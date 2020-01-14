@@ -107,10 +107,18 @@ func (l *listCommand) printAsSummary(folder *common.Folder) {
 }
 
 func (l *listCommand) printAsList(folder *common.Folder) {
-	fmt.Printf("total %d\n", len(folder.Folders)+len(folder.Files))
+	total := len(folder.Folders) + len(folder.Files)
+
+	if l.usage && total > 1 {
+		fmt.Printf("total %d (%s)\n", total, l.sizeToString(folder.Size))
+	} else {
+		fmt.Printf("total %d\n", total)
+	}
+
 	for _, f := range folder.Folders {
 		fmt.Printf("d %7v %s %s\n", l.sizeToString(f.Size), f.Created.Format("2006 Jan 02 03:04"), f.Name)
 	}
+
 	for _, f := range folder.Files {
 		lockChar := "-"
 		if f.Locked {
