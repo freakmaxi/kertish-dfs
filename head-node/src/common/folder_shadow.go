@@ -9,6 +9,7 @@ type FolderShadow struct {
 	Full    string    `json:"full"`
 	Name    string    `json:"name"`
 	Created time.Time `json:"created"`
+	Size    uint64    `json:"size"`
 }
 
 type FolderShadows []*FolderShadow
@@ -25,5 +26,6 @@ func NewFolderShadow(folderPath string) *FolderShadow {
 		Full:    folderPath,
 		Name:    name,
 		Created: time.Now().UTC(),
+		Size:    0,
 	}
 }

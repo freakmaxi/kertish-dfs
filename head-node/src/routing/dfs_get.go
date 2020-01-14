@@ -20,6 +20,9 @@ func (d *dfsRouter) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	calculateUsageHeader := strings.ToLower(r.Header.Get("X-CalculateUsage"))
+	calculateUsage := len(calculateUsageHeader) > 0 && (strings.Compare(calculateUsageHeader, "1") == 0 || strings.Compare(calculateUsageHeader, "true") == 0)
+
 	downloadHeader := strings.ToLower(r.Header.Get("X-Download"))
 	download := len(downloadHeader) > 0 && (strings.Compare(downloadHeader, "1") == 0 || strings.Compare(downloadHeader, "true") == 0)
 
@@ -30,6 +33,16 @@ func (d *dfsRouter) handleGet(w http.ResponseWriter, r *http.Request) {
 		requestedPath,
 		func(folder *common.Folder) error {
 			w.Header().Set("X-Type", "folder")
+
+			if calculateUsage {
+				folder.CalculateUsage(func(shadows common.FolderShadows) {
+					for _, folder := range shadows {
+						size, _ := d.dfs.Size(folder.Full)
+						folder.Size = size
+					}
+				})
+			}
+
 			return json.NewEncoder(w).Encode(folder)
 		},
 		func(file *common.File, streamHandler func(writer io.Writer, begins int64, ends int64) error) error {

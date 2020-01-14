@@ -114,6 +114,7 @@ Will be used to have the stability of metadata of the file system
 - `X-Path` source folder/file location in dfs
 - `X-Target` action and target of folder/file. it is formatted header, the value must be `[action],[targetPath]` 
 `c` is used for copy action, `m` is used for move action. Ex: `c,/SomeTargetFolder` or `m,/SomeTargetFolder` 
+- `X-Overwrite` ignore file/folder existence and continue without conflict response. Values: `1` or `true`. Default: `false`
 
 ##### Possible Status Codes
 - `404`: Source not found

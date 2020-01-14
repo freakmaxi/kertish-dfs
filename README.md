@@ -187,7 +187,7 @@ ok.
 - Copy `2020-dfs` executable to `/usr/local/bin` folder on the system.
 - Give execution permission to the file `sudo chmod 777 /usr/local/bin/2020-dfs`
 - Enter the following command
-`2020-dfs ls`
+`2020-dfs ls -l`
 output: 
 ```
 processing... ok.
@@ -200,7 +200,7 @@ output:
 processing... ok.
 ```
 - Enter the following command
-`2020-dfs ls`
+`2020-dfs ls -l`
 output: 
 ```
 processing... ok.

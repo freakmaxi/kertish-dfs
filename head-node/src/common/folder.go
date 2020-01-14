@@ -14,6 +14,7 @@ type Folder struct {
 	Modified time.Time     `json:"modified"`
 	Folders  FolderShadows `json:"folders"`
 	Files    Files         `json:"files"`
+	Size     uint64        `json:"size"`
 }
 
 func NewFolder(folderPath string) *Folder {
@@ -147,7 +148,7 @@ func (f *Folder) DeleteFile(name string, deleteFileHandler func(*File) error) er
 	return os.ErrNotExist
 }
 
-func (f *Folder) Size(sizeHandler func(FolderShadows) uint64) uint64 {
+func (f *Folder) CalculateUsage(calculateUsageHandler func(FolderShadows)) {
 	s := uint64(0)
 
 	for _, file := range f.Files {
@@ -155,10 +156,13 @@ func (f *Folder) Size(sizeHandler func(FolderShadows) uint64) uint64 {
 	}
 
 	if len(f.Folders) > 0 {
-		s += sizeHandler(f.Folders)
+		calculateUsageHandler(f.Folders)
+		for _, folder := range f.Folders {
+			s += folder.Size
+		}
 	}
 
-	return s
+	f.Size = s
 }
 
 func (f *Folder) CloneInto(target *Folder) {
@@ -166,7 +170,11 @@ func (f *Folder) CloneInto(target *Folder) {
 		return
 	}
 
-	copy(target.Folders, f.Folders)
+	target.Folders = make(FolderShadows, 0)
+	for _, f := range f.Folders {
+		shadow := *f
+		target.Folders = append(target.Folders, &shadow)
+	}
 
 	target.Files = make(Files, 0)
 	for _, f := range f.Files {

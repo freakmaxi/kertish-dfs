@@ -18,9 +18,12 @@ func (d *dfsRouter) handlePut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	overwriteHeader := strings.ToLower(r.Header.Get("X-Overwrite"))
+	overwrite := len(overwriteHeader) > 0 && (strings.Compare(overwriteHeader, "1") == 0 || strings.Compare(overwriteHeader, "true") == 0)
+
 	switch targetAction {
 	case "m":
-		if err := d.dfs.Move(requestedPath, targetPath); err != nil {
+		if err := d.dfs.Move(requestedPath, targetPath, overwrite); err != nil {
 			if err == os.ErrNotExist {
 				w.WriteHeader(404)
 				return
@@ -33,7 +36,7 @@ func (d *dfsRouter) handlePut(w http.ResponseWriter, r *http.Request) {
 			fmt.Printf("ERROR: Put request for source: %s and target: %s is failed. %s\n", requestedPath, targetPath, err.Error())
 		}
 	case "c":
-		if err := d.dfs.Copy(requestedPath, targetPath); err != nil {
+		if err := d.dfs.Copy(requestedPath, targetPath, overwrite); err != nil {
 			if err == os.ErrNotExist {
 				w.WriteHeader(404)
 				return

@@ -17,9 +17,10 @@ type Dfs interface {
 	Read(path string,
 		folderHandler func(folder *common.Folder) error,
 		fileHandler func(file *common.File, streamHandler func(writer io.Writer, begins int64, ends int64) error) error) error
+	Size(folderPath string) (uint64, error)
 
-	Move(source string, target string) error
-	Copy(source string, target string) error
+	Move(source string, target string, overwrite bool) error
+	Copy(source string, target string, overwrite bool) error
 	Delete(path string) error
 }
 
@@ -129,6 +130,35 @@ func (d *dfs) Read(path string,
 	return nil
 }
 
+func (d *dfs) Size(folderPath string) (uint64, error) {
+	folderPath = common.CorrectPath(folderPath)
+	size := uint64(0)
+
+	if err := d.metadata.Lock([]string{folderPath}, func(folders []*common.Folder) error {
+		for _, file := range folders[0].Files {
+			if file.Locked {
+				continue
+			}
+			size += file.Size
+		}
+
+		return d.metadata.LockChildrenOf(folders[0].Full, func(folders []*common.Folder) error {
+			for _, folder := range folders {
+				for _, file := range folder.Files {
+					if file.Locked {
+						continue
+					}
+					size += file.Size
+				}
+			}
+			return nil
+		})
+	}); err != nil {
+		return 0, err
+	}
+	return size, nil
+}
+
 func (d *dfs) folder(folderPath string, folderHandler func(folder *common.Folder) error) error {
 	folderPath = common.CorrectPath(folderPath)
 
@@ -154,17 +184,17 @@ func (d *dfs) file(path string, fileHandler func(file *common.File, streamHandle
 	})
 }
 
-func (d *dfs) Move(source string, target string) error {
-	if err := d.moveFolder(source, target); err != nil {
+func (d *dfs) Move(source string, target string, overwrite bool) error {
+	if err := d.moveFolder(source, target, overwrite); err != nil {
 		if err != os.ErrNotExist {
 			return err
 		}
-		return d.moveFile(source, target)
+		return d.moveFile(source, target, overwrite)
 	}
 	return nil
 }
 
-func (d *dfs) moveFolder(source string, target string) error {
+func (d *dfs) moveFolder(source string, target string, overwrite bool) error {
 	source = common.CorrectPath(source)
 	target = common.CorrectPath(target)
 
@@ -174,7 +204,7 @@ func (d *dfs) moveFolder(source string, target string) error {
 	folderPaths = append(folderPaths, sourceParent, source)
 	folderPaths = append(folderPaths, common.PathTree(target)...)
 
-	return d.metadata.Save(folderPaths, func(folders map[string]*common.Folder) error {
+	err := d.metadata.Save(folderPaths, func(folders map[string]*common.Folder) error {
 		sourceFolder := folders[source]
 		if sourceFolder == nil {
 			return os.ErrNotExist
@@ -217,9 +247,20 @@ func (d *dfs) moveFolder(source string, target string) error {
 
 		return nil
 	})
+
+	if err != nil {
+		if overwrite && err == os.ErrExist {
+			if err := d.deleteFolder(target); err != nil {
+				return err
+			}
+			return d.moveFolder(source, target, overwrite)
+		}
+		return err
+	}
+	return nil
 }
 
-func (d *dfs) moveFile(source string, target string) error {
+func (d *dfs) moveFile(source string, target string, overwrite bool) error {
 	sourceParent, sourceFilename := common.Split(source)
 	targetParent, targetFilename := common.Split(target)
 
@@ -227,7 +268,7 @@ func (d *dfs) moveFile(source string, target string) error {
 	folderPaths = append(folderPaths, sourceParent)
 	folderPaths = append(folderPaths, common.PathTree(targetParent)...)
 
-	return d.metadata.Save(folderPaths, func(folders map[string]*common.Folder) error {
+	err := d.metadata.Save(folderPaths, func(folders map[string]*common.Folder) error {
 		sourceFolder := folders[sourceParent]
 		if sourceFolder == nil {
 			return os.ErrNotExist
@@ -268,19 +309,30 @@ func (d *dfs) moveFile(source string, target string) error {
 			return nil
 		})
 	})
-}
 
-func (d *dfs) Copy(source string, target string) error {
-	if err := d.copyFolder(source, target); err != nil {
-		if err != os.ErrNotExist {
-			return err
+	if err != nil {
+		if overwrite && err == os.ErrExist {
+			if err := d.deleteFile(target); err != nil {
+				return err
+			}
+			return d.moveFile(source, target, overwrite)
 		}
-		return d.copyFile(source, target)
+		return err
 	}
 	return nil
 }
 
-func (d *dfs) copyFolder(source string, target string) error {
+func (d *dfs) Copy(source string, target string, overwrite bool) error {
+	if err := d.copyFolder(source, target, overwrite); err != nil {
+		if err != os.ErrNotExist {
+			return err
+		}
+		return d.copyFile(source, target, overwrite)
+	}
+	return nil
+}
+
+func (d *dfs) copyFolder(source string, target string, overwrite bool) error {
 	source = common.CorrectPath(source)
 	target = common.CorrectPath(target)
 
@@ -288,7 +340,7 @@ func (d *dfs) copyFolder(source string, target string) error {
 	folderPaths = append(folderPaths, source)
 	folderPaths = append(folderPaths, common.PathTree(target)...)
 
-	return d.metadata.Save(folderPaths, func(folders map[string]*common.Folder) error {
+	err := d.metadata.Save(folderPaths, func(folders map[string]*common.Folder) error {
 		sourceFolder := folders[source]
 		if sourceFolder == nil {
 			return os.ErrNotExist
@@ -332,9 +384,20 @@ func (d *dfs) copyFolder(source string, target string) error {
 			return nil
 		})
 	})
+
+	if err != nil {
+		if overwrite && err == os.ErrExist {
+			if err := d.deleteFolder(target); err != nil {
+				return err
+			}
+			return d.copyFolder(source, target, overwrite)
+		}
+		return err
+	}
+	return nil
 }
 
-func (d *dfs) copyFile(source string, target string) error {
+func (d *dfs) copyFile(source string, target string, overwrite bool) error {
 	sourceParent, sourceFilename := common.Split(source)
 	targetParent, targetFilename := common.Split(target)
 
@@ -342,7 +405,7 @@ func (d *dfs) copyFile(source string, target string) error {
 	folderPaths = append(folderPaths, sourceParent)
 	folderPaths = append(folderPaths, common.PathTree(targetParent)...)
 
-	return d.metadata.Save(folderPaths, func(folders map[string]*common.Folder) error {
+	err := d.metadata.Save(folderPaths, func(folders map[string]*common.Folder) error {
 		sourceFolder := folders[sourceParent]
 		if sourceFolder == nil {
 			return os.ErrNotExist
@@ -350,7 +413,7 @@ func (d *dfs) copyFile(source string, target string) error {
 
 		sourceFile := sourceFolder.File(sourceFilename)
 		if sourceFile == nil {
-			return os.ErrExist
+			return os.ErrNotExist
 		}
 
 		if sourceFile.Locked {
@@ -381,6 +444,17 @@ func (d *dfs) copyFile(source string, target string) error {
 
 		return d.cluster.CreateShadow(targetFile.Chunks)
 	})
+
+	if err != nil {
+		if overwrite && err == os.ErrExist {
+			if err := d.deleteFile(target); err != nil {
+				return err
+			}
+			return d.copyFile(source, target, overwrite)
+		}
+		return err
+	}
+	return nil
 }
 
 func (d *dfs) createFolderTree(folderPath string, folders map[string]*common.Folder) (*common.Folder, error) {
