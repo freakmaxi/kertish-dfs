@@ -36,6 +36,7 @@ Will be used to have the stability of metadata of the file system
 - `X-Path` folder/file location in dfs
 
 ##### Optional Headers:
+- `X-CalculateUsage` (only folder) force to calculate the size of folders
 - `X-Download` works only with file request. It provides the data with `Content-Disposition` header. Values: `1` or `true`. Default: `false`
 - `Range` to grab the part of the file. 
 
@@ -66,7 +67,8 @@ Will be used to have the stability of metadata of the file system
     {
       "full": "/FolderName",
       "name": "FolderName",
-      "created": "2020-01-13T13:13:22.243Z"
+      "created": "2020-01-13T13:13:22.243Z",
+      "size": 0
     }
   ],
   "files": [
@@ -85,7 +87,8 @@ Will be used to have the stability of metadata of the file system
       ],
       "locked": false
     }
-  ]
+  ],
+  "size": 0
 }
 ```
 ---
