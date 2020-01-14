@@ -18,12 +18,13 @@ const headEndPoint = "/client/dfs"
 
 var client = http.Client{}
 
-func List(headAddresses []string, source string) (*common.Folder, error) {
+func List(headAddresses []string, source string, usage bool) (*common.Folder, error) {
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s%s", headAddresses[0], headEndPoint), nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("X-Path", source)
+	req.Header.Set("X-CalculateUsage", strconv.FormatBool(usage))
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -72,7 +73,7 @@ func MakeFolder(headAddresses []string, target string) error {
 	return nil
 }
 
-func Change(headAddresses []string, source string, target string, copy bool) error {
+func Change(headAddresses []string, source string, target string, overwrite bool, copy bool) error {
 	req, err := http.NewRequest("PUT", fmt.Sprintf("http://%s%s", headAddresses[0], headEndPoint), nil)
 	if err != nil {
 		return err
@@ -83,6 +84,7 @@ func Change(headAddresses []string, source string, target string, copy bool) err
 	}
 	req.Header.Set("X-Path", source)
 	req.Header.Set("X-Target", fmt.Sprintf("%s,%s", action, target))
+	req.Header.Set("X-Overwrite", strconv.FormatBool(overwrite))
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -158,6 +160,11 @@ func Put(headAddresses []string, source string, target string, overwrite bool) e
 		if !info.IsDir() {
 			return PutFile(headAddresses, p, targetPath, overwrite)
 		}
+		if overwrite {
+			if err := Delete(headAddresses, targetPath); err != nil {
+				return err
+			}
+		}
 		return MakeFolder(headAddresses, targetPath)
 	})
 }
@@ -232,13 +239,16 @@ func contentDetails(source string) (string, int64, error) {
 	return http.DetectContentType(buf), info.Size(), nil
 }
 
-func Pull(headAddresses []string, source string, target string) error {
+func Pull(headAddresses []string, source string, target string, readRange *common.ReadRange) error {
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s%s", headAddresses[0], headEndPoint), nil)
 	if err != nil {
 		return err
 	}
 
 	req.Header.Set("X-Path", source)
+	if readRange != nil {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", readRange.Begins, readRange.Ends))
+	}
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -268,6 +278,10 @@ func Pull(headAddresses []string, source string, target string) error {
 		return nil
 	}
 
+	if strings.Compare(res.Header.Get("X-Type"), "folder") == 0 && readRange != nil {
+		return fmt.Errorf("not possible to use range argument for folders")
+	}
+
 	var folder *common.Folder
 	if err := json.NewDecoder(res.Body).Decode(&folder); err != nil {
 		return fmt.Errorf("unsuccessful operation")
@@ -281,7 +295,7 @@ func Pull(headAddresses []string, source string, target string) error {
 		sourcePath := path.Join(source, file.Name)
 		targetPath := path.Join(target, file.Name)
 
-		if err := Pull(headAddresses, sourcePath, targetPath); err != nil {
+		if err := Pull(headAddresses, sourcePath, targetPath, nil); err != nil {
 			return fmt.Errorf("unsuccessful operation")
 		}
 	}
@@ -290,7 +304,7 @@ func Pull(headAddresses []string, source string, target string) error {
 		sourcePath := path.Join(source, f.Name)
 		targetPath := path.Join(target, f.Name)
 
-		if err := Pull(headAddresses, sourcePath, targetPath); err != nil {
+		if err := Pull(headAddresses, sourcePath, targetPath, nil); err != nil {
 			return fmt.Errorf("unsuccessful operation")
 		}
 	}

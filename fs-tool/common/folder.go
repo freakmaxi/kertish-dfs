@@ -11,4 +11,5 @@ type Folder struct {
 	Modified time.Time     `json:"modified"`
 	Folders  FolderShadows `json:"folders"`
 	Files    Files         `json:"files"`
+	Size     uint64        `json:"size"`
 }
