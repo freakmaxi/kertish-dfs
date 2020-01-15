@@ -45,11 +45,25 @@ type flagContainer struct {
 	syncClusters   bool
 	getCluster     string
 	getClusters    bool
+	help           bool
+	version        bool
 
 	active string
 }
 
-func (f *flagContainer) Define() int {
+func (f *flagContainer) Define(v string) int {
+	if f.help {
+		fmt.Printf("2020-dfs Admin (v%s) usage: \n", v)
+		fmt.Println()
+
+		return 1
+	}
+
+	if f.version {
+		f.active = "version"
+		return 0
+	}
+
 	activeCount := 0
 	if len(f.createCluster) != 0 {
 		activeCount++
@@ -87,7 +101,7 @@ func (f *flagContainer) Define() int {
 	}
 
 	if activeCount == 0 {
-		fmt.Println("2020-dfs Manager Admin usage: ")
+		fmt.Printf("2020-dfs Admin (v%s) usage: \n", v)
 		fmt.Println()
 
 		return 1
@@ -102,7 +116,7 @@ func (f *flagContainer) Define() int {
 	return 0
 }
 
-func defineFlags() *flagContainer {
+func defineFlags(v string) *flagContainer {
 	set := flag.NewFlagSet("dfs", flag.ContinueOnError)
 
 	var managerAddress string
@@ -128,6 +142,8 @@ Ex: clusterId=192.168.0.1:9430,192.168.0.2:9430`)
 	set.StringVar(&removeNode, `remove-node`, "", `Removes the node from its cluster.`)
 
 	set.Bool(`sync-clusters`, false, `Synchronise all clusters and their nodes for data consistency`)
+	set.Bool(`help`, false, `Print this usage documentation`)
+	set.Bool(`version`, false, `Print release version`)
 
 	set.Parse(os.Args[1:])
 
@@ -145,9 +161,11 @@ Ex: clusterId=192.168.0.1:9430,192.168.0.2:9430`)
 		syncClusters:   strings.Index(strings.Join(os.Args, " "), "sync-clusters") > -1,
 		getCluster:     getCluster,
 		getClusters:    strings.Index(strings.Join(os.Args, " "), "get-clusters") > -1,
+		help:           strings.Index(strings.Join(os.Args, " "), "-help") > -1,
+		version:        strings.Index(strings.Join(os.Args, " "), "-version") > -1,
 	}
 
-	switch fc.Define() {
+	switch fc.Define(v) {
 	case 1:
 		set.PrintDefaults()
 		os.Exit(0)

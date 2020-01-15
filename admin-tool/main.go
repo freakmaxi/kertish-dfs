@@ -9,10 +9,14 @@ import (
 	"github.com/freakmaxi/2020-dfs/admin-tool/manager"
 )
 
+var version = "XX.X.XXXX"
+
 func main() {
-	fc := defineFlags()
+	fc := defineFlags(version)
 
 	switch fc.active {
+	case "version":
+		fmt.Println(version)
 	case "createCluster":
 		if err := manager.CreateCluster([]string{fc.managerAddress}, fc.createCluster); err != nil {
 			fmt.Printf("ERROR: %s\n", err.Error())

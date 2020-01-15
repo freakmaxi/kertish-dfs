@@ -7,8 +7,10 @@ import (
 	"github.com/freakmaxi/2020-dfs/fs-tool/flags"
 )
 
+var version = "XX.X.XXXX"
+
 func main() {
-	command := flags.NewCommand(os.Args)
+	command := flags.NewCommand(version, os.Args)
 	if !command.Parse() {
 		return
 	}

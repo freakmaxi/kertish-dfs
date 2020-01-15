@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/freakmaxi/2020-dfs/head-node/src/data"
 	"github.com/freakmaxi/2020-dfs/head-node/src/manager"
@@ -10,7 +11,17 @@ import (
 	"github.com/freakmaxi/2020-dfs/head-node/src/services"
 )
 
+var version = "XX.X.XXXX"
+
 func main() {
+	args := os.Args[1:]
+	if len(args) > 0 && strings.Compare(args[0], "--version") == 0 {
+		fmt.Println(version)
+		return
+	}
+
+	fmt.Printf("INFO: Starting 2020-dfs Head Node v%s\n", version)
+
 	bindAddr := os.Getenv("BIND_ADDRESS")
 	if len(bindAddr) == 0 {
 		bindAddr = ":4000"

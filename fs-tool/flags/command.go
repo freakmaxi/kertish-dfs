@@ -8,13 +8,15 @@ import (
 const local = "local:"
 
 type Command struct {
+	version string
+
 	filename    string
 	args        []string
 	headAddress string
 	command     execution
 }
 
-func NewCommand(args []string) *Command {
+func NewCommand(version string, args []string) *Command {
 	_, filename := path.Split(args[0])
 
 	mrArgs := make([]string, 0)
@@ -23,6 +25,7 @@ func NewCommand(args []string) *Command {
 	}
 
 	return &Command{
+		version:     version,
 		filename:    filename,
 		args:        mrArgs,
 		headAddress: "localhost:4000",
@@ -30,7 +33,7 @@ func NewCommand(args []string) *Command {
 }
 
 func (c *Command) printUsageHeader() {
-	fmt.Println("2020-dfs usage: ")
+	fmt.Printf("2020-dfs (v%s) usage: \n", c.version)
 	fmt.Println()
 }
 
@@ -40,6 +43,8 @@ func (c *Command) printUsage() {
 	fmt.Println()
 	fmt.Println("options:")
 	fmt.Println("  --head-address   Points the end point of head node to work with. Default: localhost:4000")
+	fmt.Println("  --help           Prints this usage documentation")
+	fmt.Println("  --version        Prints release version")
 	fmt.Println()
 	fmt.Println("commands:")
 	fmt.Println("  mkdir   Create folders.")
@@ -71,6 +76,12 @@ func (c *Command) Parse() bool {
 			i++
 			c.headAddress = c.args[i]
 			continue
+		case "--help":
+			c.printUsage()
+			return false
+		case "--version":
+			fmt.Printf("%s\n", c.version)
+			return false
 		}
 
 		switch arg {
