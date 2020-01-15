@@ -5,7 +5,7 @@ mass file storage requirement in isolated networks. **It does not have security 
 
 #### What is it for?
 2020-dfs is developed to cover the traditional file system requirements in a scalable way. Software will use the same
-path-tree structure to keep the files but will not stuck in hard-drive limits of the machine. It is possible to create
+path-tree structure virtually to keep the files but will not stuck in hard-drive limits of the machine. It is possible to create
 a fail-safe, highly available fast and scalable file storage.
 
 #### Where can it be used?
