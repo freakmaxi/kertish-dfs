@@ -186,9 +186,9 @@ export ROOT_PATH=""/opt/c2n2"
 ---
 ##### Creating Clusters
 
-**IMPORTANT NOTE: Data nodes sizes in the SAME CLUSTER have to be the same. You may have different servers with
+**IMPORTANT:** Data nodes sizes in the SAME CLUSTER have to be the same. You may have different servers with
 different sized hard-drives. You should use the `SIZE` environment variable to align the storage spaces according to the
-the server that has the smallest hard-drive size**
+the server that has the smallest hard-drive size
 
  
 - Copy `2020-dfs-admin` executable to `/usr/local/bin` folder on the system.
@@ -242,7 +242,7 @@ total 1
 
 If you get the same or similar outputs like here, congratulations! you successfully set up your 2020-dfs. 
 
-### One Important Note
+### One Last Important Note
 
 When you setup the cluster and the cluster starts taking data blocks, consider that cluster is as absolute. Deleting 
 the cluster will cause you data inconsistency and lost. Due to this reason, when you are creating the structure of
