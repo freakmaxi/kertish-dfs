@@ -66,7 +66,8 @@ manage farm for adding, removing cluster/node, this node will be used. Admin com
 communicate directly with manager node. Manager node is NOT scalable for now. Check `manager-node` folder for details.
 
 `Data Node` is to keep the data blocks. All the file data particles will be distributed on data nodes in
-different clusters. **CAUTION: Deletion of a data node from cluster may cause the data lost and inconsistency.**
+different clusters.
+**CAUTION: Deletion of a data node from cluster may cause the data lost and inconsistency.**
 ---
 #### Setup
 
