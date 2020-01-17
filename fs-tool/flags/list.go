@@ -96,14 +96,15 @@ func (l *listCommand) Execute() error {
 func (l *listCommand) printAsSummary(folder *common.Folder) {
 	for _, f := range folder.Folders {
 		if l.usage {
-			fmt.Printf("> %s (%s)   \n", f.Name, l.sizeToString(f.Size))
+			fmt.Printf("> %s (%s)   ", f.Name, l.sizeToString(f.Size))
 			continue
 		}
-		fmt.Printf("> %s   \n", f.Name)
+		fmt.Printf("> %s   ", f.Name)
 	}
 	for _, f := range folder.Files {
-		fmt.Printf("- %s   \n", f.Name)
+		fmt.Printf("%s   ", f.Name)
 	}
+	fmt.Println()
 }
 
 func (l *listCommand) printAsList(folder *common.Folder) {
