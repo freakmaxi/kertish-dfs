@@ -28,19 +28,31 @@ type metadata struct {
 	col   *mongo.Collection
 }
 
-func NewMetadata(mutex Mutex, conn *Connection, database string) Metadata {
+func NewMetadata(mutex Mutex, conn *Connection, database string) (Metadata, error) {
 	dfsCol := conn.db.Database(database).Collection(collection)
 
-	return &metadata{
+	m := &metadata{
 		mutex: mutex,
 		conn:  conn,
 		col:   dfsCol,
 	}
+	if err := m.setupIndices(); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func (m *metadata) context() context.Context {
 	ctx, _ := context.WithTimeout(context.Background(), time.Second*30)
 	return ctx
+}
+
+func (m *metadata) setupIndices() error {
+	model := mongo.IndexModel{
+		Keys: bson.M{"full": 1},
+	}
+	_, err := m.col.Indexes().CreateOne(m.context(), model, nil)
+	return err
 }
 
 func (m *metadata) Lock(folderPaths []string, folderHandler func(folders []*common.Folder) error) error {

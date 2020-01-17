@@ -39,19 +39,32 @@ type clusters struct {
 	col   *mongo.Collection
 }
 
-func NewClusters(mutex Mutex, conn *Connection, database string) Clusters {
+func NewClusters(mutex Mutex, conn *Connection, database string) (Clusters, error) {
 	dfsCol := conn.client.Database(database).Collection(collection)
 
-	return &clusters{
+	c := &clusters{
 		mutex: mutex,
 		conn:  conn,
 		col:   dfsCol,
 	}
+	if err := c.setupIndices(); err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
 func (c *clusters) context() context.Context {
 	ctx, _ := context.WithTimeout(context.Background(), time.Second*30)
 	return ctx
+}
+
+func (c *clusters) setupIndices() error {
+	models := []mongo.IndexModel{
+		{Keys: bson.M{"clusterId": 1}},
+		{Keys: bson.M{"nodes.id": 1}},
+	}
+	_, err := c.col.Indexes().CreateMany(c.context(), models, nil)
+	return err
 }
 
 func (c *clusters) RegisterCluster(cluster *common.Cluster) error {

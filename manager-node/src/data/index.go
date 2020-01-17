@@ -43,15 +43,17 @@ func (i *index) key(name string) string {
 }
 
 func (i *index) Add(clusterId string, sha512Hex string) error {
-	return i.lock(clusterId, func(index map[string]string) error {
-		index[sha512Hex] = clusterId
-		return nil
-	})
+	indexKey := i.key(clusterId)
+	i.mutex.Wait(indexKey)
+
+	return i.client.HSet(indexKey, sha512Hex, clusterId).Err()
 }
 
 func (i *index) Find(clusterIds []string, sha512Hex string) (string, error) {
 	for _, clusterId := range clusterIds {
 		indexKey := i.key(clusterId)
+		i.mutex.Wait(indexKey)
+
 		clusterIdBackup, err := i.client.HGet(indexKey, sha512Hex).Result()
 		if err != nil {
 			if err != redis.Nil {
@@ -65,10 +67,10 @@ func (i *index) Find(clusterIds []string, sha512Hex string) (string, error) {
 }
 
 func (i *index) Remove(clusterId string, sha512Hex string) error {
-	return i.lock(clusterId, func(index map[string]string) error {
-		delete(index, sha512Hex)
-		return nil
-	})
+	indexKey := i.key(clusterId)
+	i.mutex.Wait(indexKey)
+
+	return i.client.HDel(indexKey, sha512Hex).Err()
 }
 
 func (i *index) Replace(clusterId string, sha512HexList []string) error {

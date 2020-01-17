@@ -66,11 +66,16 @@ func main() {
 		os.Exit(22)
 	}
 
-	dataClusters := data.NewClusters(mutex, conn, mongoDb)
+	dataClusters, err := data.NewClusters(mutex, conn, mongoDb)
+	if err != nil {
+		fmt.Printf("ERROR: Cluster Data Manager is failed. %s\n", err.Error())
+		os.Exit(23)
+	}
+
 	managerCluster, err := manager.NewCluster(index, dataClusters)
 	if err != nil {
 		fmt.Printf("ERROR: Cluster Manager is failed. %s\n", err.Error())
-		os.Exit(23)
+		os.Exit(24)
 	}
 	if err := managerCluster.SyncClusters(); err != nil {
 		fmt.Printf("ERROR: Cluster Syncing is failed. %s\n", err.Error())

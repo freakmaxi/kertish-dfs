@@ -67,7 +67,12 @@ func main() {
 		os.Exit(15)
 	}
 
-	metadata := data.NewMetadata(mutex, conn, mongoDb)
+	metadata, err := data.NewMetadata(mutex, conn, mongoDb)
+	if err != nil {
+		fmt.Printf("ERROR: Metadata Manager is failed. %s\n", err.Error())
+		os.Exit(18)
+	}
+
 	cluster, err := manager.NewCluster([]string{managerAddress})
 	if err != nil {
 		fmt.Printf("ERROR: Cluster Manager is failed. %s\n", err.Error())
