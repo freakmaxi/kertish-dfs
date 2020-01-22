@@ -1,4 +1,4 @@
-module github.com/freakmaxi/2020-dfs/head-node/src
+module github.com/freakmaxi/kertish-dfs/head-node/src
 
 go 1.13
 

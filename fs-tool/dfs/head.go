@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/freakmaxi/2020-dfs/fs-tool/common"
+	"github.com/freakmaxi/kertish-dfs/fs-tool/common"
 )
 
 const headEndPoint = "/client/dfs"

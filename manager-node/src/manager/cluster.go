@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"sync"
 
-	cluster2 "github.com/freakmaxi/2020-dfs/manager-node/src/cluster"
-	"github.com/freakmaxi/2020-dfs/manager-node/src/common"
-	"github.com/freakmaxi/2020-dfs/manager-node/src/data"
-	"github.com/freakmaxi/2020-dfs/manager-node/src/errors"
+	cluster2 "github.com/freakmaxi/kertish-dfs/manager-node/src/cluster"
+	"github.com/freakmaxi/kertish-dfs/manager-node/src/common"
+	"github.com/freakmaxi/kertish-dfs/manager-node/src/data"
+	"github.com/freakmaxi/kertish-dfs/manager-node/src/errors"
 )
 
 const blockSize uint32 = 1024 * 1024 * 32 // 32Mb

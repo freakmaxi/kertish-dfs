@@ -1,4 +1,4 @@
-# 2020 DFS Manager Node
+# Kertish DFS Manager Node
 
 Manager node is responsible to orchestrate data nodes.
 Default bind endpoint port is `:9400`
@@ -18,7 +18,7 @@ Data nodes will access the service using `http://127.0.0.1:9400/client/node`
 
 Cluster and Data node setup and information will be kept in Mongo DB.
 
-- `MONGO_DATABASE` (optional) : Mongo DB name. Default: `2020-dfs`
+- `MONGO_DATABASE` (optional) : Mongo DB name. Default: `kertish-dfs`
 
 - `REDIS_CONN` (mandatory) : Redis dss. Ex: `127.0.0.1:6379`
 

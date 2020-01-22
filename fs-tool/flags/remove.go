@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/freakmaxi/2020-dfs/fs-tool/common"
-	"github.com/freakmaxi/2020-dfs/fs-tool/dfs"
-	"github.com/freakmaxi/2020-dfs/fs-tool/errors"
+	"github.com/freakmaxi/kertish-dfs/fs-tool/common"
+	"github.com/freakmaxi/kertish-dfs/fs-tool/dfs"
+	"github.com/freakmaxi/kertish-dfs/fs-tool/errors"
 )
 
 type removeCommand struct {

@@ -1,4 +1,4 @@
-# 2020 DFS Head Node
+# Kertish DFS Head Node
 
 Head node is responsible to handle file system client and dfs using manager node and data nodes.
 Default bind endpoint port is `:4000`
@@ -22,7 +22,7 @@ operations of file/folder placement.
 
 Metadata of the file system will be kept in Mongo DB.
 
-- `MONGO_DATABASE` (optional) : Mongo DB name. Default: `2020-dfs`
+- `MONGO_DATABASE` (optional) : Mongo DB name. Default: `kertish-dfs`
 
 - `REDIS_CONN` (mandatory) : Redis dss. Ex: `127.0.0.1:6379`
 

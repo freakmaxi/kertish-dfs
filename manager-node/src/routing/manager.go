@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/freakmaxi/2020-dfs/manager-node/src/manager"
+	"github.com/freakmaxi/kertish-dfs/manager-node/src/manager"
 )
 
 type managerRouter struct {

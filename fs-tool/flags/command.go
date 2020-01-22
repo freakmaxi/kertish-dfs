@@ -33,7 +33,7 @@ func NewCommand(version string, args []string) *Command {
 }
 
 func (c *Command) printUsageHeader() {
-	fmt.Printf("2020-dfs (v%s) usage: \n", c.version)
+	fmt.Printf("Kertish-dfs (v%s) usage: \n", c.version)
 	fmt.Println()
 }
 

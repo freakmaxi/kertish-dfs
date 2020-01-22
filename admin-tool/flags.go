@@ -53,7 +53,7 @@ type flagContainer struct {
 
 func (f *flagContainer) Define(v string) int {
 	if f.help {
-		fmt.Printf("2020-dfs Admin (v%s) usage: \n", v)
+		fmt.Printf("Kertish-dfs Admin (v%s) usage: \n", v)
 		fmt.Println()
 
 		return 1
@@ -101,7 +101,7 @@ func (f *flagContainer) Define(v string) int {
 	}
 
 	if activeCount == 0 {
-		fmt.Printf("2020-dfs Admin (v%s) usage: \n", v)
+		fmt.Printf("Kertish-dfs Admin (v%s) usage: \n", v)
 		fmt.Println()
 
 		return 1

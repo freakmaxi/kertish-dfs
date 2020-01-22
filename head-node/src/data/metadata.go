@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/freakmaxi/2020-dfs/head-node/src/common"
+	"github.com/freakmaxi/kertish-dfs/head-node/src/common"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"

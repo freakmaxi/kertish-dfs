@@ -5,22 +5,24 @@ import (
 	"os"
 	"strings"
 
-	"github.com/freakmaxi/2020-dfs/head-node/src/data"
-	"github.com/freakmaxi/2020-dfs/head-node/src/manager"
-	"github.com/freakmaxi/2020-dfs/head-node/src/routing"
-	"github.com/freakmaxi/2020-dfs/head-node/src/services"
+	"github.com/freakmaxi/kertish-dfs/head-node/src/data"
+	"github.com/freakmaxi/kertish-dfs/head-node/src/manager"
+	"github.com/freakmaxi/kertish-dfs/head-node/src/routing"
+	"github.com/freakmaxi/kertish-dfs/head-node/src/services"
 )
 
 var version = "XX.X.XXXX"
 
 func main() {
+	printWelcome()
+
 	args := os.Args[1:]
 	if len(args) > 0 && strings.Compare(args[0], "--version") == 0 {
 		fmt.Println(version)
 		return
 	}
 
-	fmt.Printf("INFO: Starting 2020-dfs Head Node v%s\n", version)
+	fmt.Println("INFO: ------------ Starting Head Node ------------")
 
 	bindAddr := os.Getenv("BIND_ADDRESS")
 	if len(bindAddr) == 0 {
@@ -44,7 +46,7 @@ func main() {
 
 	mongoDb := os.Getenv("MONGO_DATABASE")
 	if len(mongoDb) == 0 {
-		mongoDb = "2020-dfs"
+		mongoDb = "kertish-dfs"
 	}
 	fmt.Printf("INFO: MONGO_DATABASE: %s\n", mongoDb)
 
@@ -88,4 +90,26 @@ func main() {
 	proxy.Start()
 
 	os.Exit(0)
+}
+
+func printWelcome() {
+	fmt.Println()
+	fmt.Println("     'o@@@@@@o,  o@@@@@@o")
+	fmt.Println("   'o@@@@o/-\\@@|@@/--\\@@@o             __ _  ____  ____  ____  __  ____  _  _")
+	fmt.Println("  `o@/.       `@@~      o@@o          (  / )(  __)(  _ \\(_  _)(  )/ ___)/ )( \\")
+	fmt.Println("  o@@:   oo    @@ .@@@. :@@~           )  (  ) _)  )   /  )(   )( \\___ \\) __ (")
+	fmt.Println("  o@@,  .@@@.  @@=  oo  o@o`          (__\\_)(____)(__\\_) (__) (__)(____/\\_)(_/")
+	fmt.Println("  '@@%`      `@@@@o....@@%`                                  ____  ____  ____")
+	fmt.Println("   :@@@@o....@@@@@@@@@@@@@%~                                (    \\(  __)/ ___)")
+	fmt.Println(" .oo@@@@@@@@@@@@@@@@@@@@@@@@o~`    .@@@@`                    ) D ( ) _) \\___ \\")
+	fmt.Println("o@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@o . @@@oo@@@@@               (____/(__)  (____/")
+	fmt.Printf("o@@@@@@%%@@@@@@@@@@@@@@@@@@@@@@@@@@@@@`  @o  @               version %s\n", version)
+	fmt.Println("o@@@@@@:~O@@@@@@@@@@@@@@@@@@@@@@@@@@@ooo@@@@@")
+	fmt.Println(" ~o@@@@|  `O@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@/`")
+	fmt.Println("   `~=/`   *O@@@@@@@@@@@@@@@@@@@@@@@@@@@O/")
+	fmt.Println("              \\\\O@@@@@@@@@@@@@@@@@@@@@O/`")
+	fmt.Println("                 `\\\\|O@@@@@@@@@0oo/:")
+	fmt.Println()
+	fmt.Printf("Visit: https://github.com/freakmaxi/kertish-dfs\n")
+	fmt.Println()
 }

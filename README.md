@@ -1,10 +1,10 @@
-# 2020-DFS
+# Kertish-DFS
 
-2020-dfs is a distributed file system with basic functionality. It is developed to cover the expectation for
+Kertish-dfs is a distributed file system with basic functionality. It is developed to cover the expectation for
 mass file storage requirement in isolated networks. **It does not have security implementation.**
 
 #### What is it for?
-2020-dfs is developed to cover the traditional file system requirements in a scalable way. Software will use the same
+Kertish-dfs is developed to cover the traditional file system requirements in a scalable way. Software will use the same
 path-tree structure virtually to keep the files but will not stuck in hard-drive limits of the machine. It is possible to create
 a fail-safe, highly available fast and scalable file storage.
 
@@ -13,15 +13,15 @@ Systems where they need huge storage space requirements to keep all the files lo
 common cloud storage for micro services, video storage for a streaming services, and the like...
 
 #### How shouldn't be used?
-2020-dfs does not have any security implementation. For this reason, it is best to use it in a publicly isolated
+Kertish-dfs does not have any security implementation. For this reason, it is best to use it in a publicly isolated
 network. Also it does not have file/folder permission integration, so user base limitations are also not available.
 
 #### How is the best usage?
-2020-dfs is suitable to use as a back service of front services. It means, it is better not to allow users directly 
+Kertish-dfs is suitable to use as a back service of front services. It means, it is better not to allow users directly 
 to the file manipulation.
 
 #### Terminology
-- Farm: Whole 2020-dfs with multi clusters. A farm can have one or more clusters with different sizes.
+- Farm: Whole Kertish-dfs with multi clusters. A farm can have one or more clusters with different sizes.
 - Cluster: A group of servers to hold data. A cluster can have one or more data node. 
 - Data Node: A service running in a cluster to handle data manipulation requests. 
 - Master: The server that has the latest version of the data blocks
@@ -29,7 +29,7 @@ to the file manipulation.
 - Data Block: Data particle of the big data. Max size is 32mb. 
 
 #### Summary
-2020-dfs allows you to create data farm in distributed locations. Every data farm consist of clusters. Clusters
+Kertish-dfs allows you to create data farm in distributed locations. Every data farm consist of clusters. Clusters
 are data banks. Every cluster has one or more data node. Always one data node works as master. Every data node
 additions to that cluster will be used as backup of the master.
 
@@ -50,7 +50,7 @@ the real size
 
 #### Architecture
 
-2020-dfs farm consist of minimum
+Kertish-dfs farm consist of minimum
 - 1 Manager Node
 - 1 Head Node
 - 1 Data Node
@@ -89,28 +89,28 @@ You will not find the Mongo DB and Redis DSS setup. Please follow the instructio
 
 #### Preperation
 
-- Download the latest release of 2020-dfs or compile it using the `create_release.sh` shell script file located under
+- Download the latest release of Kertish-dfs or compile it using the `create_release.sh` shell script file located under
 the `-build-` folder.
 
 ##### Setting Up Manager Node
 
-- Copy `2020-dfs-manager` executable to `/usr/local/bin` folder on the system.
-- Give execution permission to the file `sudo chmod +x /usr/local/bin/2020-dfs-manager`
+- Copy `kertish-dfs-manager` executable to `/usr/local/bin` folder on the system.
+- Give execution permission to the file `sudo chmod +x /usr/local/bin/kertish-dfs-manager`
 - Create an empty file in your user path, copy-paste the following and save the file
 ```shell script
 #!/bin/sh
 
 export MONGO_CONN="mongodb://root:pass@127.0.0.1:27017" # Modify the values according to your setup
 export REDIS_CONN:="127.0.0.1:6379"                     # Modify the values according to your setup
-/usr/local/bin/2020-dfs-manager
+/usr/local/bin/kertish-dfs-manager
 ```
 - Give execution permission to the file `sudo chmod +x [Saved File Location]`
 - Execute the saved file.
 ---
 ##### Setting Up Head Node
 
-- Copy `2020-dfs-head` executable to `/usr/local/bin` folder on the system.
-- Give execution permission to the file `sudo chmod +x /usr/local/bin/2020-dfs-head`
+- Copy `kertish-dfs-head` executable to `/usr/local/bin` folder on the system.
+- Give execution permission to the file `sudo chmod +x /usr/local/bin/kertish-dfs-head`
 - Create an empty file in your user path, copy-paste the following and save the file
 ```shell script
 #!/bin/sh
@@ -118,15 +118,15 @@ export REDIS_CONN:="127.0.0.1:6379"                     # Modify the values acco
 export MANAGER_ADDRESS="http://127.0.0.1:9400" 
 export MONGO_CONN="mongodb://root:pass@127.0.0.1:27017" # Modify the values according to your setup
 export REDIS_CONN:="127.0.0.1:6379"                     # Modify the values according to your setup
-/usr/local/bin/2020-dfs-head
+/usr/local/bin/kertish-dfs-head
 ```
 - Give execution permission to the file `sudo chmod +x [Saved File Location]`
 - Execute the saved file.
 ---
 ##### Setting Up Data Node(s)
 
-- Copy `2020-dfs-data` executable to `/usr/local/bin` folder on the system.
-- Give execution permission to the file `sudo chmod +x /usr/local/bin/2020-dfs-data`
+- Copy `kertish-dfs-data` executable to `/usr/local/bin` folder on the system.
+- Give execution permission to the file `sudo chmod +x /usr/local/bin/kertish-dfs-data`
 - Create following folders - /opt/c1n1 - /opt/c1n2 - /opt/c2n1 - /opt/c2n2
 - Create an empty file on your user path named `dn-c1n1.sh`, copy-paste the following and save the file
 ```shell script
@@ -136,7 +136,7 @@ export BIND_ADDRESS="127.0.0.1:9430"
 export MANAGER_ADDRESS="http://127.0.0.1:9400"
 export SIZE="1073741824" # 1gb
 export ROOT_PATH=""/opt/c1n1"
-/usr/local/bin/2020-dfs-data
+/usr/local/bin/kertish-dfs-data
 ```
 - Give execution permission to the file `sudo chmod +x [Saved File Location]`
 - Execute the saved file.
@@ -151,7 +151,7 @@ export BIND_ADDRESS="127.0.0.1:9431"
 export MANAGER_ADDRESS="http://127.0.0.1:9400"
 export SIZE="1073741824" # 1gb
 export ROOT_PATH=""/opt/c1n2"
-/usr/local/bin/2020-dfs-data
+/usr/local/bin/kertish-dfs-data
 ```
 - Give execution permission to the file `sudo chmod +x [Saved File Location]`
 - Execute the saved file.
@@ -166,7 +166,7 @@ export BIND_ADDRESS="127.0.0.1:9432"
 export MANAGER_ADDRESS="http://127.0.0.1:9400"
 export SIZE="1073741824" # 1gb
 export ROOT_PATH=""/opt/c2n1"
-/usr/local/bin/2020-dfs-data
+/usr/local/bin/kertish-dfs-data
 ```
 - Give execution permission to the file `sudo chmod +x [Saved File Location]`
 - Execute the saved file.
@@ -181,7 +181,7 @@ export BIND_ADDRESS="127.0.0.1:9433"
 export MANAGER_ADDRESS="http://127.0.0.1:9400"
 export SIZE="1073741824" # 1gb
 export ROOT_PATH=""/opt/c2n2"
-/usr/local/bin/2020-dfs-data
+/usr/local/bin/kertish-dfs-data
 ```
 - Give execution permission to the file `sudo chmod 777 [Saved File Location]`
 - Execute the saved file.
@@ -193,10 +193,10 @@ different sized hard-drives. You should use the `SIZE` environment variable to a
 the server that has the smallest hard-drive size
 
  
-- Copy `2020-dfs-admin` executable to `/usr/local/bin` folder on the system.
-- Give execution permission to the file `sudo chmod +x /usr/local/bin/2020-dfs-admin`
+- Copy `kertish-dfs-admin` executable to `/usr/local/bin` folder on the system.
+- Give execution permission to the file `sudo chmod +x /usr/local/bin/kertish-dfs-admin`
 - Enter the following command
-`2020-dfs-admin -create-cluster 127.0.0.1:9430,127.0.0.1:9431`
+`kertish-dfs-admin -create-cluster 127.0.0.1:9430,127.0.0.1:9431`
 - If everything went right, you should see an output like
 ```
 Cluster Details: eddd204e4cd23a14cb2f20c84299ee81
@@ -206,7 +206,7 @@ Cluster Details: eddd204e4cd23a14cb2f20c84299ee81
 ok.
 ```
 - Enter the following command to create the one another cluster
-`2020-dfs-admin -create-cluster 127.0.0.1:9432,127.0.0.1:9433`
+`kertish-dfs-admin -create-cluster 127.0.0.1:9432,127.0.0.1:9433`
 - If everything went right, you should see something like this
 ```
 Cluster Details: 8f0e2bc02811f346d6cbb542c92d118d
@@ -218,31 +218,31 @@ ok.
 ---
 ##### Manipulating FileSystem
 
-- Copy `2020-dfs` executable to `/usr/local/bin` folder on the system.
-- Give execution permission to the file `sudo chmod +x /usr/local/bin/2020-dfs`
+- Copy `kertish-dfs` executable to `/usr/local/bin` folder on the system.
+- Give execution permission to the file `sudo chmod +x /usr/local/bin/kertish-dfs`
 - Enter the following command
-`2020-dfs ls -l`
+`kertish-dfs ls -l`
 output: 
 ```
 processing... ok.
 total 0
 ```
 - Put a file from your local drive to dfs
-`2020-dfs cp local:/usr/local/bin/2020-dfs /2020-dfs`
+`kertish-dfs cp local:/usr/local/bin/kertish-dfs /kertish-dfs`
 output: 
 ```
 processing... ok.
 ```
 - Enter the following command
-`2020-dfs ls -l`
+`kertish-dfs ls -l`
 output: 
 ```
 processing... ok.
 total 1
--  7291kb 2020 Jan 13 05:30 2020-dfs
+-  7291kb 2020 Jan 13 05:30 kertish-dfs
 ```
 
-If you get the same or similar outputs like here, congratulations! you successfully set up your 2020-dfs. 
+If you get the same or similar outputs like here, congratulations! you successfully set up your Kertish-dfs. 
 
 ### One Last Important Note
 

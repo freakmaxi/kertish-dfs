@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/freakmaxi/2020-dfs/manager-node/src/common"
-	"github.com/freakmaxi/2020-dfs/manager-node/src/errors"
+	"github.com/freakmaxi/kertish-dfs/manager-node/src/common"
+	"github.com/freakmaxi/kertish-dfs/manager-node/src/errors"
 )
 
 func (m *managerRouter) handleDelete(w http.ResponseWriter, r *http.Request) {

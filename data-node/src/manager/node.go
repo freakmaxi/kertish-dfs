@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/freakmaxi/2020-dfs/data-node/src/common"
+	"github.com/freakmaxi/kertish-dfs/data-node/src/common"
 )
 
 const managerEndPoint = "/client/node"

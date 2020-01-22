@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/freakmaxi/2020-dfs/manager-node/src/routing"
+	"github.com/freakmaxi/kertish-dfs/manager-node/src/routing"
 )
 
 type Proxy struct {
@@ -20,7 +20,7 @@ func NewProxy(bindAddr string, manager *routing.Manager) *Proxy {
 }
 
 func (p *Proxy) Start() {
-	fmt.Printf("INFO: 2020-DFS Manager Service is starting on %s\n", p.bindAddr)
+	fmt.Printf("INFO: Manager Service is running on %s\n", p.bindAddr)
 	if err := http.ListenAndServe(p.bindAddr, p.manager.Get()); err != nil {
 		fmt.Printf("ERROR: Manager service is failed. %s\n", err.Error())
 	}

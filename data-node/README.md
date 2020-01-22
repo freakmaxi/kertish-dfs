@@ -1,4 +1,4 @@
-# 2020 DFS Data Node
+# Kertish DFS Data Node
 
 Data node is responsible to store file blocks and serve then they requested.
 Default bind endpoint port is `:9430`

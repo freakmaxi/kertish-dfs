@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/freakmaxi/2020-dfs/admin-tool/common"
-	"github.com/freakmaxi/2020-dfs/admin-tool/manager"
+	"github.com/freakmaxi/kertish-dfs/admin-tool/common"
+	"github.com/freakmaxi/kertish-dfs/admin-tool/manager"
 )
 
 var version = "XX.X.XXXX"

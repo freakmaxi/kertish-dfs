@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/freakmaxi/2020-dfs/head-node/src/common"
+	"github.com/freakmaxi/kertish-dfs/head-node/src/common"
 )
 
 func (d *dfsRouter) handlePut(w http.ResponseWriter, r *http.Request) {

@@ -1,3 +1,3 @@
-module github.com/freakmaxi/2020-dfs/admin-tool
+module github.com/freakmaxi/kertish-dfs/admin-tool
 
 go 1.13

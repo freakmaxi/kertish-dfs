@@ -12,9 +12,9 @@ import (
 	"strings"
 	"syscall"
 
-	cluster2 "github.com/freakmaxi/2020-dfs/head-node/src/cluster"
-	"github.com/freakmaxi/2020-dfs/head-node/src/common"
-	"github.com/freakmaxi/2020-dfs/head-node/src/errors"
+	cluster2 "github.com/freakmaxi/kertish-dfs/head-node/src/cluster"
+	"github.com/freakmaxi/kertish-dfs/head-node/src/common"
+	"github.com/freakmaxi/kertish-dfs/head-node/src/errors"
 )
 
 const managerEndPoint = "/client/manager"

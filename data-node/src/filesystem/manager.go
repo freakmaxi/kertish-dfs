@@ -8,8 +8,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/freakmaxi/2020-dfs/data-node/src/cluster"
-	"github.com/freakmaxi/2020-dfs/data-node/src/errors"
+	"github.com/freakmaxi/kertish-dfs/data-node/src/cluster"
+	"github.com/freakmaxi/kertish-dfs/data-node/src/errors"
 )
 
 type Manager interface {
