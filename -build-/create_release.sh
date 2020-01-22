@@ -41,8 +41,6 @@ echo "  > compiling linux x64 release"
 GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../../-build-/releases/linux/kertish-manager
 echo "  > compiling macosx x64 release"
 GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../../-build-/releases/macosx/kertish-manager
-echo "  > compiling windows x64 release"
-GOOS=windows GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../../-build-/releases/windows/kertish-manager.exe
 
 echo ""
 echo "Building Head Node service executable (v$RELEASE_VERSION)"
@@ -51,8 +49,6 @@ echo "  > compiling linux x64 release"
 GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../../-build-/releases/linux/kertish-head
 echo "  > compiling macosx x64 release"
 GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../../-build-/releases/macosx/kertish-head
-echo "  > compiling windows x64 release"
-GOOS=windows GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../../-build-/releases/windows/kertish-head.exe
 
 echo ""
 echo "Building Data Node service executable (v$RELEASE_VERSION)"
@@ -61,5 +57,3 @@ echo "  > compiling linux x64 release"
 GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../../-build-/releases/linux/kertish-data
 echo "  > compiling macosx x64 release"
 GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../../-build-/releases/macosx/kertish-data
-echo "  > compiling windows x64 release"
-GOOS=windows GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../../-build-/releases/windows/kertish-data.exe
