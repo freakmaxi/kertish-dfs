@@ -33,8 +33,8 @@ Will be used to have the stability of metadata of the file system
 - `GET` is used to get folders/files list and also file downloading.
 
 ##### Required Headers:
-- `X-Path` folder(s)/file(s) location in dfs. Possible formats are `[sourcePath]` or `j,[sourcePath],[sourcePath]...`
-`sourcePath`(s) should be url encoded
+- `X-Path` folder(s)/file(s) location in dfs. Possible formats are `[sourcePath]` or to join files 
+`j,[sourcePath],[sourcePath]...`. `sourcePath`(s) should be url encoded
 
 ##### Optional Headers:
 - `X-CalculateUsage` (only folder) force to calculate the size of folders
@@ -115,8 +115,8 @@ Will be used to have the stability of metadata of the file system
 - `PUT` is used to move/copy folders/files in file system.
 
 ##### Required Headers:
-- `X-Path` source folder(s)/file(s) location in dfs. Possible formats are `[sourcePath]` or `j,[sourcePath],[sourcePath]...`
-`sourcePath`(s) should be url encoded
+- `X-Path` source folder(s)/file(s) location in dfs. Possible formats are `[sourcePath]` or for file/folder joining
+`j,[sourcePath],[sourcePath]...`. `sourcePath`(s) should be url encoded
 - `X-Target` action and target of folder/file. it is formatted header, the value must be `[action],[targetPath]` and
 `targetPath` should be url encoded. 
 `c` is used for copy action, `m` is used for move action. Ex: `c,/SomeTargetFolder` or `m,/SomeTargetFolder` 
