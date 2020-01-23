@@ -125,6 +125,7 @@ Will be used to have the stability of metadata of the file system
 ##### Possible Status Codes
 - `404`: Source not found
 - `409`: Conflict (folder/file exists)
+- `412`: Conflict when joining folders
 - `422`: Required Request Headers are not valid or absent
 - `500`: Operational failures
 - `200`: Accepted
