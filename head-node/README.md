@@ -33,7 +33,8 @@ Will be used to have the stability of metadata of the file system
 - `GET` is used to get folders/files list and also file downloading.
 
 ##### Required Headers:
-- `X-Path` folder/file location in dfs
+- `X-Path` folder(s)/file(s) location in dfs. Possible formats are `[sourcePath]` or `j,[sourcePath],[sourcePath]...`
+`sourcePath`(s) should be url encoded
 
 ##### Optional Headers:
 - `X-CalculateUsage` (only folder) force to calculate the size of folders
@@ -96,7 +97,7 @@ Will be used to have the stability of metadata of the file system
 
 ##### Required Headers:
 - `X-ApplyTo` is the aim of operation. Values: `file` or `folder`
-- `X-Path` folder/file location in dfs
+- `X-Path` folder/file location in dfs (should be urlencoded)
 - `Content-Type` (only file)
 - `Content-Length` (only file)
 
@@ -114,8 +115,10 @@ Will be used to have the stability of metadata of the file system
 - `PUT` is used to move/copy folders/files in file system.
 
 ##### Required Headers:
-- `X-Path` source folder/file location in dfs
-- `X-Target` action and target of folder/file. it is formatted header, the value must be `[action],[targetPath]` 
+- `X-Path` source folder(s)/file(s) location in dfs. Possible formats are `[sourcePath]` or `j,[sourcePath],[sourcePath]...`
+`sourcePath`(s) should be url encoded
+- `X-Target` action and target of folder/file. it is formatted header, the value must be `[action],[targetPath]` and
+`targetPath` should be url encoded. 
 `c` is used for copy action, `m` is used for move action. Ex: `c,/SomeTargetFolder` or `m,/SomeTargetFolder` 
 - `X-Overwrite` ignore file/folder existence and continue without conflict response. Values: `1` or `true`. Default: `false`
 
@@ -130,7 +133,7 @@ Will be used to have the stability of metadata of the file system
 **CAUTION: Deletion operation is applied immediately**
 
 ##### Required Headers:
-- `X-Path` source folder/file location in dfs
+- `X-Path` source folder/file location in dfs (should be urlencoded)
 
 ##### Possible Status Codes
 - `404`: Not found
