@@ -13,12 +13,13 @@ import (
 )
 
 func (d *dfsRouter) handleGet(w http.ResponseWriter, r *http.Request) {
-	requestedPath := r.Header.Get("X-Path")
-
-	if !common.ValidatePath(requestedPath) {
+	requestedPaths, sourceAction, err := d.describeXPath(r.Header.Get("X-Path"))
+	if err != nil {
 		w.WriteHeader(422)
 		return
 	}
+
+	join := strings.Compare(sourceAction, "j") == 0
 
 	calculateUsageHeader := strings.ToLower(r.Header.Get("X-CalculateUsage"))
 	calculateUsage := len(calculateUsageHeader) > 0 && (strings.Compare(calculateUsageHeader, "1") == 0 || strings.Compare(calculateUsageHeader, "true") == 0)
@@ -30,7 +31,7 @@ func (d *dfsRouter) handleGet(w http.ResponseWriter, r *http.Request) {
 	partialRequest := len(requestRange) > 0
 
 	if err := d.dfs.Read(
-		requestedPath,
+		requestedPaths, join,
 		func(folder *common.Folder) error {
 			w.Header().Set("X-Type", "folder")
 
@@ -56,10 +57,13 @@ func (d *dfsRouter) handleGet(w http.ResponseWriter, r *http.Request) {
 		if err == os.ErrNotExist {
 			w.WriteHeader(404)
 			return
+		} else if err == os.ErrInvalid {
+			w.WriteHeader(422)
+			return
 		} else {
 			w.WriteHeader(500)
 		}
-		fmt.Printf("ERROR: Get request for %s is failed. %s\n", requestedPath, err.Error())
+		fmt.Printf("ERROR: Get request for %s is failed. %s\n", strings.Join(requestedPaths, " "), err.Error())
 	}
 }
 

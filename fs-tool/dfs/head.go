@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -23,7 +24,7 @@ func List(headAddresses []string, source string, usage bool) (*common.Folder, er
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("X-Path", source)
+	req.Header.Set("X-Path", createXPath([]string{source}))
 	req.Header.Set("X-CalculateUsage", strconv.FormatBool(usage))
 
 	res, err := client.Do(req)
@@ -54,7 +55,7 @@ func MakeFolder(headAddresses []string, target string) error {
 		return err
 	}
 	req.Header.Set("X-ApplyTo", "folder")
-	req.Header.Set("X-Path", target)
+	req.Header.Set("X-Path", createXPath([]string{target}))
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -73,7 +74,7 @@ func MakeFolder(headAddresses []string, target string) error {
 	return nil
 }
 
-func Change(headAddresses []string, source string, target string, overwrite bool, copy bool) error {
+func Change(headAddresses []string, sources []string, target string, overwrite bool, copy bool) error {
 	req, err := http.NewRequest("PUT", fmt.Sprintf("http://%s%s", headAddresses[0], headEndPoint), nil)
 	if err != nil {
 		return err
@@ -82,8 +83,8 @@ func Change(headAddresses []string, source string, target string, overwrite bool
 	if copy {
 		action = "c"
 	}
-	req.Header.Set("X-Path", source)
-	req.Header.Set("X-Target", fmt.Sprintf("%s,%s", action, target))
+	req.Header.Set("X-Path", createXPath(sources))
+	req.Header.Set("X-Target", fmt.Sprintf("%s,%s", action, url.QueryEscape(target)))
 	req.Header.Set("X-Overwrite", strconv.FormatBool(overwrite))
 
 	res, err := client.Do(req)
@@ -93,18 +94,20 @@ func Change(headAddresses []string, source string, target string, overwrite bool
 
 	switch res.StatusCode {
 	case 404:
-		return fmt.Errorf("%s is not exists", source)
+		return fmt.Errorf("%s is/are not exists", sourcesErrorString(sources))
 	case 409:
 		return fmt.Errorf("%s is already exists", target)
+	case 412:
+		return fmt.Errorf("%s have conflicts between file(s)/folder(s)", sourcesErrorString(sources))
 	case 422:
-		return fmt.Errorf("%s and %s should be absolute paths", source, target)
+		return fmt.Errorf("%s and %s should be absolute paths", sourcesErrorString(sources), target)
 	case 500:
 		if strings.Compare(action, "m") == 0 {
 			action = "move"
 		} else {
 			action = "copy"
 		}
-		return fmt.Errorf("unable to %s from %s to %s", action, source, target)
+		return fmt.Errorf("unable to %s from %s to %s", action, sourcesErrorString(sources), target)
 	}
 
 	return nil
@@ -115,7 +118,7 @@ func Delete(headAddresses []string, target string) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("X-Path", target)
+	req.Header.Set("X-Path", createXPath([]string{target}))
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -187,7 +190,7 @@ func PutFile(headAddresses []string, source string, target string, overwrite boo
 	}
 
 	req.Header.Set("X-ApplyTo", "file")
-	req.Header.Set("X-Path", target)
+	req.Header.Set("X-Path", createXPath([]string{target}))
 	req.Header.Set("X-Overwrite", strconv.FormatBool(overwrite))
 	req.Header.Set("X-AllowEmpty", strconv.FormatBool(size == 0))
 	req.Header.Set("Content-Type", contentType)
@@ -239,13 +242,13 @@ func contentDetails(source string) (string, int64, error) {
 	return http.DetectContentType(buf), info.Size(), nil
 }
 
-func Pull(headAddresses []string, source string, target string, readRange *common.ReadRange) error {
+func Pull(headAddresses []string, sources []string, target string, readRange *common.ReadRange) error {
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s%s", headAddresses[0], headEndPoint), nil)
 	if err != nil {
 		return err
 	}
 
-	req.Header.Set("X-Path", source)
+	req.Header.Set("X-Path", createXPath(sources))
 	if readRange != nil {
 		req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", readRange.Begins, readRange.Ends))
 	}
@@ -257,11 +260,14 @@ func Pull(headAddresses []string, source string, target string, readRange *commo
 
 	switch res.StatusCode {
 	case 404:
-		return fmt.Errorf("%s is not exists", source)
+		return fmt.Errorf("%s is/are not exists", sourcesErrorString(sources))
 	case 422:
-		return fmt.Errorf("%s should be an absolute path", source)
+		if strings.Compare(res.Header.Get("X-Type"), "file") == 0 {
+			return fmt.Errorf("%s should be absolute path(s)", sourcesErrorString(sources))
+		}
+		return fmt.Errorf("combining dfs folder(s) to local folder is not possible")
 	case 500:
-		return fmt.Errorf("unable to get %s", source)
+		return fmt.Errorf("unable to get %s", sourcesErrorString(sources))
 	}
 
 	if strings.Compare(res.Header.Get("X-Type"), "file") == 0 {
@@ -292,22 +298,39 @@ func Pull(headAddresses []string, source string, target string, readRange *commo
 	}
 
 	for _, file := range folder.Files {
-		sourcePath := path.Join(source, file.Name)
+		sourcePath := path.Join(sources[0], file.Name)
 		targetPath := path.Join(target, file.Name)
 
-		if err := Pull(headAddresses, sourcePath, targetPath, nil); err != nil {
+		if err := Pull(headAddresses, []string{sourcePath}, targetPath, nil); err != nil {
 			return fmt.Errorf("unsuccessful operation")
 		}
 	}
 
 	for _, f := range folder.Folders {
-		sourcePath := path.Join(source, f.Name)
+		sourcePath := path.Join(sources[0], f.Name)
 		targetPath := path.Join(target, f.Name)
 
-		if err := Pull(headAddresses, sourcePath, targetPath, nil); err != nil {
+		if err := Pull(headAddresses, []string{sourcePath}, targetPath, nil); err != nil {
 			return fmt.Errorf("unsuccessful operation")
 		}
 	}
 
 	return nil
+}
+
+func createXPath(sources []string) string {
+	if len(sources) == 1 {
+		return url.QueryEscape(sources[0])
+	}
+	for i := range sources {
+		sources[i] = url.QueryEscape(sources[i])
+	}
+	return fmt.Sprintf("j,%s", strings.Join(sources, ","))
+}
+
+func sourcesErrorString(sources []string) string {
+	for i := range sources {
+		sources[i], _ = url.QueryUnescape(sources[i])
+	}
+	return strings.Join(sources, " + ")
 }

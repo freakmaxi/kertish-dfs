@@ -1,10 +1,14 @@
 package common
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"os"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/freakmaxi/kertish-dfs/head-node/src/errors"
 )
 
 type Folder struct {
@@ -78,6 +82,41 @@ func (f *Folder) NewFile(name string) (*File, error) {
 	sort.Sort(f.Files)
 
 	return nf, nil
+}
+
+func CreateJoinedFolder(folders []*Folder) (*Folder, error) {
+	hash := md5.New()
+
+	joinedFolder := NewFolder("/TEMP")
+	for _, f := range folders {
+		if _, err := hash.Write([]byte(f.Full)); err != nil {
+			return nil, err
+		}
+
+		for _, fs := range f.Folders {
+			shadow := *fs
+
+			fp := f.Folder(shadow.Name)
+			if fp != nil {
+				return nil, errors.ErrJoinConflict
+			}
+			f.Folders = append(f.Folders, &shadow)
+		}
+
+		for _, file := range f.Files {
+			shadow := *file
+
+			fileCheck := f.File(shadow.Name)
+			if fileCheck != nil {
+				return nil, errors.ErrJoinConflict
+			}
+			f.Files = append(f.Files, &shadow)
+		}
+	}
+	joinedFolder.Name = hex.EncodeToString(hash.Sum(nil))
+	joinedFolder.Full = Join(pathSeparator, joinedFolder.Name)
+
+	return joinedFolder, nil
 }
 
 func (f *Folder) Folder(name string) *string {

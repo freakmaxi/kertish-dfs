@@ -10,15 +10,17 @@ import (
 	"github.com/freakmaxi/kertish-dfs/fs-tool/common"
 	"github.com/freakmaxi/kertish-dfs/fs-tool/dfs"
 	"github.com/freakmaxi/kertish-dfs/fs-tool/errors"
+	"github.com/google/uuid"
 )
 
 type copyCommand struct {
 	headAddresses []string
 	args          []string
 
+	join      bool
 	overwrite bool
 	readRange *common.ReadRange
-	source    string
+	sources   []string
 	target    string
 }
 
@@ -36,6 +38,10 @@ func (c *copyCommand) Parse() error {
 		case "-f":
 			c.args = c.args[1:]
 			c.overwrite = true
+			continue
+		case "-j":
+			c.args = c.args[1:]
+			c.join = true
 			continue
 		case "-r":
 			c.args = c.args[1:]
@@ -59,12 +65,16 @@ func (c *copyCommand) Parse() error {
 		break
 	}
 
-	if len(c.args) != 2 {
+	if len(c.args) < 2 {
 		return fmt.Errorf("cp command needs source and target parameters")
 	}
 
-	c.source = c.args[0]
-	c.target = c.args[1]
+	if !c.join && len(c.args) > 2 {
+		return fmt.Errorf("cp command needs join flag to combine sources to target")
+	}
+
+	c.sources = c.args[:len(c.args)-1]
+	c.target = c.args[len(c.args)-1]
 
 	return nil
 }
@@ -77,6 +87,7 @@ func (c *copyCommand) PrintUsage() {
 	fmt.Println()
 	fmt.Println("arguments:")
 	fmt.Println("  -f          overwrites the existent file / folder")
+	fmt.Println("  -j          joins sources to target file / folder")
 	fmt.Println("  -r value    copies only defined range of the file.")
 	fmt.Println("              Ex: cp -r [byteBegins]->[byteEnds] [source] local:[target]")
 	fmt.Println()
@@ -85,7 +96,18 @@ func (c *copyCommand) PrintUsage() {
 }
 
 func (c *copyCommand) Execute() error {
-	if strings.Index(c.source, local) == 0 {
+	onlyLocal := false
+	for _, source := range c.sources {
+		if strings.Index(source, local) == 0 {
+			onlyLocal = true
+			continue
+		}
+		if onlyLocal {
+			return fmt.Errorf("cp command doesn't support to combine local and remote sources together to target")
+		}
+	}
+
+	if onlyLocal {
 		if err := c.localToRemote(); err != nil {
 			return err
 		}
@@ -102,7 +124,7 @@ func (c *copyCommand) Execute() error {
 	anim := common.NewAnimation("processing...")
 	anim.Start()
 
-	if err := dfs.Change(c.headAddresses, c.source, c.target, c.overwrite, true); err != nil {
+	if err := dfs.Change(c.headAddresses, c.sources, c.target, c.overwrite, true); err != nil {
 		anim.Cancel()
 		return err
 	}
@@ -119,7 +141,11 @@ func (c *copyCommand) remoteToLocal() error {
 	}
 
 	if info != nil && info.IsDir() {
-		_, sourceFileName := path.Split(c.source)
+		if len(c.sources) > 1 {
+			return fmt.Errorf("please specify a target file name to combine")
+		}
+
+		_, sourceFileName := path.Split(c.sources[0])
 		c.target = path.Join(c.target, sourceFileName)
 
 		info, err = os.Stat(c.target)
@@ -154,7 +180,7 @@ func (c *copyCommand) remoteToLocal() error {
 	anim := common.NewAnimation("processing...")
 	anim.Start()
 
-	if err := dfs.Pull(c.headAddresses, c.source, c.target, c.readRange); err != nil {
+	if err := dfs.Pull(c.headAddresses, c.sources, c.target, c.readRange); err != nil {
 		anim.Cancel()
 		return err
 	}
@@ -167,15 +193,24 @@ func (c *copyCommand) localToRemote() error {
 		return fmt.Errorf("please use O/S native commands to copy/move files/folders between local locations")
 	}
 
-	c.source = c.source[len(local):]
-	if len(c.source) == 0 {
-		return fmt.Errorf("please specify the source")
+	for i := range c.sources {
+		c.sources[i] = c.sources[i][len(local):]
+		if len(c.sources[i]) == 0 {
+			return fmt.Errorf("please specify the source")
+		}
 	}
 
 	anim := common.NewAnimation("processing...")
 	anim.Start()
 
-	if err := dfs.Put(c.headAddresses, c.source, c.target, c.overwrite); err != nil {
+	sourceTemp := path.Join(os.TempDir(), uuid.New().String())
+	defer os.Remove(sourceTemp)
+	if err := createTemporary(c.sources, sourceTemp); err != nil {
+		anim.Cancel()
+		return err
+	}
+
+	if err := dfs.Put(c.headAddresses, sourceTemp, c.target, c.overwrite); err != nil {
 		anim.Cancel()
 		return fmt.Errorf(err.Error())
 	}

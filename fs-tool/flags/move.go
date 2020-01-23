@@ -10,14 +10,16 @@ import (
 	"github.com/freakmaxi/kertish-dfs/fs-tool/common"
 	"github.com/freakmaxi/kertish-dfs/fs-tool/dfs"
 	"github.com/freakmaxi/kertish-dfs/fs-tool/errors"
+	"github.com/google/uuid"
 )
 
 type moveCommand struct {
 	headAddresses []string
 	args          []string
 
+	join      bool
 	overwrite bool
-	source    string
+	sources   []string
 	target    string
 }
 
@@ -36,6 +38,10 @@ func (m *moveCommand) Parse() error {
 			m.args = m.args[1:]
 			m.overwrite = true
 			continue
+		case "-j":
+			m.args = m.args[1:]
+			m.join = true
+			continue
 		case "-h":
 			return errors.ErrShowUsage
 		default:
@@ -50,8 +56,12 @@ func (m *moveCommand) Parse() error {
 		return fmt.Errorf("mv command needs source and target parameters")
 	}
 
-	m.source = m.args[0]
-	m.target = m.args[1]
+	if !m.join && len(m.args) > 2 {
+		return fmt.Errorf("mv command needs join flag to combine sources to target")
+	}
+
+	m.sources = m.args[:len(m.args)-1]
+	m.target = m.args[len(m.args)-1]
 
 	return nil
 }
@@ -64,11 +74,23 @@ func (m *moveCommand) PrintUsage() {
 	fmt.Println()
 	fmt.Println("arguments:")
 	fmt.Println("  -f          overwrites the existent file / folder")
+	fmt.Println("  -j          joins sources to target file / folder")
 	fmt.Println()
 }
 
 func (m *moveCommand) Execute() error {
-	if strings.Index(m.source, local) == 0 {
+	onlyLocal := false
+	for _, source := range m.sources {
+		if strings.Index(source, local) == 0 {
+			onlyLocal = true
+			continue
+		}
+		if onlyLocal {
+			return fmt.Errorf("mv command doesn't support to combine local and remote sources together to target")
+		}
+	}
+
+	if onlyLocal {
 		if err := m.localToRemote(); err != nil {
 			return err
 		}
@@ -85,7 +107,7 @@ func (m *moveCommand) Execute() error {
 	anim := common.NewAnimation("processing...")
 	anim.Start()
 
-	if err := dfs.Change(m.headAddresses, m.source, m.target, m.overwrite, false); err != nil {
+	if err := dfs.Change(m.headAddresses, m.sources, m.target, m.overwrite, false); err != nil {
 		anim.Cancel()
 		return err
 	}
@@ -102,7 +124,11 @@ func (m *moveCommand) remoteToLocal() error {
 	}
 
 	if info != nil && info.IsDir() {
-		_, sourceFileName := path.Split(m.source)
+		if len(m.sources) > 1 {
+			return fmt.Errorf("please specify a target file name to combine")
+		}
+
+		_, sourceFileName := path.Split(m.sources[0])
 		m.target = path.Join(m.target, sourceFileName)
 
 		info, err = os.Stat(m.target)
@@ -137,14 +163,16 @@ func (m *moveCommand) remoteToLocal() error {
 	anim := common.NewAnimation("processing...")
 	anim.Start()
 
-	if err := dfs.Pull(m.headAddresses, m.source, m.target, nil); err != nil {
+	if err := dfs.Pull(m.headAddresses, m.sources, m.target, nil); err != nil {
 		anim.Cancel()
 		return err
 	}
 
-	if err := dfs.Delete(m.headAddresses, m.source); err != nil {
-		anim.Cancel()
-		return err
+	for _, source := range m.sources {
+		if err := dfs.Delete(m.headAddresses, source); err != nil {
+			anim.Cancel()
+			return err
+		}
 	}
 	anim.Stop()
 	return nil
@@ -155,22 +183,33 @@ func (m *moveCommand) localToRemote() error {
 		return fmt.Errorf("please use O/S native commands to copy/move files/folders between local locations")
 	}
 
-	m.source = m.source[len(local):]
-	if len(m.source) == 0 {
-		return fmt.Errorf("please specify the source")
+	for i := range m.sources {
+		m.sources[i] = m.sources[i][len(local):]
+		if len(m.sources[i]) == 0 {
+			return fmt.Errorf("please specify the source")
+		}
 	}
 
 	anim := common.NewAnimation("processing...")
 	anim.Start()
 
-	if err := dfs.Put(m.headAddresses, m.source, m.target, m.overwrite); err != nil {
+	sourceTemp := path.Join(os.TempDir(), uuid.New().String())
+	defer os.Remove(sourceTemp)
+	if err := createTemporary(m.sources, sourceTemp); err != nil {
+		anim.Cancel()
+		return err
+	}
+
+	if err := dfs.Put(m.headAddresses, sourceTemp, m.target, m.overwrite); err != nil {
 		anim.Cancel()
 		return fmt.Errorf(err.Error())
 	}
 
-	if err := os.RemoveAll(m.source); err != nil {
-		anim.Cancel()
-		return fmt.Errorf("local file/folder couldn't delete")
+	for _, source := range m.sources {
+		if err := os.RemoveAll(source); err != nil {
+			anim.Cancel()
+			return fmt.Errorf("local file/folder couldn't delete")
+		}
 	}
 	anim.Stop()
 	return nil

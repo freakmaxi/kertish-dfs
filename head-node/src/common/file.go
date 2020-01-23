@@ -1,6 +1,9 @@
 package common
 
 import (
+	"crypto/md5"
+	"encoding/hex"
+	"sort"
 	"strings"
 	"time"
 )
@@ -20,6 +23,44 @@ type Files []*File
 func (f Files) Len() int           { return len(f) }
 func (f Files) Less(i, j int) bool { return strings.Compare(f[i].Name, f[j].Name) < 0 }
 func (f Files) Swap(i, j int)      { f[i], f[j] = f[j], f[i] }
+
+func CreateJoinedFile(files Files) (*File, error) {
+	hash := md5.New()
+
+	mime := ""
+	sequenceCount := uint16(0)
+	joinedFile := newFile("")
+	for _, f := range files {
+		if _, err := hash.Write([]byte(f.Name)); err != nil {
+			return nil, err
+		}
+		joinedFile.Size += f.Size
+
+		sort.Sort(f.Chunks)
+		for _, c := range f.Chunks {
+			shadow := *c
+
+			shadow.Sequence = sequenceCount
+			sequenceCount++
+
+			joinedFile.Chunks = append(joinedFile.Chunks, &shadow)
+		}
+
+		if len(mime) == 0 {
+			mime = f.Mime
+			continue
+		}
+		if strings.Compare(mime, f.Mime) == 0 {
+			continue
+		}
+
+		mime = joinedFile.Mime
+	}
+	joinedFile.Mime = mime
+	joinedFile.Name = hex.EncodeToString(hash.Sum(nil))
+
+	return joinedFile, nil
+}
 
 func newFile(name string) *File {
 	return &File{

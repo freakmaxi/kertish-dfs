@@ -8,16 +8,26 @@ import (
 
 const pathSeparator = "/"
 
-func CorrectPath(folderPath string) string {
-	if strings.Index(folderPath, pathSeparator) != 0 {
-		folderPath = fmt.Sprintf("%s%s", pathSeparator, folderPath)
-	}
-	folderPath = path.Clean(folderPath)
+func CorrectPaths(paths []string) []string {
+	for i := range paths {
+		folderPath := paths[i]
 
-	if len(folderPath) == 0 {
-		return pathSeparator
+		if strings.Index(folderPath, pathSeparator) != 0 {
+			folderPath = fmt.Sprintf("%s%s", pathSeparator, folderPath)
+		}
+		folderPath = path.Clean(folderPath)
+
+		if len(folderPath) == 0 {
+			folderPath = pathSeparator
+		}
+
+		paths[i] = folderPath
 	}
-	return folderPath
+	return paths
+}
+
+func CorrectPath(folderPath string) string {
+	return CorrectPaths([]string{folderPath})[0]
 }
 
 func PathTree(folderPath string) []string {
