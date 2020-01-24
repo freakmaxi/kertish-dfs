@@ -58,7 +58,7 @@ func (c *cluster) Create(size uint64, reader io.Reader) (common.DataChunks, erro
 	}
 
 	if err := c.commitReservation(reservation.Id, clusterUsageMap); err != nil {
-		fmt.Printf("ERROR: Commiting reservation (%s) is failed: %s\n", reservation.Id, err.Error())
+		fmt.Printf("ERROR: Committing reservation (%s) is failed: %s\n", reservation.Id, err.Error())
 	}
 
 	return chunks, nil

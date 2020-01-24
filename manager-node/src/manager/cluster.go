@@ -123,7 +123,7 @@ func (c *cluster) prepareNodes(nodeAddresses []string, clusterSize uint64) (comm
 		}
 
 		if clusterSize > 0 && size != clusterSize {
-			return nil, 0, fmt.Errorf("inconsistant size between master and slave")
+			return nil, 0, fmt.Errorf("inconsistent size between master and slave")
 		}
 		clusterSize = size
 
