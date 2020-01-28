@@ -100,7 +100,7 @@ func Change(headAddresses []string, sources []string, target string, overwrite b
 	case 412:
 		return fmt.Errorf("%s have conflicts between file(s)/folder(s)", sourcesErrorString(sources))
 	case 422:
-		return fmt.Errorf("%s and %s should be absolute paths", sourcesErrorString(sources), target)
+		return fmt.Errorf("%s and %s should be full and absolute paths", sourcesErrorString(sources), target)
 	case 500:
 		if strings.Compare(action, "m") == 0 {
 			action = "move"

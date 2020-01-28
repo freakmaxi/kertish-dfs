@@ -1,20 +1,23 @@
 package flags
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/freakmaxi/kertish-dfs/fs-tool/common"
 	"github.com/freakmaxi/kertish-dfs/fs-tool/dfs"
 	"github.com/freakmaxi/kertish-dfs/fs-tool/errors"
+	"github.com/freakmaxi/kertish-dfs/fs-tool/terminal"
 	"github.com/google/uuid"
 )
 
 type moveCommand struct {
 	headAddresses []string
+	output        terminal.Output
+	basePath      string
 	args          []string
 
 	join      bool
@@ -23,9 +26,11 @@ type moveCommand struct {
 	target    string
 }
 
-func NewMove(headAddresses []string, args []string) execution {
+func NewMove(headAddresses []string, output terminal.Output, basePath string, args []string) execution {
 	return &moveCommand{
 		headAddresses: headAddresses,
+		output:        output,
+		basePath:      basePath,
 		args:          args,
 	}
 }
@@ -67,15 +72,20 @@ func (m *moveCommand) Parse() error {
 }
 
 func (m *moveCommand) PrintUsage() {
-	fmt.Println("  mv          Move file or folder.")
-	fmt.Println("              Ex: mv [arguments] [source] [target]          # Move in dfs")
-	fmt.Println("              Ex: mv [arguments] local:[source] [target]    # Move from local to dfs")
-	fmt.Println("              Ex: mv [arguments] [source] local:[target]    # Move from dfs to local")
-	fmt.Println()
-	fmt.Println("arguments:")
-	fmt.Println("  -f          overwrites the existent file / folder")
-	fmt.Println("  -j          joins sources to target file / folder")
-	fmt.Println()
+	m.output.Println("  mv          Move file or folder.")
+	m.output.Println("              Ex: mv [arguments] [source] [target]          # Move in dfs")
+	m.output.Println("              Ex: mv [arguments] local:[source] [target]    # Move from local to dfs")
+	m.output.Println("              Ex: mv [arguments] [source] local:[target]    # Move from dfs to local")
+	m.output.Println("")
+	m.output.Println("arguments:")
+	m.output.Println("  -f          overwrites the existent file / folder")
+	m.output.Println("  -j          joins sources to target file / folder")
+	m.output.Println("")
+	m.output.Refresh()
+}
+
+func (m *moveCommand) Name() string {
+	return "mv"
 }
 
 func (m *moveCommand) Execute() error {
@@ -104,8 +114,19 @@ func (m *moveCommand) Execute() error {
 		return nil
 	}
 
-	anim := common.NewAnimation("processing...")
+	anim := common.NewAnimation(m.output, "processing...")
 	anim.Start()
+
+	for i := range m.sources {
+		if filepath.IsAbs(m.sources[i]) {
+			continue
+		}
+		m.sources[i] = common.Join(m.basePath, m.sources[i])
+	}
+
+	if !filepath.IsAbs(m.target) {
+		m.target = common.Join(m.basePath, m.target)
+	}
 
 	if err := dfs.Change(m.headAddresses, m.sources, m.target, m.overwrite, false); err != nil {
 		anim.Cancel()
@@ -143,25 +164,36 @@ func (m *moveCommand) remoteToLocal() error {
 		}
 
 		if !m.overwrite {
-			fmt.Printf("File %s is already exists\n", m.target)
-			fmt.Print("Do you want to overwrite? (y/N) ")
+			m.output.Printf("File %s is already exists\n", m.target)
+			m.output.Print("Do you want to overwrite? (y/N) ")
+			m.output.Refresh()
 
-			reader := bufio.NewReader(os.Stdin)
-			char, _, err := reader.ReadRune()
-			if err != nil {
-				return err
+			var out string
+			if !m.output.Scan(&out) {
+				m.output.Println("unable to get the answer")
+				m.output.Refresh()
+				return nil
 			}
 
-			switch char {
-			case 'Y', 'y':
+			switch strings.ToLower(out) {
+			case "y", "yes":
 			default:
+				m.output.Println("")
+				m.output.Refresh()
 				return nil
 			}
 		}
 	}
 
-	anim := common.NewAnimation("processing...")
+	anim := common.NewAnimation(m.output, "processing...")
 	anim.Start()
+
+	for i := range m.sources {
+		if filepath.IsAbs(m.sources[i]) {
+			continue
+		}
+		m.sources[i] = common.Join(m.basePath, m.sources[i])
+	}
 
 	if err := dfs.Pull(m.headAddresses, m.sources, m.target, nil); err != nil {
 		anim.Cancel()
@@ -190,7 +222,7 @@ func (m *moveCommand) localToRemote() error {
 		}
 	}
 
-	anim := common.NewAnimation("processing...")
+	anim := common.NewAnimation(m.output, "processing...")
 	anim.Start()
 
 	sourceTemp := path.Join(os.TempDir(), uuid.New().String())
@@ -198,6 +230,10 @@ func (m *moveCommand) localToRemote() error {
 	if err := createTemporary(m.sources, sourceTemp); err != nil {
 		anim.Cancel()
 		return err
+	}
+
+	if !filepath.IsAbs(m.target) {
+		m.target = common.Join(m.basePath, m.target)
 	}
 
 	if err := dfs.Put(m.headAddresses, sourceTemp, m.target, m.overwrite); err != nil {

@@ -2,7 +2,10 @@ package flags
 
 import (
 	"fmt"
+	"os"
 	"path"
+
+	"github.com/freakmaxi/kertish-dfs/fs-tool/terminal"
 )
 
 const local = "local:"
@@ -52,6 +55,7 @@ func (c *Command) printUsage() {
 	fmt.Println("  cp      Copy file or folder.")
 	fmt.Println("  mv      Move file or folder.")
 	fmt.Println("  rm      Remove files and/or folders.")
+	fmt.Println("  sh      Enter shell mode of fs-tool.")
 	fmt.Println()
 }
 
@@ -85,14 +89,14 @@ func (c *Command) Parse() bool {
 		}
 
 		switch arg {
-		case "mkdir", "ls", "cp", "mv", "rm":
+		case "mkdir", "ls", "cp", "mv", "rm", "sh":
 			mrArgs := make([]string, 0)
 			if i+1 < len(c.args) {
 				mrArgs = c.args[i+1:]
 			}
 
 			var err error
-			c.command, err = newExecution([]string{c.headAddress}, arg, mrArgs)
+			c.command, err = newExecution([]string{c.headAddress}, terminal.NewStdOut(), arg, string(os.PathSeparator), mrArgs, c.version)
 			if err != nil {
 				fmt.Println(err.Error())
 				fmt.Println()

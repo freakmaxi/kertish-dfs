@@ -2,16 +2,21 @@ package flags
 
 import (
 	"fmt"
+	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/freakmaxi/kertish-dfs/fs-tool/common"
 	"github.com/freakmaxi/kertish-dfs/fs-tool/dfs"
 	"github.com/freakmaxi/kertish-dfs/fs-tool/errors"
+	"github.com/freakmaxi/kertish-dfs/fs-tool/terminal"
 )
 
 type listCommand struct {
 	headAddresses []string
+	output        terminal.Output
+	basePath      string
 	args          []string
 
 	listing bool
@@ -19,9 +24,11 @@ type listCommand struct {
 	source  string
 }
 
-func NewList(headAddresses []string, args []string) execution {
+func NewList(headAddresses []string, output terminal.Output, basePath string, args []string) execution {
 	return &listCommand{
 		headAddresses: headAddresses,
+		output:        output,
+		basePath:      basePath,
 		args:          args,
 	}
 }
@@ -52,22 +59,31 @@ func (l *listCommand) Parse() error {
 		return fmt.Errorf("ls command needs optionally source parameter")
 	}
 
-	l.source = "/"
+	l.source = l.basePath
 	if len(l.args) == 1 {
-		l.source = l.args[0]
+		if !filepath.IsAbs(l.args[0]) {
+			l.source = path.Join(l.basePath, l.args[0])
+		} else {
+			l.source = l.args[0]
+		}
 	}
 
 	return nil
 }
 
 func (l *listCommand) PrintUsage() {
-	fmt.Println("  ls          List files and folders.")
-	fmt.Println("              Ex: ls [arguments] [target]")
-	fmt.Println()
-	fmt.Println("arguments:")
-	fmt.Println("  -l          shows in a listing format")
-	fmt.Println("  -u          calculate the size of folders")
-	fmt.Println()
+	l.output.Println("  ls          List files and folders.")
+	l.output.Println("              Ex: ls [arguments] [target]")
+	l.output.Println("")
+	l.output.Println("arguments:")
+	l.output.Println("  -l          shows in a listing format")
+	l.output.Println("  -u          calculate the size of folders")
+	l.output.Println("")
+	l.output.Refresh()
+}
+
+func (l *listCommand) Name() string {
+	return "ls"
 }
 
 func (l *listCommand) Execute() error {
@@ -75,7 +91,7 @@ func (l *listCommand) Execute() error {
 		return fmt.Errorf("please use O/S native commands to list files/folders")
 	}
 
-	anim := common.NewAnimation("processing...")
+	anim := common.NewAnimation(l.output, "processing...")
 	anim.Start()
 
 	folder, err := dfs.List(l.headAddresses, l.source, l.usage)
@@ -96,28 +112,29 @@ func (l *listCommand) Execute() error {
 func (l *listCommand) printAsSummary(folder *common.Folder) {
 	for _, f := range folder.Folders {
 		if l.usage {
-			fmt.Printf("> %s (%s)   ", f.Name, l.sizeToString(f.Size))
+			l.output.Printf("> %s (%s)   ", f.Name, l.sizeToString(f.Size))
 			continue
 		}
-		fmt.Printf("> %s   ", f.Name)
+		l.output.Printf("> %s   ", f.Name)
 	}
 	for _, f := range folder.Files {
-		fmt.Printf("%s   ", f.Name)
+		l.output.Printf("%s   ", f.Name)
 	}
-	fmt.Println()
+	l.output.Println("")
+	l.output.Refresh()
 }
 
 func (l *listCommand) printAsList(folder *common.Folder) {
 	total := len(folder.Folders) + len(folder.Files)
 
 	if l.usage && total > 1 {
-		fmt.Printf("total %d (%s)\n", total, l.sizeToString(folder.Size))
+		l.output.Printf("total %d (%s)\n", total, l.sizeToString(folder.Size))
 	} else {
-		fmt.Printf("total %d\n", total)
+		l.output.Printf("total %d\n", total)
 	}
 
 	for _, f := range folder.Folders {
-		fmt.Printf("d %7v %s %s\n", l.sizeToString(f.Size), f.Created.Format("2006 Jan 02 03:04"), f.Name)
+		l.output.Printf("d %7v %s %s\n", l.sizeToString(f.Size), f.Created.Format("2006 Jan 02 03:04"), f.Name)
 	}
 
 	for _, f := range folder.Files {
@@ -125,8 +142,10 @@ func (l *listCommand) printAsList(folder *common.Folder) {
 		if f.Locked {
 			lockChar = "•"
 		}
-		fmt.Printf("%s %7v %s %s\n", lockChar, l.sizeToString(f.Size), f.Modified.Format("2006 Jan 02 03:04"), f.Name)
+		l.output.Printf("%s %7v %s %s\n", lockChar, l.sizeToString(f.Size), f.Modified.Format("2006 Jan 02 03:04"), f.Name)
 	}
+
+	l.output.Refresh()
 }
 
 func (l *listCommand) sizeToString(size uint64) string {

@@ -1,27 +1,31 @@
 package flags
 
 import (
-	"bufio"
 	"fmt"
-	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/freakmaxi/kertish-dfs/fs-tool/common"
 	"github.com/freakmaxi/kertish-dfs/fs-tool/dfs"
 	"github.com/freakmaxi/kertish-dfs/fs-tool/errors"
+	"github.com/freakmaxi/kertish-dfs/fs-tool/terminal"
 )
 
 type removeCommand struct {
 	headAddresses []string
+	output        terminal.Output
+	basePath      string
 	args          []string
 
 	confirm bool
 	targets []string
 }
 
-func NewRemove(headAddresses []string, args []string) execution {
+func NewRemove(headAddresses []string, output terminal.Output, basePath string, args []string) execution {
 	return &removeCommand{
 		headAddresses: headAddresses,
+		output:        output,
+		basePath:      basePath,
 		args:          args,
 		confirm:       true,
 		targets:       make([]string, 0),
@@ -57,12 +61,17 @@ func (r *removeCommand) Parse() error {
 }
 
 func (r *removeCommand) PrintUsage() {
-	fmt.Println("  rm          Remove files and/or folders.")
-	fmt.Println("              Ex: rm [arguments] [target] [target] [target] ...")
-	fmt.Println()
-	fmt.Println("arguments:")
-	fmt.Println("  -f          skip confirmation and removes")
-	fmt.Println()
+	r.output.Println("  rm          Remove files and/or folders.")
+	r.output.Println("              Ex: rm [arguments] [target] [target] [target] ...")
+	r.output.Println("")
+	r.output.Println("arguments:")
+	r.output.Println("  -f          skip confirmation and removes")
+	r.output.Println("")
+	r.output.Refresh()
+}
+
+func (r *removeCommand) Name() string {
+	return "rm"
 }
 
 func (r *removeCommand) Execute() error {
@@ -75,27 +84,33 @@ func (r *removeCommand) Execute() error {
 			list = fmt.Sprintf("%s  - %s\n", list, d)
 		}
 
-		fmt.Println("You are about to remove")
-		fmt.Print(list)
-		fmt.Print("Do you want to continue? (y/N) ")
+		r.output.Println("You are about to remove")
+		r.output.Print(list)
+		r.output.Print("Do you want to continue? (y/N) ")
+		r.output.Refresh()
 
-		reader := bufio.NewReader(os.Stdin)
-		char, _, err := reader.ReadRune()
-		if err != nil {
-			fmt.Println(err)
+		var out string
+		if !r.output.Scan(&out) {
+			r.output.Println("unable to get the answer")
+			r.output.Refresh()
+			return nil
 		}
 
-		switch char {
-		case 'Y', 'y':
+		switch strings.ToLower(out) {
+		case "y", "yes":
 		default:
 			return nil
 		}
 	}
 
-	anim := common.NewAnimation("processing...")
+	anim := common.NewAnimation(r.output, "processing...")
 	anim.Start()
 
 	for _, d := range r.targets {
+		if !filepath.IsAbs(d) {
+			d = common.Join(r.basePath, d)
+		}
+
 		if err := dfs.Delete(r.headAddresses, d); err != nil {
 			anim.Cancel()
 			return err

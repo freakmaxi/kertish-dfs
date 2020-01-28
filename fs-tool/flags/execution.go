@@ -4,27 +4,32 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/freakmaxi/kertish-dfs/fs-tool/terminal"
 )
 
 type execution interface {
 	Parse() error
 	PrintUsage()
 
+	Name() string
 	Execute() error
 }
 
-func newExecution(headAddresses []string, command string, args []string) (execution, error) {
+func newExecution(headAddresses []string, output terminal.Output, command string, basePath string, args []string, version string) (execution, error) {
 	switch command {
 	case "ls":
-		return NewList(headAddresses, args), nil
+		return NewList(headAddresses, output, basePath, args), nil
 	case "mkdir":
-		return NewMakeDirectory(headAddresses, args), nil
+		return NewMakeDirectory(headAddresses, output, basePath, args), nil
 	case "cp":
-		return NewCopy(headAddresses, args), nil
+		return NewCopy(headAddresses, output, basePath, args), nil
 	case "mv":
-		return NewMove(headAddresses, args), nil
+		return NewMove(headAddresses, output, basePath, args), nil
 	case "rm":
-		return NewRemove(headAddresses, args), nil
+		return NewRemove(headAddresses, output, basePath, args), nil
+	case "sh":
+		return NewShell(headAddresses, version), nil
 	}
 
 	return nil, fmt.Errorf("unsupported command")

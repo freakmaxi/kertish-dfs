@@ -69,6 +69,25 @@ func Join(inputs ...string) string {
 	return CorrectPath(strings.Join(inputs, pathSeparator))
 }
 
-func ValidatePath(folderPath string) bool {
-	return strings.Index(folderPath, pathSeparator) == 0
+func DivideParts(folderPath string) []string {
+	return strings.Split(folderPath, pathSeparator)
+}
+
+func Absolute(basePath string, folderPath string) string {
+	if strings.Index(folderPath, pathSeparator) == 0 {
+		basePath = pathSeparator
+	}
+
+	targetParts := DivideParts(folderPath)
+	for len(targetParts) > 0 {
+		if strings.Compare(targetParts[0], "..") != 0 {
+			basePath = Join(basePath, targetParts[0])
+			targetParts = targetParts[1:]
+			continue
+		}
+		parentPath, _ := Split(basePath)
+		basePath = parentPath
+		targetParts = targetParts[1:]
+	}
+	return basePath
 }

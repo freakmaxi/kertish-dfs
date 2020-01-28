@@ -1,20 +1,23 @@
 package flags
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/freakmaxi/kertish-dfs/fs-tool/common"
 	"github.com/freakmaxi/kertish-dfs/fs-tool/dfs"
 	"github.com/freakmaxi/kertish-dfs/fs-tool/errors"
+	"github.com/freakmaxi/kertish-dfs/fs-tool/terminal"
 	"github.com/google/uuid"
 )
 
 type copyCommand struct {
 	headAddresses []string
+	output        terminal.Output
+	basePath      string
 	args          []string
 
 	join      bool
@@ -24,9 +27,11 @@ type copyCommand struct {
 	target    string
 }
 
-func NewCopy(headAddresses []string, args []string) execution {
+func NewCopy(headAddresses []string, output terminal.Output, basePath string, args []string) execution {
 	return &copyCommand{
 		headAddresses: headAddresses,
+		output:        output,
+		basePath:      basePath,
 		args:          args,
 	}
 }
@@ -80,19 +85,24 @@ func (c *copyCommand) Parse() error {
 }
 
 func (c *copyCommand) PrintUsage() {
-	fmt.Println("  cp          Copy file or folder.")
-	fmt.Println("              Ex: cp [arguments] [source] [target]          # Copy in dfs")
-	fmt.Println("              Ex: cp [arguments] local:[source] [target]    # Copy from local to dfs")
-	fmt.Println("              Ex: cp [arguments] [source] local:[target]    # Copy from dfs to local")
-	fmt.Println()
-	fmt.Println("arguments:")
-	fmt.Println("  -f          overwrites the existent file / folder")
-	fmt.Println("  -j          joins sources to target file / folder")
-	fmt.Println("  -r value    copies only defined range of the file.")
-	fmt.Println("              Ex: cp -r [byteBegins]->[byteEnds] [source] local:[target]")
-	fmt.Println()
-	fmt.Println("              WARNING: range works only from dfs to local copy operations")
-	fmt.Println()
+	c.output.Println("  cp          Copy file or folder.")
+	c.output.Println("              Ex: cp [arguments] [source] [target]          # Copy in dfs")
+	c.output.Println("              Ex: cp [arguments] local:[source] [target]    # Copy from local to dfs")
+	c.output.Println("              Ex: cp [arguments] [source] local:[target]    # Copy from dfs to local")
+	c.output.Println("")
+	c.output.Println("arguments:")
+	c.output.Println("  -f          overwrites the existent file / folder")
+	c.output.Println("  -j          joins sources to target file / folder")
+	c.output.Println("  -r value    copies only defined range of the file.")
+	c.output.Println("              Ex: cp -r [byteBegins]->[byteEnds] [source] local:[target]")
+	c.output.Println("")
+	c.output.Println("              WARNING: range works only from dfs to local copy operations")
+	c.output.Println("")
+	c.output.Refresh()
+}
+
+func (c *copyCommand) Name() string {
+	return "cp"
 }
 
 func (c *copyCommand) Execute() error {
@@ -121,8 +131,19 @@ func (c *copyCommand) Execute() error {
 		return nil
 	}
 
-	anim := common.NewAnimation("processing...")
+	anim := common.NewAnimation(c.output, "processing...")
 	anim.Start()
+
+	for i := range c.sources {
+		if filepath.IsAbs(c.sources[i]) {
+			continue
+		}
+		c.sources[i] = common.Join(c.basePath, c.sources[i])
+	}
+
+	if !filepath.IsAbs(c.target) {
+		c.target = common.Join(c.basePath, c.target)
+	}
 
 	if err := dfs.Change(c.headAddresses, c.sources, c.target, c.overwrite, true); err != nil {
 		anim.Cancel()
@@ -160,25 +181,36 @@ func (c *copyCommand) remoteToLocal() error {
 		}
 
 		if !c.overwrite {
-			fmt.Printf("File %s is already exists\n", c.target)
-			fmt.Print("Do you want to overwrite? (y/N) ")
+			c.output.Printf("File %s is already exists\n", c.target)
+			c.output.Print("Do you want to overwrite? (y/N) ")
+			c.output.Refresh()
 
-			reader := bufio.NewReader(os.Stdin)
-			char, _, err := reader.ReadRune()
-			if err != nil {
-				return err
+			var out string
+			if !c.output.Scan(&out) {
+				c.output.Println("unable to get the answer")
+				c.output.Refresh()
+				return nil
 			}
 
-			switch char {
-			case 'Y', 'y':
+			switch strings.ToLower(out) {
+			case "y", "yes":
 			default:
+				c.output.Println("")
+				c.output.Refresh()
 				return nil
 			}
 		}
 	}
 
-	anim := common.NewAnimation("processing...")
+	anim := common.NewAnimation(c.output, "processing...")
 	anim.Start()
+
+	for i := range c.sources {
+		if filepath.IsAbs(c.sources[i]) {
+			continue
+		}
+		c.sources[i] = common.Join(c.basePath, c.sources[i])
+	}
 
 	if err := dfs.Pull(c.headAddresses, c.sources, c.target, c.readRange); err != nil {
 		anim.Cancel()
@@ -200,7 +232,7 @@ func (c *copyCommand) localToRemote() error {
 		}
 	}
 
-	anim := common.NewAnimation("processing...")
+	anim := common.NewAnimation(c.output, "processing...")
 	anim.Start()
 
 	sourceTemp := path.Join(os.TempDir(), uuid.New().String())
@@ -208,6 +240,10 @@ func (c *copyCommand) localToRemote() error {
 	if err := createTemporary(c.sources, sourceTemp); err != nil {
 		anim.Cancel()
 		return err
+	}
+
+	if !filepath.IsAbs(c.target) {
+		c.target = common.Join(c.basePath, c.target)
 	}
 
 	if err := dfs.Put(c.headAddresses, sourceTemp, c.target, c.overwrite); err != nil {
