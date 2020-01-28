@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/freakmaxi/kertish-dfs/fs-tool/common"
+	"github.com/freakmaxi/kertish-dfs/fs-tool/errors"
 	"github.com/freakmaxi/kertish-dfs/fs-tool/terminal"
 	"github.com/gdamore/tcell"
 	"github.com/mattn/go-runewidth"
@@ -437,8 +438,11 @@ func (s *shellCommand) parse(args []string) (bool, bool, execution) {
 
 		err = command.Parse()
 		if err != nil {
-			s.output.Println(err.Error())
+			if err != errors.ErrShowUsage {
+				s.output.Println(err.Error())
+			}
 			s.output.Println("")
+			s.output.Println("Usage:")
 			command.PrintUsage()
 			return true, false, nil
 		}
