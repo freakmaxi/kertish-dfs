@@ -19,7 +19,8 @@ commands:
   sh      Enter shell mode of fs-tool.
 ```
 
-###Shell Commands
+### Shell Commands
+
 ```
       __ _  ____  ____  ____  __  ____  _  _       ____  ____  ____                                                                    
      (  / )(  __)(  _ \(_  _)(  )/ ___)/ )( \     (    \(  __)/ ___)                                                                   
