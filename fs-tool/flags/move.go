@@ -3,6 +3,7 @@ package flags
 import (
 	"fmt"
 	"os"
+	"os/user"
 	"path"
 	"path/filepath"
 	"strings"
@@ -195,6 +196,13 @@ func (m *moveCommand) remoteToLocal() error {
 		m.sources[i] = common.Join(m.basePath, m.sources[i])
 	}
 
+	if strings.Index(m.target, "~") == 0 {
+		u, err := user.Current()
+		if err == nil {
+			m.target = path.Join(u.HomeDir, m.target[1:])
+		}
+	}
+
 	if err := dfs.Pull(m.headAddresses, m.sources, m.target, nil); err != nil {
 		anim.Cancel()
 		return err
@@ -220,16 +228,25 @@ func (m *moveCommand) localToRemote() error {
 		if len(m.sources[i]) == 0 {
 			return fmt.Errorf("please specify the source")
 		}
+		if strings.Index(m.sources[i], "~") == 0 {
+			u, err := user.Current()
+			if err == nil {
+				m.sources[i] = path.Join(u.HomeDir, m.sources[i][1:])
+			}
+		}
 	}
 
 	anim := common.NewAnimation(m.output, "processing...")
 	anim.Start()
 
-	sourceTemp := path.Join(os.TempDir(), uuid.New().String())
-	defer os.Remove(sourceTemp)
-	if err := createTemporary(m.sources, sourceTemp); err != nil {
-		anim.Cancel()
-		return err
+	sourceTemp := m.sources[0]
+	if len(m.sources) > 1 {
+		sourceTemp := path.Join(os.TempDir(), uuid.New().String())
+		defer os.Remove(sourceTemp)
+		if err := createTemporary(m.sources, sourceTemp); err != nil {
+			anim.Cancel()
+			return err
+		}
 	}
 
 	if !filepath.IsAbs(m.target) {

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 
+	"github.com/freakmaxi/kertish-dfs/fs-tool/errors"
 	"github.com/freakmaxi/kertish-dfs/fs-tool/terminal"
 )
 
@@ -106,7 +107,9 @@ func (c *Command) Parse() bool {
 
 			err = c.command.Parse()
 			if err != nil {
-				fmt.Println(err.Error())
+				if err != errors.ErrShowUsage {
+					fmt.Println(err.Error())
+				}
 				fmt.Println()
 				c.printUsageHeader()
 				c.command.PrintUsage()

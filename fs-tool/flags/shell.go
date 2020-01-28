@@ -76,7 +76,33 @@ func (s *shellCommand) printHelp() {
 	s.output.Println("  mv      Move file or folder.")
 	s.output.Println("  rm      Remove files and/or folders.")
 	s.output.Println("  help    Show this screen.")
+	s.output.Println("          Ex: help [command] or help shortcuts")
 	s.output.Println("  exit    Exit from shell.")
+	s.output.Refresh()
+}
+
+func (s *shellCommand) printShortcuts() {
+	s.output.Println("available shortcuts:")
+	s.output.Println("  Escape    :   Clear/Cancel line")
+	s.output.Println("  Up        :   Older history")
+	s.output.Println("  Down      :   Newer history")
+	s.output.Println("  Home      :   Move cursor to line head")
+	s.output.Println("  End       :   Move cursor to line end")
+	s.output.Println("  PageUp    :   Scroll up")
+	s.output.Println("  PageDown  :   Scroll down")
+	s.output.Println("  Ctrl+T    :   Top of the terminal")
+	s.output.Println("  Ctrl+B    :   Bottom of the terminal")
+	s.output.Println("  Ctrl+Y    :   Page up in the terminal")
+	s.output.Println("  Ctrl+V    :   Page down in the terminal")
+	s.output.Println("  Ctrl+W    :   Remove previous word")
+	s.output.Println("  Backspace :   Remove previous char")
+	s.output.Println("  Left      :   Move cursor to previous char")
+	s.output.Println("  Alt+Left  :   Jump to previous word")
+	s.output.Println("  Right     :   Move cursor to next char")
+	s.output.Println("  Alt+Right :   Jump to next word")
+	s.output.Println("  Ctrl+R    :   Refresh terminal cache")
+	s.output.Println("  Tab       :   Complete path")
+	s.output.Println("  Enter     :   Execute command")
 	s.output.Refresh()
 }
 
@@ -363,7 +389,36 @@ func (s *shellCommand) parse(args []string) (bool, bool, execution) {
 		s.activeFolder = command.(*changeDirectoryCommand).CurrentFolder
 		return true, false, nil
 	case "help":
-		s.printHelp()
+		if len(args) < 2 {
+			s.printHelp()
+			return true, false, nil
+		}
+
+		if strings.Compare(args[1], "shortcuts") == 0 {
+			s.output.Println("")
+			s.printShortcuts()
+			return true, false, nil
+		}
+
+		if strings.Compare(args[1], "cd") == 0 {
+			command := NewChangeDirectory(s.headAddresses, s.output, nil)
+			s.output.Println("")
+			s.output.Println("Usage:")
+			command.PrintUsage()
+
+			return true, false, nil
+		}
+
+		var err error
+		command, err := newExecution(s.headAddresses, s.output, args[1], s.activeFolder.Full, nil, s.version)
+		if err != nil {
+			s.output.Println(err.Error())
+			return true, false, nil
+		}
+		s.output.Println("")
+		s.output.Println("Usage:")
+		command.PrintUsage()
+
 		return true, false, nil
 	case "exit":
 		return true, true, nil

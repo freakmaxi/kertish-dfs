@@ -332,6 +332,12 @@ func (t *tCellOut) ScrollBottom() {
 }
 
 func (t *tCellOut) Scan(out *string) bool {
+	currentColumnOrigin := t.colOrigin
+	t.LockOrigin()
+	defer func() {
+		t.colOrigin = currentColumnOrigin
+	}()
+
 	*out = ""
 	for {
 		ev := t.screen.PollEvent()

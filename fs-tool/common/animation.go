@@ -28,6 +28,7 @@ func NewAnimation(output terminal.Output, header string) *animation {
 }
 
 func (p *animation) Start() {
+	defer p.output.Refresh()
 	p.output.Printf("%s |", p.header)
 
 	p.waitGroup.Add(1)
@@ -51,6 +52,7 @@ func (p *animation) Start() {
 				c := chars[i%len(chars)]
 				p.output.Remove(1)
 				p.output.Printf(string(c))
+				p.output.Refresh()
 				time.Sleep(time.Millisecond * 100)
 			}
 			i++
