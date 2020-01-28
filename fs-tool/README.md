@@ -39,7 +39,8 @@ available commands:
   mv      Move file or folder.                                                                                                         
   rm      Remove files and/or folders.                                                                                                 
   help    Show this screen.                                                                                                            
-  exit    Exit from shell.                                                                                                                                 
+          Ex: help [command] or help shortcuts                                                                                         
+  exit    Exit from shell.                                                                                                                                
 ```
 
 #### Shell Shortcuts
