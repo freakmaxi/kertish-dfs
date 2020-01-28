@@ -41,3 +41,28 @@ available commands:
   help    Show this screen.                                                                                                            
   exit    Exit from shell.                                                                                                                                 
 ```
+
+#### Shell Shortcuts
+
+```text
+Escape    :   Clear/Cancel line
+Up        :   Older history
+Down      :   Newer history
+Home      :   Move cursor to line head
+End       :   Move cursor to line end
+PageUp    :   Scroll up
+PageDown  :   Scroll down
+Ctrl+T    :   Top of the terminal
+Ctrl+B    :   Bottom of the terminal
+Ctrl+Y    :   Page up in the terminal
+Ctrl+V    :   Page down in the terminal
+Ctrl+W    :   Remove previous word
+Backspace :   Remove previous char
+Left      :   Move cursor to previous char
+Alt+Left  :   Jump to previous word
+Right     :   Move cursor to next char
+Alt+Right :   Jump to next word
+Ctrl+R    :   Refresh terminal cache
+Tab       :   Complete path
+Enter     :   Execute command
+```
