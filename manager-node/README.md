@@ -24,6 +24,8 @@ Cluster and Data node setup and information will be kept in Mongo DB.
 
 Will be used to have the stability of cluster and data node setup and also file indexing information.
 
+- `REDIS_CLUSTER_MODE` : Redis cluster mode activation Ex: `true`
+
 ### Manager Cluster and Node Manipulation Requests
 
 - `GET` is used to sync cluster/clusters, list cluster/clusters and nodes and find the cluster information for file.

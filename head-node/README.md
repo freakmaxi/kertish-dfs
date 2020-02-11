@@ -28,6 +28,8 @@ Metadata of the file system will be kept in Mongo DB.
 
 Will be used to have the stability of metadata of the file system
 
+- `REDIS_CLUSTER_MODE` : Redis cluster mode activation Ex: `true`
+
 ### File System Manipulation Requests
 
 - `GET` is used to get folders/files list and also file downloading.
