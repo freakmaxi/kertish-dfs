@@ -7,6 +7,15 @@ import (
 	"github.com/go-redis/redis/v7"
 )
 
+type IndexClient interface {
+	Del(keys ...string) *redis.IntCmd
+	HSet(key, field string, value interface{}) *redis.BoolCmd
+	HGet(key, field string) *redis.StringCmd
+	HDel(key string, fields ...string) *redis.IntCmd
+	HGetAll(key string) *redis.StringStringMapCmd
+	HMSet(key string, values ...interface{}) *redis.IntCmd
+}
+
 type Index interface {
 	Add(clusterId string, sha512Hex string) error
 	Find(clusterIds []string, sha512Hex string) (string, error)
@@ -17,25 +26,16 @@ type Index interface {
 
 type index struct {
 	mutex     Mutex
-	client    *redis.Client
+	client    IndexClient
 	keyPrefix string
 }
 
-func NewIndex(address string, keyPrefix string, mutex Mutex) (Index, error) {
-	client := redis.NewClient(&redis.Options{
-		Addr: address,
-	})
-
-	_, err := client.Ping().Result()
-	if err != nil {
-		return nil, err
-	}
-
+func NewIndex(client IndexClient, keyPrefix string, mutex Mutex) Index {
 	return &index{
-		mutex:     mutex,
 		client:    client,
 		keyPrefix: keyPrefix,
-	}, nil
+		mutex:     mutex,
+	}
 }
 
 func (i *index) key(name string) string {

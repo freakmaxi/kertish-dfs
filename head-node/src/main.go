@@ -57,11 +57,21 @@ func main() {
 	}
 	fmt.Printf("INFO: REDIS_CONN: %s\n", redisConn)
 
-	mutex, err := data.NewMutex(redisConn)
+	redisClusterMode := os.Getenv("REDIS_CLUSTER_MODE")
+	fmt.Printf("INFO: REDIS_CLUSTER_MODE: %t\n", len(redisClusterMode) > 0)
+
+	var mutexClient data.MutexClient
+	var err error
+	if len(redisClusterMode) == 0 {
+		mutexClient, err = data.NewMutexStandaloneClient(redisConn)
+	} else {
+		mutexClient, err = data.NewMutexClusterClient(strings.Split(redisConn, ","))
+	}
 	if err != nil {
 		fmt.Printf("ERROR: Mutex Setup is failed. %s\n", err.Error())
 		os.Exit(13)
 	}
+	mutex := data.NewMutex(mutexClient)
 
 	conn, err := data.NewConnection(mongoConn)
 	if err != nil {

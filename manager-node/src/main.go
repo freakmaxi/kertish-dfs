@@ -50,23 +50,39 @@ func main() {
 	}
 	fmt.Printf("INFO: REDIS_CONN: %s\n", redisConn)
 
+	redisClusterMode := os.Getenv("REDIS_CLUSTER_MODE")
+	fmt.Printf("INFO: REDIS_CLUSTER_MODE: %t\n", len(redisClusterMode) > 0)
+
+	var mutexClient data.MutexClient
+	var err error
+	if len(redisClusterMode) == 0 {
+		mutexClient, err = data.NewMutexStandaloneClient(redisConn)
+	} else {
+		mutexClient, err = data.NewMutexClusterClient(strings.Split(redisConn, ","))
+	}
+	if err != nil {
+		fmt.Printf("ERROR: Mutex Setup is failed. %s\n", err.Error())
+		os.Exit(21)
+	}
+	mutex := data.NewMutex(mutexClient)
+
 	conn, err := data.NewConnection(mongoConn)
 	if err != nil {
 		fmt.Printf("ERROR: MongoDB Connection is failed. %s\n", err.Error())
 		os.Exit(20)
 	}
 
-	mutex, err := data.NewMutex(redisConn)
-	if err != nil {
-		fmt.Printf("ERROR: Mutex Setup is failed. %s\n", err.Error())
-		os.Exit(21)
+	var indexClient data.IndexClient
+	if len(redisClusterMode) == 0 {
+		indexClient, err = data.NewIndexStandaloneClient(redisConn)
+	} else {
+		indexClient, err = data.NewIndexClusterClient(strings.Split(redisConn, ","))
 	}
-
-	index, err := data.NewIndex(redisConn, strings.ReplaceAll(mongoDb, " ", "_"), mutex)
 	if err != nil {
 		fmt.Printf("ERROR: Index Setup is failed. %s\n", err.Error())
 		os.Exit(22)
 	}
+	index := data.NewIndex(indexClient, strings.ReplaceAll(mongoDb, " ", "_"), mutex)
 
 	dataClusters, err := data.NewClusters(mutex, conn, mongoDb)
 	if err != nil {

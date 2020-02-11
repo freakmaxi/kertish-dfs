@@ -7,6 +7,12 @@ import (
 	"github.com/go-redis/redis/v7"
 )
 
+type MutexClient interface {
+	Get(key string) *redis.StringCmd
+	Set(key string, value interface{}, expiration time.Duration) *redis.StatusCmd
+	Del(keys ...string) *redis.IntCmd
+}
+
 type Mutex interface {
 	Lock(string)
 	UnLock(string)
@@ -14,24 +20,15 @@ type Mutex interface {
 }
 
 type mutex struct {
-	client    *redis.Client
+	client    MutexClient
 	keyPrefix string
 }
 
-func NewMutex(address string) (Mutex, error) {
-	client := redis.NewClient(&redis.Options{
-		Addr: address,
-	})
-
-	_, err := client.Ping().Result()
-	if err != nil {
-		return nil, err
-	}
-
+func NewMutex(client MutexClient) Mutex {
 	return &mutex{
 		client:    client,
 		keyPrefix: "lock",
-	}, nil
+	}
 }
 
 func (m *mutex) key(name string) string {
