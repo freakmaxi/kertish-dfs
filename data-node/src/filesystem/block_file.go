@@ -4,6 +4,7 @@ import (
 	"crypto/sha512"
 	"encoding/binary"
 	"encoding/hex"
+	"fmt"
 	"hash"
 	"io"
 	"os"
@@ -239,9 +240,31 @@ func (b *blockFile) Close() {
 		return
 	}
 
-	if err := os.Rename(b.tempPath, b.targetPath); err != nil {
-		os.Remove(b.tempPath)
+	if err := b.move(b.tempPath, b.targetPath); err != nil {
+		fmt.Printf("ERROR: File creation is failed silently: %s\n", err.Error())
 	}
+}
+
+func (b *blockFile) move(source string, target string) error {
+	defer os.Remove(source)
+
+	sourceFile, err := os.OpenFile(source, os.O_RDONLY, 0666)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+
+	targetFile, err := os.OpenFile(target, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+	if err != nil {
+		return err
+	}
+	defer targetFile.Close()
+
+	if _, err = io.Copy(targetFile, sourceFile); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 var _ BlockFile = &blockFile{}
