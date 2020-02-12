@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -30,10 +31,11 @@ func main() {
 		fmt.Printf("ERROR: Unable to read hardware details: %s\n", err.Error())
 		os.Exit(1)
 	}
+	fmt.Printf("INFO: HARDWARE_ID: %s\n", hardwareAddr)
 
 	bindAddr := os.Getenv("BIND_ADDRESS")
-	if len(bindAddr) == 0 {
-		bindAddr = ":9430"
+	if matched, err := regexp.MatchString(`:\d{1,5}$`, bindAddr); err != nil || !matched {
+		bindAddr = fmt.Sprintf("%s:9430", bindAddr)
 	}
 	fmt.Printf("INFO: BIND_ADDRESS: %s\n", bindAddr)
 
