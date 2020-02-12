@@ -91,6 +91,11 @@ func main() {
 		os.Exit(20)
 	}
 	dfs := manager.NewDfs(metadata, cluster)
+	// create root if not exists
+	if err := dfs.CreateFolder("/"); err != nil && err != os.ErrExist {
+		fmt.Printf("ERROR: Unable to create cluster root path. %s\n", err.Error())
+		os.Exit(21)
+	}
 	dfsRouter := routing.NewDfsRouter(dfs)
 
 	routerManager := routing.NewManager()
