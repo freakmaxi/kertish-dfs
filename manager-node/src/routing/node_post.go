@@ -80,19 +80,16 @@ func (n *nodeRouter) validatePostAction(action string) bool {
 
 func (n *nodeRouter) describeHandshakeOptions(options string) (uint64, string, string, error) {
 	opts := strings.Split(options, ",")
-	if len(opts) != 2 {
+	if len(opts) != 3 {
 		return 0, "", "", os.ErrInvalid
 	}
 
-	sizeString := opts[0]
-	addresses := strings.Split(opts[1], "$")
-
-	size, err := strconv.ParseUint(sizeString, 10, 64)
+	size, err := strconv.ParseUint(opts[0], 10, 64)
 	if err != nil {
 		return 0, "", "", os.ErrInvalid
 	}
 
-	return size, addresses[0], addresses[1], nil
+	return size, opts[1], opts[2], nil
 }
 
 func (n *nodeRouter) describeCreateOptions(options string) (string, string, error) {

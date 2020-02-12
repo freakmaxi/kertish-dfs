@@ -84,7 +84,7 @@ func (n *node) Handshake(hardwareAddr string, bindAddr string, size uint64) erro
 		return err
 	}
 	req.Header.Set("X-Action", "handshake")
-	req.Header.Set("X-Options", fmt.Sprintf("%s,%s$%s", strconv.FormatUint(size, 10), hardwareAddr, bindAddr))
+	req.Header.Set("X-Options", fmt.Sprintf("%s,%s,%s", strconv.FormatUint(size, 10), hardwareAddr, bindAddr))
 
 	res, err := n.client.Do(req)
 	if err != nil {
