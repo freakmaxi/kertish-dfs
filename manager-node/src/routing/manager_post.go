@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -34,13 +32,10 @@ func (m *managerRouter) handlePost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *managerRouter) handleRegister(w http.ResponseWriter, r *http.Request) {
-	clusterId, addresses, err := m.describeRegisterOptions(r.Header.Get("X-Options"))
-	if err != nil {
-		w.WriteHeader(422)
-		return
-	}
+	clusterId, addresses := m.describeRegisterOptions(r.Header.Get("X-Options"))
 
 	var cluster *common.Cluster
+	var err error
 	if len(clusterId) == 0 {
 		cluster, err = m.manager.Register(addresses)
 	} else {
@@ -128,21 +123,14 @@ func (m *managerRouter) validatePostAction(action string) bool {
 	return false
 }
 
-func (m *managerRouter) describeRegisterOptions(options string) (string, []string, error) {
+func (m *managerRouter) describeRegisterOptions(options string) (string, []string) {
 	clusterId := ""
 	eqIdx := strings.Index(options, "=")
 	if eqIdx > -1 {
 		clusterId = options[:eqIdx]
 		options = options[eqIdx+1:]
 	}
-
-	ipAddressMask, _ := regexp.Compile(`\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}(:\d{1,5})?`)
 	addresses := strings.Split(options, ",")
 
-	for _, address := range addresses {
-		if !ipAddressMask.MatchString(address) {
-			return "", nil, os.ErrInvalid
-		}
-	}
-	return clusterId, addresses, nil
+	return clusterId, addresses
 }

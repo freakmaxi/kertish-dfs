@@ -24,12 +24,15 @@ type Commander interface {
 type commander struct {
 	fs   filesystem.Manager
 	node manager.Node
+
+	hardwareAddr string
 }
 
-func NewCommander(fs filesystem.Manager, node manager.Node) (Commander, error) {
+func NewCommander(fs filesystem.Manager, node manager.Node, hardwareAddr string) (Commander, error) {
 	return &commander{
-		fs:   fs,
-		node: node,
+		fs:           fs,
+		node:         node,
+		hardwareAddr: hardwareAddr,
 	}, nil
 }
 
@@ -63,6 +66,8 @@ func (c *commander) process(command string, conn net.Conn) error {
 		return c.read(conn)
 	case "DELE":
 		return c.dele(conn)
+	case "HWID":
+		return c.hwid(conn)
 	case "JOIN":
 		return c.join(conn)
 	case "MODE":
@@ -224,6 +229,23 @@ func (c *commander) dele(conn net.Conn) error {
 
 		return nil
 	})
+}
+
+func (c *commander) hwid(conn net.Conn) error {
+	if _, err := conn.Write([]byte{'+'}); err != nil {
+		return err
+	}
+
+	hardwareIdLength := byte(len(c.hardwareAddr))
+	if err := binary.Write(conn, binary.LittleEndian, hardwareIdLength); err != nil {
+		return err
+	}
+
+	if _, err := conn.Write([]byte(c.hardwareAddr)); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (c *commander) join(conn net.Conn) error {

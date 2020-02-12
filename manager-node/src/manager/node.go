@@ -15,7 +15,7 @@ const semaphoreLimit = 10
 const syncGapLimit = 100 // millisecond
 
 type Node interface {
-	Handshake(nodeAddress string, size uint64) (string, string, string, error)
+	Handshake(nodeHardwareAddr string, nodeAddress string, size uint64) (string, string, string, error)
 	Create(nodeId string, sha512Hex string) error
 	Delete(nodeId string, sha512Hex string, shadow bool, size uint64) error
 }
@@ -129,8 +129,8 @@ func (n *node) processSync(ns nodeSync) {
 	}
 }
 
-func (n *node) Handshake(nodeAddress string, size uint64) (string, string, string, error) {
-	nodeId := newNodeId(nodeAddress, size)
+func (n *node) Handshake(nodeHardwareAddr string, nodeAddress string, size uint64) (string, string, string, error) {
+	nodeId := newNodeId(nodeHardwareAddr, nodeAddress, size)
 
 	clusterId, err := n.clusters.ClusterIdOf(nodeId)
 	if err != nil {

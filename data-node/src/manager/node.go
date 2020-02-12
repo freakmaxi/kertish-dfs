@@ -14,7 +14,7 @@ type Node interface {
 	Join(clusterId string, nodeId string, masterAddress string)
 	Mode(master bool)
 	Leave()
-	Handshake(bindAddr string, size uint64) error
+	Handshake(hardwareAddr string, bindAddr string, size uint64) error
 
 	Create(sha512Hex string) error
 	Delete(sha512Hex string, shadow bool, size uint32) error
@@ -78,13 +78,13 @@ func (n *node) Leave() {
 	n.masterAddress = ""
 }
 
-func (n *node) Handshake(bindAddr string, size uint64) error {
+func (n *node) Handshake(hardwareAddr string, bindAddr string, size uint64) error {
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s%s", n.managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("X-Action", "handshake")
-	req.Header.Set("X-Options", fmt.Sprintf("%s,%s", strconv.FormatUint(size, 10), bindAddr))
+	req.Header.Set("X-Options", fmt.Sprintf("%s,%s$%s", strconv.FormatUint(size, 10), hardwareAddr, bindAddr))
 
 	res, err := n.client.Do(req)
 	if err != nil {

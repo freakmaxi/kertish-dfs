@@ -127,7 +127,12 @@ func (c *cluster) prepareNodes(nodeAddresses []string, clusterSize uint64) (comm
 		}
 		clusterSize = size
 
-		nodeId := newNodeId(nodeAddress, clusterSize)
+		hardwareId, err := node.HardwareId()
+		if err != nil {
+			return nil, 0, err
+		}
+
+		nodeId := newNodeId(hardwareId, nodeAddress, clusterSize)
 		if _, err := c.clusters.ClusterIdOf(nodeId); err == nil || err != errors.ErrNotFound {
 			if err == nil {
 				err = errors.ErrRegistered

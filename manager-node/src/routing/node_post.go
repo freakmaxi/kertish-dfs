@@ -3,7 +3,6 @@ package routing
 import (
 	"net/http"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -30,13 +29,13 @@ func (n *nodeRouter) handlePost(w http.ResponseWriter, r *http.Request) {
 
 func (n *nodeRouter) handleHandshake(w http.ResponseWriter, r *http.Request) {
 	opts := r.Header.Get("X-Options")
-	size, nodeAddress, err := n.describeHandshakeOptions(opts)
+	size, nodeHardwareAddr, nodeAddress, err := n.describeHandshakeOptions(opts)
 	if err != nil {
 		w.WriteHeader(422)
 		return
 	}
 
-	clusterId, nodeId, syncSourceNodeAddr, err := n.manager.Handshake(nodeAddress, size)
+	clusterId, nodeId, syncSourceNodeAddr, err := n.manager.Handshake(nodeHardwareAddr, nodeAddress, size)
 	if err != nil {
 		if err == errors.ErrNotFound {
 			w.WriteHeader(404)
@@ -79,26 +78,21 @@ func (n *nodeRouter) validatePostAction(action string) bool {
 	return false
 }
 
-func (n *nodeRouter) describeHandshakeOptions(options string) (uint64, string, error) {
+func (n *nodeRouter) describeHandshakeOptions(options string) (uint64, string, string, error) {
 	opts := strings.Split(options, ",")
 	if len(opts) != 2 {
-		return 0, "", os.ErrInvalid
+		return 0, "", "", os.ErrInvalid
 	}
 
 	sizeString := opts[0]
-	address := opts[1]
+	addresses := strings.Split(opts[1], "$")
 
 	size, err := strconv.ParseUint(sizeString, 10, 64)
 	if err != nil {
-		return 0, "", os.ErrInvalid
+		return 0, "", "", os.ErrInvalid
 	}
 
-	ipAddressMask, _ := regexp.Compile(`\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3}(:\d{1,5})?`)
-	if !ipAddressMask.MatchString(address) {
-		return 0, "", os.ErrInvalid
-	}
-
-	return size, address, nil
+	return size, addresses[0], addresses[1], nil
 }
 
 func (n *nodeRouter) describeCreateOptions(options string) (string, string, error) {

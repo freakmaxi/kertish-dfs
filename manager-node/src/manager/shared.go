@@ -21,7 +21,7 @@ func newClusterId() string {
 	return md5Hash(clusterId.String())
 }
 
-func newNodeId(bindAddr string, size uint64) string {
-	nodeId := fmt.Sprintf("%s%s", bindAddr, strconv.FormatUint(size, 10))
+func newNodeId(hardwareAddr string, bindAddr string, size uint64) string {
+	nodeId := fmt.Sprintf("%s%s%s", hardwareAddr, bindAddr, strconv.FormatUint(size, 10))
 	return md5Hash(nodeId)
 }

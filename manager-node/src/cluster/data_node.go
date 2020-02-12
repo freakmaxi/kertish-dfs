@@ -15,6 +15,7 @@ import (
 const commandCreate = "CREA"
 const commandRead = "READ"
 const commandDelete = "DELE"
+const commandHardwareId = "HWID"
 const commandJoin = "JOIN"
 const commandMode = "MODE"
 const commandLeave = "LEAV"
@@ -31,6 +32,7 @@ type DataNode interface {
 	Read(sha512Hex string, readHandler func(data []byte) error) error
 	Delete(sha512Hex string) error
 
+	HardwareId() (string, error)
 	Join(clusterId string, nodeId string, masterAddress string) bool
 	Mode(master bool) bool
 	Leave() bool
@@ -109,6 +111,10 @@ func (d *dataNode) Read(sha512Hex string, readHandler func([]byte) error) error 
 
 func (d *dataNode) Delete(sha512Hex string) error {
 	return d.clone().delete(sha512Hex)
+}
+
+func (d *dataNode) HardwareId() (string, error) {
+	return d.clone().hardwareId()
 }
 
 func (d *dataNode) Join(clusterId string, nodeId string, masterAddress string) bool {
@@ -266,6 +272,37 @@ func (d *dataNode) delete(sha512Hex string) error {
 	}
 
 	return nil
+}
+
+func (d *dataNode) hardwareId() (string, error) {
+	if err := d.connect(); err != nil {
+		return "", err
+	}
+	defer d.close()
+
+	if _, err := d.conn.Write([]byte(commandHardwareId)); err != nil {
+		return "", err
+	}
+
+	if !d.result() {
+		return "", fmt.Errorf("data node refused the hardware id request")
+	}
+
+	var hardwareIdLength byte
+	if err := binary.Read(d.conn, binary.LittleEndian, &hardwareIdLength); err != nil {
+		return "", err
+	}
+
+	readBuffer := make([]byte, hardwareIdLength)
+	if _, err := io.ReadAtLeast(d.conn, readBuffer, len(readBuffer)); err != nil {
+		return "", err
+	}
+
+	if !d.result() {
+		return "", fmt.Errorf("hardware id command is failed on data node")
+	}
+
+	return string(readBuffer), nil
 }
 
 func (d *dataNode) join(clusterId string, nodeId string, masterAddress string) bool {

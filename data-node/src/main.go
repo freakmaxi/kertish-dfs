@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -23,6 +24,12 @@ func main() {
 	}
 
 	fmt.Println("INFO: ------------ Starting Data Node ------------")
+
+	hardwareAddr, err := findHardwareAddress()
+	if err != nil {
+		fmt.Printf("ERROR: Unable to read hardware details: %s\n", err.Error())
+		os.Exit(1)
+	}
 
 	bindAddr := os.Getenv("BIND_ADDRESS")
 	if len(bindAddr) == 0 {
@@ -66,7 +73,7 @@ func main() {
 		os.Exit(100)
 	}
 
-	c, err := service.NewCommander(fs, n)
+	c, err := service.NewCommander(fs, n, hardwareAddr)
 	if err != nil {
 		fmt.Printf("ERROR: Commander creation is failed: %s\n", err.Error())
 		os.Exit(200)
@@ -79,7 +86,7 @@ func main() {
 	}
 
 	fmt.Print("INFO: Waiting for handshake...")
-	if err := n.Handshake(bindAddr, size); err != nil {
+	if err := n.Handshake(hardwareAddr, bindAddr, size); err != nil {
 		fmt.Printf(" %s\n", err.Error())
 		fmt.Printf("INFO: Data Node is starting as stand-alone on %s\n", bindAddr)
 	} else {
@@ -103,6 +110,34 @@ func main() {
 	}
 
 	os.Exit(0)
+}
+
+func findHardwareAddress() (string, error) {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return "", err
+	}
+
+	for _, in := range interfaces {
+		addrs, err := in.Addrs()
+		if err != nil {
+			return "", err
+		}
+
+		for _, addr := range addrs {
+			switch addr.(type) {
+			case *net.IPNet:
+				addrIp := addr.(*net.IPNet).IP
+
+				if addrIp.To4() == nil || addrIp.IsLoopback() {
+					continue
+				}
+
+				return in.HardwareAddr.String(), nil
+			}
+		}
+	}
+	return "", fmt.Errorf("no suitable hardware address is found")
 }
 
 func printWelcome() {
