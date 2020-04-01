@@ -77,7 +77,7 @@ func main() {
 
 	var indexClient data.IndexClient
 	if len(redisClusterMode) == 0 {
-		indexClient, err = data.NewIndexStandaloneClient(redisConn)
+		indexClient, err = data.NewIndexStandaloneClient(redisConn, redisPassword)
 	} else {
 		indexClient, err = data.NewIndexClusterClient(strings.Split(redisConn, ","), redisPassword)
 	}
