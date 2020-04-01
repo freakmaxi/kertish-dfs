@@ -6,9 +6,10 @@ type indexStandalone struct {
 	client *redis.Client
 }
 
-func NewIndexStandaloneClient(address string) (IndexClient, error) {
+func NewIndexStandaloneClient(address string, password string) (IndexClient, error) {
 	client := redis.NewClient(&redis.Options{
-		Addr: address,
+		Addr:     address,
+		Password: password,
 	})
 
 	_, err := client.Ping().Result()

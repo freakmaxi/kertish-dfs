@@ -79,7 +79,7 @@ func main() {
 	if len(redisClusterMode) == 0 {
 		indexClient, err = data.NewIndexStandaloneClient(redisConn)
 	} else {
-		indexClient, err = data.NewIndexClusterClient(strings.Split(redisConn, ","))
+		indexClient, err = data.NewIndexClusterClient(strings.Split(redisConn, ","), redisPassword)
 	}
 	if err != nil {
 		fmt.Printf("ERROR: Index Setup is failed. %s\n", err.Error())
