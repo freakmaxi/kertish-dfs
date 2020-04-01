@@ -50,15 +50,18 @@ func main() {
 	}
 	fmt.Printf("INFO: REDIS_CONN: %s\n", redisConn)
 
+	redisPassword := os.Getenv("REDIS_PASSWORD")
+	fmt.Printf("INFO: REDIS_PASSWORD: %t\n", len(redisPassword) > 0)
+
 	redisClusterMode := os.Getenv("REDIS_CLUSTER_MODE")
 	fmt.Printf("INFO: REDIS_CLUSTER_MODE: %t\n", len(redisClusterMode) > 0)
 
 	var mutexClient data.MutexClient
 	var err error
 	if len(redisClusterMode) == 0 {
-		mutexClient, err = data.NewMutexStandaloneClient(redisConn)
+		mutexClient, err = data.NewMutexStandaloneClient(redisConn, redisPassword)
 	} else {
-		mutexClient, err = data.NewMutexClusterClient(strings.Split(redisConn, ","))
+		mutexClient, err = data.NewMutexClusterClient(strings.Split(redisConn, ","), redisPassword)
 	}
 	if err != nil {
 		fmt.Printf("ERROR: Mutex Setup is failed. %s\n", err.Error())

@@ -10,9 +10,10 @@ type mutexStandalone struct {
 	client *redis.Client
 }
 
-func NewMutexStandaloneClient(address string) (MutexClient, error) {
+func NewMutexStandaloneClient(address string, password string) (MutexClient, error) {
 	client := redis.NewClient(&redis.Options{
-		Addr: address,
+		Addr:     address,
+		Password: password,
 	})
 
 	_, err := client.Ping().Result()

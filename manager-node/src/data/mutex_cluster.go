@@ -10,9 +10,10 @@ type mutexCluster struct {
 	cluster *redis.ClusterClient
 }
 
-func NewMutexClusterClient(addresses []string) (MutexClient, error) {
+func NewMutexClusterClient(addresses []string, password string) (MutexClient, error) {
 	cluster := redis.NewClusterClient(&redis.ClusterOptions{
-		Addrs: addresses,
+		Addrs:    addresses,
+		Password: password,
 	})
 
 	_, err := cluster.Ping().Result()

@@ -6,9 +6,10 @@ type indexCluster struct {
 	cluster *redis.ClusterClient
 }
 
-func NewIndexClusterClient(addresses []string) (IndexClient, error) {
+func NewIndexClusterClient(addresses []string, password string) (IndexClient, error) {
 	cluster := redis.NewClusterClient(&redis.ClusterOptions{
-		Addrs: addresses,
+		Addrs:    addresses,
+		Password: password,
 	})
 
 	_, err := cluster.Ping().Result()
