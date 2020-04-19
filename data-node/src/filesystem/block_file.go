@@ -22,7 +22,7 @@ type BlockFile interface {
 	Write(data []byte) error
 	Verify() bool
 
-	Read(readHandler func(data []byte) error) error
+	Read(readHandler func(data []byte) error, completedHandler func() error) error
 	Usage() (uint16, []byte, error)
 	Size() (uint32, []byte, error)
 
@@ -121,7 +121,7 @@ func (b *blockFile) Verify() bool {
 	return b.verified
 }
 
-func (b *blockFile) Read(readHandler func(data []byte) error) error {
+func (b *blockFile) Read(readHandler func(data []byte) error, completedHandler func() error) error {
 	if err := b.prepare(); err != nil {
 		return err
 	}
@@ -135,7 +135,7 @@ func (b *blockFile) Read(readHandler func(data []byte) error) error {
 		s, err := b.inner.Read(buffer)
 		if err != nil {
 			if err == io.EOF {
-				return nil
+				return completedHandler()
 			}
 			return err
 		}

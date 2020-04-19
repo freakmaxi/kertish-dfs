@@ -7,7 +7,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/freakmaxi/kertish-dfs/data-node/src/cache"
 	"github.com/freakmaxi/kertish-dfs/data-node/src/filesystem"
 	"github.com/freakmaxi/kertish-dfs/data-node/src/manager"
 	"github.com/freakmaxi/kertish-dfs/data-node/src/service"
@@ -75,7 +77,40 @@ func main() {
 		os.Exit(100)
 	}
 
-	c, err := service.NewCommander(fs, n, hardwareAddr)
+	cacheLifetime := 360
+	cacheLimitString := os.Getenv("CACHE_LIMIT")
+	if len(cacheLimitString) == 0 {
+		cacheLimitString = "0"
+	}
+	cacheLimit, err := strconv.ParseUint(cacheLimitString, 10, 64)
+	if err != nil {
+		fmt.Printf("ERROR: Cache Limit size is wrong: %s\n", err.Error())
+		os.Exit(120)
+	}
+	if cacheLimit == 0 {
+		fmt.Println("WARN: Cache is disabled")
+	} else {
+		fmt.Printf("INFO: CACHE_LIMIT: %s (%s Gb)\n", cacheLimitString, strconv.FormatUint(cacheLimit/(1024*1024*1024), 10))
+
+		ccLifetimeString := os.Getenv("CACHE_LIFETIME")
+		if len(ccLifetimeString) == 0 {
+			ccLifetimeString = "360"
+		}
+		ccLifetime, err := strconv.ParseUint(ccLifetimeString, 10, 64)
+		if err != nil {
+			fmt.Printf("ERROR: Cache Lifetime is wrong: %s\n", err.Error())
+			os.Exit(130)
+		}
+		if ccLifetime == 0 {
+			fmt.Println("ERROR: Cache Lifetime can not be 0")
+			os.Exit(131)
+		}
+		fmt.Printf("INFO: CACHE_LIFETIME: %s min.\n", ccLifetimeString)
+	}
+
+	cc := cache.NewContainer(cacheLimit, time.Minute*time.Duration(cacheLifetime))
+
+	c, err := service.NewCommander(fs, cc, n, hardwareAddr)
 	if err != nil {
 		fmt.Printf("ERROR: Commander creation is failed: %s\n", err.Error())
 		os.Exit(200)

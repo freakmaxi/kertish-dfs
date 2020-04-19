@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/freakmaxi/kertish-dfs/data-node/src/cache"
 	"github.com/freakmaxi/kertish-dfs/data-node/src/cluster"
 	"github.com/freakmaxi/kertish-dfs/data-node/src/errors"
 	"github.com/freakmaxi/kertish-dfs/data-node/src/filesystem"
@@ -22,15 +23,17 @@ type Commander interface {
 }
 
 type commander struct {
-	fs   filesystem.Manager
-	node manager.Node
+	fs    filesystem.Manager
+	cache cache.Container
+	node  manager.Node
 
 	hardwareAddr string
 }
 
-func NewCommander(fs filesystem.Manager, node manager.Node, hardwareAddr string) (Commander, error) {
+func NewCommander(fs filesystem.Manager, cc cache.Container, node manager.Node, hardwareAddr string) (Commander, error) {
 	return &commander{
 		fs:           fs,
+		cache:        cc,
 		node:         node,
 		hardwareAddr: hardwareAddr,
 	}, nil
@@ -162,6 +165,9 @@ func (c *commander) crea(conn net.Conn) error {
 			return err
 		}
 
+		// Add to the cache
+		c.cache.Upsert(sha512Hex, chunkBuffer)
+
 		return nil
 	})
 }
@@ -170,6 +176,26 @@ func (c *commander) read(conn net.Conn) error {
 	sha512Hex, err := c.hashAsHex(conn)
 	if err != nil {
 		return err
+	}
+
+	// Check cache first
+	if content := c.cache.Query(sha512Hex); content != nil {
+		if _, err := conn.Write([]byte{'+'}); err != nil {
+			return err
+		}
+
+		sizeBuffer := make([]byte, 4)
+		binary.LittleEndian.PutUint32(sizeBuffer, uint32(len(content)))
+
+		if _, err := conn.Write(sizeBuffer); err != nil {
+			return err
+		}
+
+		if _, err := conn.Write(content); err != nil {
+			return err
+		}
+
+		return nil
 	}
 
 	return c.fs.File(sha512Hex, func(blockFile filesystem.BlockFile) error {
@@ -189,10 +215,21 @@ func (c *commander) read(conn net.Conn) error {
 			return err
 		}
 
-		return blockFile.Read(func(data []byte) error {
-			_, err := conn.Write(data)
-			return err
-		})
+		cacheData := make([]byte, 0)
+		return blockFile.Read(
+			func(data []byte) error {
+				// Compile For Cache
+				cacheData = append(cacheData, data...)
+
+				_, err := conn.Write(data)
+				return err
+			},
+			func() error {
+				// Add/Update Cache
+				c.cache.Upsert(sha512Hex, cacheData)
+
+				return nil
+			})
 	})
 }
 
@@ -226,6 +263,9 @@ func (c *commander) dele(conn net.Conn) error {
 
 		// No need to track errors on this call
 		c.node.Delete(sha512Hex, usageCount > 1, size)
+
+		// Remove from cache
+		c.cache.Remove(sha512Hex)
 
 		return nil
 	})
@@ -386,10 +426,14 @@ func (c *commander) syrd(conn net.Conn) error {
 			return err
 		}
 
-		return blockFile.Read(func(data []byte) error {
-			_, err := conn.Write(data)
-			return err
-		})
+		return blockFile.Read(
+			func(data []byte) error {
+				_, err := conn.Write(data)
+				return err
+			},
+			func() error {
+				return nil
+			})
 	})
 }
 
