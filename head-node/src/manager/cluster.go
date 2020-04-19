@@ -91,38 +91,43 @@ func (c *cluster) Read(chunks common.DataChunks, w io.Writer, begins int64, ends
 
 	total := int64(0)
 	for _, chunk := range chunks {
-		total += int64(chunk.Size)
+		chunkSize := int64(chunk.Size)
+
+		total += chunkSize
 		if total < begins {
 			continue
 		}
-		if ends > -1 && ends < total-int64(chunk.Size) {
+		if ends > -1 && ends < total-chunkSize {
 			break
 		}
 
-		if address, has := m[chunk.Hash]; has {
-			chunkStarts := total - int64(chunk.Size)
-			begins -= chunkStarts
-			if begins < 0 {
-				begins = 0
-			}
+		startPoint := total - chunkSize
+		startPoint = begins - startPoint
+		if startPoint < 0 {
+			startPoint = 0
+		}
 
-			endPoint := int64(chunk.Size)
-			if ends > -1 {
-				endsCal := (total - 1) - ends
-				if endsCal > 0 && endsCal < endPoint {
-					endPoint -= endsCal
-				}
+		endPoint := chunkSize
+		if ends > -1 {
+			endsCal := (total - 1) - ends
+			if endsCal > 0 && endsCal < chunkSize {
+				endPoint -= endsCal
 			}
+		}
 
-			if err := cluster2.NewDataNode(address).Read(chunk.Hash, func(buffer []byte) error {
-				_, err := w.Write(buffer[begins:endPoint])
-				if errors2.Is(err, syscall.EPIPE) {
-					return nil
-				}
-				return err
-			}); err != nil {
-				return err
+		address, has := m[chunk.Hash]
+		if !has {
+			continue
+		}
+
+		if err := cluster2.NewDataNode(address).Read(chunk.Hash, func(buffer []byte) error {
+			_, err := w.Write(buffer[startPoint:endPoint])
+			if errors2.Is(err, syscall.EPIPE) {
+				return nil
 			}
+			return err
+		}); err != nil {
+			return err
 		}
 	}
 
