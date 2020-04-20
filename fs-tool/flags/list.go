@@ -139,7 +139,9 @@ func (l *listCommand) printAsList(folder *common.Folder) {
 
 	for _, f := range folder.Files {
 		lockChar := "-"
-		if f.Locked {
+		if f.Zombie {
+			lockChar = "↯"
+		} else if f.Locked {
 			lockChar = "•"
 		}
 		l.output.Printf("%s %7v %s %s\n", lockChar, l.sizeToString(f.Size), f.Modified.Format("2006 Jan 02 03:04"), f.Name)

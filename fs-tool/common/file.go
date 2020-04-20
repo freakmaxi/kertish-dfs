@@ -12,6 +12,7 @@ type File struct {
 	Created  time.Time `json:"created"`
 	Modified time.Time `json:"modified"`
 	Locked   bool      `json:"locked"`
+	Zombie   bool      `json:"zombie"`
 }
 
 type Files []*File
