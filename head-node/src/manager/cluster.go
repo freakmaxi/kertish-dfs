@@ -23,7 +23,7 @@ type Cluster interface {
 	Create(size uint64, reader io.Reader) (common.DataChunks, error)
 	CreateShadow(chunks common.DataChunks) error
 	Read(chunks common.DataChunks, writer io.Writer, begins int64, ends int64) error
-	Delete(chunks common.DataChunks) error
+	Delete(chunks common.DataChunks) ([]string, error)
 }
 
 type cluster struct {
@@ -134,21 +134,24 @@ func (c *cluster) Read(chunks common.DataChunks, w io.Writer, begins int64, ends
 	return nil
 }
 
-func (c *cluster) Delete(chunks common.DataChunks) error {
+func (c *cluster) Delete(chunks common.DataChunks) ([]string, error) {
+	modifiedHashes := make([]string, 0)
+
 	m, err := c.createClusterMap(chunks, true)
 	if err != nil {
-		return err
+		return modifiedHashes, err
 	}
 
 	for _, chunk := range chunks {
 		if address, has := m[chunk.Hash]; has {
 			if err := cluster2.NewDataNode(address).Delete(chunk.Hash); err != nil {
-				return err
+				return modifiedHashes, err
 			}
+			modifiedHashes = append(modifiedHashes, chunk.Hash)
 		}
 	}
 
-	return nil
+	return modifiedHashes, nil
 }
 
 func (c *cluster) makeReservation(size uint64) (*common.Reservation, error) {

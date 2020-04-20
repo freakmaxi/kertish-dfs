@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/freakmaxi/kertish-dfs/head-node/src/common"
+	"github.com/freakmaxi/kertish-dfs/head-node/src/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -130,6 +131,12 @@ func (m *metadata) Save(folderPaths []string, saveHandler func(folders map[strin
 	}
 
 	if err := saveHandler(folders); err != nil {
+		if err == errors.ErrZombie {
+			if err := m.overwrite(folders); err != nil {
+				return err
+			}
+			return err
+		}
 		return err
 	}
 

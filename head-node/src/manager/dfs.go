@@ -93,7 +93,10 @@ func (d *dfs) CreateFile(path string, mime string, size uint64, contentReader io
 	}
 
 	if overwrite && len(file.Chunks) > 0 {
-		if err := d.cluster.Delete(file.Chunks); err != nil {
+		deletedChunkHashes, err := d.cluster.Delete(file.Chunks)
+		file.IngestDeletion(deletedChunkHashes)
+
+		if err != nil {
 			file.Locked = false
 			if err := d.update(path, file); err != nil {
 				return err
@@ -601,7 +604,12 @@ func (d *dfs) deleteFolder(folderPath string) error {
 						file := folder.Files[0]
 
 						if err := folder.DeleteFile(file.Name, func(file *common.File) error {
-							return d.cluster.Delete(file.Chunks)
+							deletedChunkHashes, err := d.cluster.Delete(file.Chunks)
+							file.IngestDeletion(deletedChunkHashes)
+							if file.Zombie {
+								return errors.ErrZombie
+							}
+							return err
 						}); err != nil {
 							return err
 						}
@@ -627,7 +635,14 @@ func (d *dfs) deleteFile(path string) error {
 			if file.Locked {
 				return errors.ErrLock
 			}
-			return d.cluster.Delete(file.Chunks)
+
+			deletedChunkHashes, err := d.cluster.Delete(file.Chunks)
+			file.IngestDeletion(deletedChunkHashes)
+
+			if file.Zombie {
+				return errors.ErrZombie
+			}
+			return err
 		})
 	})
 }

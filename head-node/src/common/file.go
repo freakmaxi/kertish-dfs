@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/freakmaxi/kertish-dfs/head-node/src/errors"
 )
 
 type File struct {
@@ -15,7 +17,9 @@ type File struct {
 	Created  time.Time  `json:"created"`
 	Modified time.Time  `json:"modified"`
 	Chunks   DataChunks `json:"chunks"`
+	Missing  DataChunks `json:"missing"`
 	Locked   bool       `json:"locked"`
+	Zombie   bool       `json:"zombie"`
 }
 
 type Files []*File
@@ -31,6 +35,9 @@ func CreateJoinedFile(files Files) (*File, error) {
 	sequenceCount := uint16(0)
 	joinedFile := newFile("")
 	for _, f := range files {
+		if f.Zombie {
+			return nil, errors.ErrZombie
+		}
 		if _, err := hash.Write([]byte(f.Name)); err != nil {
 			return nil, err
 		}
@@ -70,8 +77,40 @@ func newFile(name string) *File {
 		Created:  time.Now().UTC(),
 		Modified: time.Now().UTC(),
 		Chunks:   make(DataChunks, 0),
+		Missing:  make(DataChunks, 0),
 		Locked:   true,
+		Zombie:   false,
 	}
+}
+
+func (f *File) IngestDeletion(deletedChunkHashes []string) {
+	if len(deletedChunkHashes) == 0 {
+		return
+	}
+
+	deletedChunkHashesMap := make(map[string]bool)
+	for _, deletedChunkHash := range deletedChunkHashes {
+		deletedChunkHashesMap[deletedChunkHash] = true
+	}
+
+	chunks := make(DataChunks, len(f.Chunks))
+	copy(chunks, f.Chunks)
+
+	f.Chunks = make(DataChunks, 0)
+
+	for len(chunks) > 0 {
+		chunk := chunks[0]
+
+		_, has := deletedChunkHashesMap[chunk.Hash]
+		if !has {
+			f.Chunks = append(f.Chunks, chunk)
+		} else {
+			f.Missing = append(f.Missing, chunk)
+		}
+		chunks = chunks[1:]
+	}
+
+	f.Zombie = len(f.Chunks) > 0
 }
 
 func (f *File) Reset(mime string, size uint64) {
@@ -80,7 +119,9 @@ func (f *File) Reset(mime string, size uint64) {
 	f.Created = time.Now().UTC()
 	f.Modified = time.Now().UTC()
 	f.Chunks = make(DataChunks, 0)
+	f.Missing = make(DataChunks, 0)
 	f.Locked = true
+	f.Zombie = false
 }
 
 func (f *File) CloneInto(target *File) {
