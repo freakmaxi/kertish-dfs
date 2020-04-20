@@ -143,25 +143,16 @@ func (d *dfs) Size(folderPath string) (uint64, error) {
 	folderPath = common.CorrectPath(folderPath)
 	size := uint64(0)
 
-	if err := d.metadata.Lock([]string{folderPath}, func(folders []*common.Folder) error {
-		for _, file := range folders[0].Files {
-			if file.Locked {
-				continue
-			}
-			size += file.Size
-		}
-
-		return d.metadata.LockChildrenOf(folders[0].Full, func(folders []*common.Folder) error {
-			for _, folder := range folders {
-				for _, file := range folder.Files {
-					if file.Locked {
-						continue
-					}
-					size += file.Size
+	if err := d.metadata.LockTree(folderPath, true, func(folders []*common.Folder) error {
+		for _, folder := range folders {
+			for _, file := range folder.Files {
+				if file.Locked {
+					continue
 				}
+				size += file.Size
 			}
-			return nil
-		})
+		}
+		return nil
 	}); err != nil {
 		return 0, err
 	}
@@ -274,7 +265,7 @@ func (d *dfs) moveFolder(sources []string, target string, overwrite bool) error 
 			if err := folders[sourceParent].DeleteFolder(sourceChild, func(fullPath string) error {
 				folders[fullPath] = nil
 
-				return d.metadata.LockChildrenOf(fullPath, func(sourceChildren []*common.Folder) error {
+				return d.metadata.LockTree(fullPath, false, func(sourceChildren []*common.Folder) error {
 					for _, sourceChild := range sourceChildren {
 						if sourceChild.Locked() {
 							return errors.ErrLock
@@ -444,7 +435,7 @@ func (d *dfs) copyFolder(sources []string, target string, overwrite bool) error 
 		}
 
 		for _, sourceFolder := range sourceFolders {
-			if err := d.metadata.LockChildrenOf(sourceFolder.Full, func(sourceChildren []*common.Folder) error {
+			if err := d.metadata.LockTree(sourceFolder.Full, false, func(sourceChildren []*common.Folder) error {
 				for _, sourceChild := range sourceChildren {
 					sourceChild.Full = strings.Replace(sourceChild.Full, sourceFolder.Full, targetFolder.Full, 1)
 					for _, file := range sourceChild.Files {
@@ -600,43 +591,24 @@ func (d *dfs) deleteFolder(folderPath string) error {
 		}
 
 		return folder.DeleteFolder(childPath, func(fullPath string) error {
-			return d.metadata.Lock([]string{fullPath}, func(deletingFolders []*common.Folder) error {
-				deletingFolder := deletingFolders[0]
-
-				if deletingFolder.Locked() {
-					return errors.ErrLock
-				}
-
-				for len(deletingFolder.Files) > 0 {
-					file := deletingFolder.Files[0]
-
-					if err := deletingFolder.DeleteFile(file.Name, func(file *common.File) error {
-						return d.cluster.Delete(file.Chunks)
-					}); err != nil {
-						return err
+			return d.metadata.LockTree(fullPath, true, func(deletingFolders []*common.Folder) error {
+				for _, folder := range deletingFolders {
+					if folder.Locked() {
+						return errors.ErrLock
 					}
-				}
-				folders[deletingFolder.Full] = nil
 
-				return d.metadata.LockChildrenOf(deletingFolder.Full, func(subFolders []*common.Folder) error {
-					for _, folder := range subFolders {
-						if folder.Locked() {
-							return errors.ErrLock
+					for len(folder.Files) > 0 {
+						file := folder.Files[0]
+
+						if err := folder.DeleteFile(file.Name, func(file *common.File) error {
+							return d.cluster.Delete(file.Chunks)
+						}); err != nil {
+							return err
 						}
-
-						for len(folder.Files) > 0 {
-							file := folder.Files[0]
-
-							if err := folder.DeleteFile(file.Name, func(file *common.File) error {
-								return d.cluster.Delete(file.Chunks)
-							}); err != nil {
-								return err
-							}
-						}
-						folders[folder.Full] = nil
 					}
-					return nil
-				})
+					folders[folder.Full] = nil
+				}
+				return nil
 			})
 		})
 	})

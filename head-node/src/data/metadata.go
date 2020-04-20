@@ -16,7 +16,7 @@ import (
 
 type Metadata interface {
 	Lock(folderPaths []string, folderHandler func(folders []*common.Folder) error) error
-	LockChildrenOf(folderPath string, folderHandler func(folders []*common.Folder) error) error
+	LockTree(folderPath string, includeItself bool, folderHandler func(folders []*common.Folder) error) error
 	Save(folderPaths []string, saveHandler func(folders map[string]*common.Folder) error) error
 }
 
@@ -78,9 +78,15 @@ func (m *metadata) Lock(folderPaths []string, folderHandler func(folders []*comm
 	return folderHandler(folders)
 }
 
-func (m *metadata) LockChildrenOf(folderPath string, folderHandler func(folders []*common.Folder) error) error {
-	keyword := fmt.Sprintf("^%s/.+", folderPath)
-	filter := bson.M{"full": bson.M{"$regex": primitive.Regex{Pattern: keyword}}}
+func (m *metadata) LockTree(folderPath string, includeItself bool, folderHandler func(folders []*common.Folder) error) error {
+	filterContent := []interface{}{
+		bson.M{"full": bson.M{"$regex": primitive.Regex{Pattern: fmt.Sprintf("^%s/.+", folderPath)}}},
+	}
+	if includeItself {
+		filterContent = append(filterContent, bson.M{"full": bson.M{"$regex": primitive.Regex{Pattern: fmt.Sprintf("^%s$", folderPath)}}})
+	}
+	filter := bson.M{"$or": filterContent}
+
 	cursor, err := m.col.Find(m.context(), filter)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
