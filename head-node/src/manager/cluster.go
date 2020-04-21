@@ -23,7 +23,7 @@ type Cluster interface {
 	Create(size uint64, reader io.Reader) (common.DataChunks, error)
 	CreateShadow(chunks common.DataChunks) error
 	Read(chunks common.DataChunks, writer io.Writer, begins int64, ends int64) error
-	Delete(chunks common.DataChunks) ([]string, error)
+	Delete(chunks common.DataChunks) ([]string, []string, error)
 }
 
 type cluster struct {
@@ -65,7 +65,7 @@ func (c *cluster) Create(size uint64, reader io.Reader) (common.DataChunks, erro
 }
 
 func (c *cluster) CreateShadow(chunks common.DataChunks) error {
-	m, err := c.createClusterMap(chunks, true)
+	m, err := c.createClusterMap(chunks, common.MT_Create)
 	if err != nil {
 		return err
 	}
@@ -84,7 +84,7 @@ func (c *cluster) CreateShadow(chunks common.DataChunks) error {
 func (c *cluster) Read(chunks common.DataChunks, w io.Writer, begins int64, ends int64) error {
 	sort.Sort(chunks)
 
-	m, err := c.createClusterMap(chunks, false)
+	m, err := c.createClusterMap(chunks, common.MT_Read)
 	if err != nil {
 		return err
 	}
@@ -134,24 +134,28 @@ func (c *cluster) Read(chunks common.DataChunks, w io.Writer, begins int64, ends
 	return nil
 }
 
-func (c *cluster) Delete(chunks common.DataChunks) ([]string, error) {
-	modifiedHashes := make([]string, 0)
+func (c *cluster) Delete(chunks common.DataChunks) ([]string, []string, error) {
+	deletedHashes := make([]string, 0)
+	missingHashes := make([]string, 0)
 
-	m, err := c.createClusterMap(chunks, true)
+	m, err := c.createClusterMap(chunks, common.MT_Delete)
 	if err != nil {
-		return modifiedHashes, err
+		return deletedHashes, missingHashes, err
 	}
 
 	for _, chunk := range chunks {
-		if address, has := m[chunk.Hash]; has {
-			if err := cluster2.NewDataNode(address).Delete(chunk.Hash); err != nil {
-				return modifiedHashes, err
-			}
-			modifiedHashes = append(modifiedHashes, chunk.Hash)
+		address, has := m[chunk.Hash]
+		if !has {
+			missingHashes = append(missingHashes, chunk.Hash)
+			continue
 		}
+		if err := cluster2.NewDataNode(address).Delete(chunk.Hash); err != nil {
+			return deletedHashes, missingHashes, err
+		}
+		deletedHashes = append(deletedHashes, chunk.Hash)
 	}
 
-	return modifiedHashes, nil
+	return deletedHashes, missingHashes, nil
 }
 
 func (c *cluster) makeReservation(size uint64) (*common.Reservation, error) {
@@ -265,13 +269,17 @@ func (c *cluster) createClusterMap(chunks common.DataChunks, deleteMap bool) (ma
 	return m, nil
 }
 
-func (c *cluster) requestClusterMap(sha512HexList []string, deleteMap bool) (map[string]string, error) {
+func (c *cluster) requestClusterMap(sha512HexList []string, mapType common.MapType) (map[string]string, error) {
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s%s", c.managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return nil, err
 	}
+
 	mode := "read"
-	if deleteMap {
+	switch mapType {
+	case common.MT_Create:
+		mode = "create"
+	case common.MT_Delete:
 		mode = "delete"
 	}
 	req.Header.Set("X-Action", fmt.Sprintf("%sMap", mode))

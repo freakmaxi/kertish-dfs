@@ -17,11 +17,11 @@ import (
 
 type Metadata interface {
 	Lock(folderPaths []string, folderHandler func(folders []*common.Folder) error) error
-	LockTree(folderPath string, includeItself bool, folderHandler func(folders []*common.Folder) error) error
+	LockTree(folderPath string, includeItself bool, reverseSort bool, folderHandler func(folders []*common.Folder) error) error
 	Save(folderPaths []string, saveHandler func(folders map[string]*common.Folder) error) error
 }
 
-const collection = "metadata"
+const metadataCollection = "metadata"
 
 type metadata struct {
 	mutex Mutex
@@ -30,7 +30,7 @@ type metadata struct {
 }
 
 func NewMetadata(mutex Mutex, conn *Connection, database string) (Metadata, error) {
-	dfsCol := conn.db.Database(database).Collection(collection)
+	dfsCol := conn.db.Database(database).Collection(metadataCollection)
 
 	m := &metadata{
 		mutex: mutex,
@@ -79,7 +79,7 @@ func (m *metadata) Lock(folderPaths []string, folderHandler func(folders []*comm
 	return folderHandler(folders)
 }
 
-func (m *metadata) LockTree(folderPath string, includeItself bool, folderHandler func(folders []*common.Folder) error) error {
+func (m *metadata) LockTree(folderPath string, includeItself bool, reverseSort bool, folderHandler func(folders []*common.Folder) error) error {
 	filterContent := []interface{}{
 		bson.M{"full": bson.M{"$regex": primitive.Regex{Pattern: fmt.Sprintf("^%s/.+", folderPath)}}},
 	}
@@ -88,7 +88,14 @@ func (m *metadata) LockTree(folderPath string, includeItself bool, folderHandler
 	}
 	filter := bson.M{"$or": filterContent}
 
-	cursor, err := m.col.Find(m.context(), filter)
+	opts := options.Find()
+	if !reverseSort {
+		opts.SetSort(bson.M{"full": 1})
+	} else {
+		opts.SetSort(bson.M{"full": -1})
+	}
+
+	cursor, err := m.col.Find(m.context(), filter, opts)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return os.ErrNotExist
@@ -153,8 +160,8 @@ func (m *metadata) overwrite(folders map[string]*common.Folder) error {
 	}
 
 	if err = mongo.WithSession(m.context(), session, func(sc mongo.SessionContext) error {
-		for k, folder := range folders {
-			filter := bson.M{"full": k}
+		for folderPath, folder := range folders {
+			filter := bson.M{"full": folderPath}
 
 			if folder == nil {
 				if _, err := m.col.DeleteOne(m.context(), filter); err != nil && err != mongo.ErrNoDocuments {

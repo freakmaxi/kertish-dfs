@@ -83,34 +83,52 @@ func newFile(name string) *File {
 	}
 }
 
-func (f *File) IngestDeletion(deletedChunkHashes []string) {
-	if len(deletedChunkHashes) == 0 {
+func (f *File) Ingest(deletedChunkHashes []string, missingChunkHashes []string) {
+	if len(deletedChunkHashes) == 0 && len(missingChunkHashes) == 0 {
 		return
-	}
-
-	deletedChunkHashesMap := make(map[string]bool)
-	for _, deletedChunkHash := range deletedChunkHashes {
-		deletedChunkHashesMap[deletedChunkHash] = true
 	}
 
 	chunks := make(DataChunks, len(f.Chunks))
 	copy(chunks, f.Chunks)
+
+	absentChunkHashesMap := make(map[string]bool)
+	for _, deletedChunkHash := range deletedChunkHashes {
+		absentChunkHashesMap[deletedChunkHash] = true
+	}
+
+	for _, missingChunkHash := range missingChunkHashes {
+		absentChunkHashesMap[missingChunkHash] = true
+	}
 
 	f.Chunks = make(DataChunks, 0)
 
 	for len(chunks) > 0 {
 		chunk := chunks[0]
 
-		_, has := deletedChunkHashesMap[chunk.Hash]
-		if !has {
-			f.Chunks = append(f.Chunks, chunk)
-		} else {
+		_, has := absentChunkHashesMap[chunk.Hash]
+		if has {
 			f.Missing = append(f.Missing, chunk)
+		} else {
+			f.Chunks = append(f.Chunks, chunk)
 		}
 		chunks = chunks[1:]
 	}
 
-	f.Zombie = len(f.Chunks) > 0
+	f.Zombie = len(missingChunkHashes) > 0 || len(deletedChunkHashes) > 0 && len(f.Chunks) > 0
+}
+
+func (f *File) CanDie() bool {
+	return f.Zombie && len(f.Chunks) == 0
+}
+
+func (f *File) Resurrect() {
+	if len(f.Missing) == 0 {
+		return
+	}
+
+	f.Chunks = append(f.Chunks, f.Missing...)
+	f.Missing = make(DataChunks, 0)
+	f.Zombie = false
 }
 
 func (f *File) Reset(mime string, size uint64) {
