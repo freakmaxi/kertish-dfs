@@ -25,7 +25,7 @@ func List(headAddresses []string, source string, usage bool) (*common.Folder, er
 		return nil, err
 	}
 	req.Header.Set("X-Path", createXPath([]string{source}))
-	req.Header.Set("X-CalculateUsage", strconv.FormatBool(usage))
+	req.Header.Set("X-Calculate-Usage", strconv.FormatBool(usage))
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -54,7 +54,7 @@ func MakeFolder(headAddresses []string, target string) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("X-ApplyTo", "folder")
+	req.Header.Set("X-Apply-To", "folder")
 	req.Header.Set("X-Path", createXPath([]string{target}))
 
 	res, err := client.Do(req)
@@ -197,10 +197,10 @@ func PutFile(headAddresses []string, source string, target string, overwrite boo
 		return err
 	}
 
-	req.Header.Set("X-ApplyTo", "file")
+	req.Header.Set("X-Apply-To", "file")
 	req.Header.Set("X-Path", createXPath([]string{target}))
 	req.Header.Set("X-Overwrite", strconv.FormatBool(overwrite))
-	req.Header.Set("X-AllowEmpty", strconv.FormatBool(size == 0))
+	req.Header.Set("X-Allow-Empty", strconv.FormatBool(size == 0))
 	req.Header.Set("Content-Type", contentType)
 	req.ContentLength = size
 

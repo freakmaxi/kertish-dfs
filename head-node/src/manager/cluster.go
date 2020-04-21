@@ -192,7 +192,7 @@ func (c *cluster) discardReservation(reservationId string) error {
 		return err
 	}
 	req.Header.Set("X-Action", "discard")
-	req.Header.Set("X-ReservationId", reservationId)
+	req.Header.Set("X-Reservation-Id", reservationId)
 
 	res, err := c.client.Do(req)
 	if err != nil {
@@ -212,7 +212,7 @@ func (c *cluster) commitReservation(reservationId string, clusterUsageMap map[st
 		return err
 	}
 	req.Header.Set("X-Action", "commit")
-	req.Header.Set("X-ReservationId", reservationId)
+	req.Header.Set("X-Reservation-Id", reservationId)
 
 	clusterUsageList := make([]string, 0)
 	for k, v := range clusterUsageMap {
@@ -252,16 +252,16 @@ func (c *cluster) findCluster(sha512Hex string) (string, string, error) {
 		return "", "", fmt.Errorf("cluster manager request is failed (findCluster): %d - %s", res.StatusCode, common.NewError(res.Body).Message)
 	}
 
-	return res.Header.Get("X-ClusterId"), res.Header.Get("X-Address"), nil
+	return res.Header.Get("X-Cluster-Id"), res.Header.Get("X-Address"), nil
 }
 
-func (c *cluster) createClusterMap(chunks common.DataChunks, deleteMap bool) (map[string]string, error) {
+func (c *cluster) createClusterMap(chunks common.DataChunks, mapType common.MapType) (map[string]string, error) {
 	sha512HexList := make([]string, 0)
 	for _, chunk := range chunks {
 		sha512HexList = append(sha512HexList, chunk.Hash)
 	}
 
-	m, err := c.requestClusterMap(sha512HexList, deleteMap)
+	m, err := c.requestClusterMap(sha512HexList, mapType)
 	if err != nil {
 		return nil, err
 	}

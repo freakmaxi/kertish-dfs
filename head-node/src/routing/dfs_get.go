@@ -21,7 +21,7 @@ func (d *dfsRouter) handleGet(w http.ResponseWriter, r *http.Request) {
 
 	join := strings.Compare(sourceAction, "j") == 0
 
-	calculateUsageHeader := strings.ToLower(r.Header.Get("X-CalculateUsage"))
+	calculateUsageHeader := strings.ToLower(r.Header.Get("X-Calculate-Usage"))
 	calculateUsage := len(calculateUsageHeader) > 0 && (strings.Compare(calculateUsageHeader, "1") == 0 || strings.Compare(calculateUsageHeader, "true") == 0)
 
 	downloadHeader := strings.ToLower(r.Header.Get("X-Download"))

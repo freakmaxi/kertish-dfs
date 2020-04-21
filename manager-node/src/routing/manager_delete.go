@@ -74,7 +74,7 @@ func (m *managerRouter) handleUnRegister(w http.ResponseWriter, r *http.Request)
 }
 
 func (m *managerRouter) handleCommit(w http.ResponseWriter, r *http.Request) {
-	reservationId := r.Header.Get("X-ReservationId")
+	reservationId := r.Header.Get("X-Reservation-Id")
 	clusterMap, err := m.describeReservationCommitOptions(r.Header.Get("X-Options"))
 
 	if len(reservationId) == 0 || err != nil {
@@ -95,7 +95,7 @@ func (m *managerRouter) handleCommit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *managerRouter) handleDiscard(w http.ResponseWriter, r *http.Request) {
-	reservationId := r.Header.Get("X-ReservationId")
+	reservationId := r.Header.Get("X-Reservation-Id")
 	if len(reservationId) == 0 {
 		w.WriteHeader(422)
 		return

@@ -45,8 +45,8 @@ func (n *nodeRouter) handleHandshake(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("X-ClusterId", clusterId)
-	w.Header().Set("X-NodeId", nodeId)
+	w.Header().Set("X-Cluster-Id", clusterId)
+	w.Header().Set("X-Node-Id", nodeId)
 	w.Header().Set("X-Master", syncSourceNodeAddr)
 }
 

@@ -98,8 +98,8 @@ func (n *node) Handshake(hardwareAddr string, bindAddr string, size uint64) erro
 		return fmt.Errorf("node manager request is failed (Handshake): %d - %s", res.StatusCode, common.NewError(res.Body).Message)
 	}
 
-	n.clusterId = res.Header.Get("X-ClusterId")
-	n.nodeId = res.Header.Get("X-NodeId")
+	n.clusterId = res.Header.Get("X-Cluster-Id")
+	n.nodeId = res.Header.Get("X-Node-Id")
 	if len(n.clusterId) == 0 || len(n.nodeId) == 0 {
 		return fmt.Errorf("node manager response wrong for handshake")
 	}

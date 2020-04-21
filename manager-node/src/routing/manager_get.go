@@ -109,10 +109,10 @@ func (m *managerRouter) handleClusters(w http.ResponseWriter, r *http.Request) {
 func (m *managerRouter) handleFind(w http.ResponseWriter, r *http.Request) {
 	sha512Hex := r.Header.Get("X-Options")
 
-	clusterId, address, err := m.manager.Find(sha512Hex, true)
+	clusterId, address, err := m.manager.Find(sha512Hex, common.MT_Create)
 
 	if err == nil {
-		w.Header().Set("X-ClusterId", clusterId)
+		w.Header().Set("X-Cluster-Id", clusterId)
 		w.Header().Set("X-Address", address)
 		return
 	}

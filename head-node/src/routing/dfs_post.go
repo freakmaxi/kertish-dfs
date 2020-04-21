@@ -10,7 +10,7 @@ import (
 )
 
 func (d *dfsRouter) handlePost(w http.ResponseWriter, r *http.Request) {
-	applyTo := r.Header.Get("X-ApplyTo")
+	applyTo := r.Header.Get("X-Apply-To")
 	requestedPaths, _, err := d.describeXPath(r.Header.Get("X-Path"))
 	if !d.validateApplyTo(applyTo) || err != nil || len(requestedPaths) > 1 {
 		w.WriteHeader(422)
@@ -30,7 +30,7 @@ func (d *dfsRouter) handlePost(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case "file":
-		allowEmptyHeader := strings.ToLower(r.Header.Get("X-Overwrite"))
+		allowEmptyHeader := strings.ToLower(r.Header.Get("X-Allow-Empty"))
 		allowEmpty := len(allowEmptyHeader) > 0 && (strings.Compare(allowEmptyHeader, "1") == 0 || strings.Compare(allowEmptyHeader, "true") == 0)
 
 		contentType := r.Header.Get("Content-Type")
