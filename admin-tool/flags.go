@@ -37,16 +37,17 @@ func (a *addNode) Set(value string) error {
 }
 
 type flagContainer struct {
-	managerAddress string
-	createCluster  []string
-	deleteCluster  string
-	addNode        addNode
-	removeNode     string
-	syncClusters   bool
-	getCluster     string
-	getClusters    bool
-	help           bool
-	version        bool
+	managerAddress   string
+	createCluster    []string
+	deleteCluster    string
+	addNode          addNode
+	removeNode       string
+	syncClusters     bool
+	checkConsistency bool
+	getCluster       string
+	getClusters      bool
+	help             bool
+	version          bool
 
 	active string
 }
@@ -88,6 +89,11 @@ func (f *flagContainer) Define(v string) int {
 	if f.syncClusters {
 		activeCount++
 		f.active = "syncClusters"
+	}
+
+	if f.checkConsistency {
+		activeCount++
+		f.active = "checkConsistency"
 	}
 
 	if len(f.getCluster) > 0 {
@@ -142,6 +148,7 @@ Ex: clusterId=192.168.0.1:9430,192.168.0.2:9430`)
 	set.StringVar(&removeNode, `remove-node`, "", `Removes the node from its cluster.`)
 
 	set.Bool(`sync-clusters`, false, `Synchronise all clusters and their nodes for data consistency`)
+	set.Bool(`check-consistency`, false, `Check file chunk node distribution consistency in metadata and mark as zombie for the broken ones`)
 	set.Bool(`help`, false, `Print this usage documentation`)
 	set.Bool(`version`, false, `Print release version`)
 
@@ -153,16 +160,17 @@ Ex: clusterId=192.168.0.1:9430,192.168.0.2:9430`)
 	}
 
 	fc := &flagContainer{
-		managerAddress: managerAddress,
-		createCluster:  cc,
-		deleteCluster:  deleteCluster,
-		addNode:        addNode,
-		removeNode:     removeNode,
-		syncClusters:   strings.Index(strings.Join(os.Args, " "), "sync-clusters") > -1,
-		getCluster:     getCluster,
-		getClusters:    strings.Index(strings.Join(os.Args, " "), "get-clusters") > -1,
-		help:           strings.Index(strings.Join(os.Args, " "), "-help") > -1,
-		version:        strings.Index(strings.Join(os.Args, " "), "-version") > -1,
+		managerAddress:   managerAddress,
+		createCluster:    cc,
+		deleteCluster:    deleteCluster,
+		addNode:          addNode,
+		removeNode:       removeNode,
+		syncClusters:     strings.Index(strings.Join(os.Args, " "), "sync-clusters") > -1,
+		checkConsistency: strings.Index(strings.Join(os.Args, " "), "check-consistency") > -1,
+		getCluster:       getCluster,
+		getClusters:      strings.Index(strings.Join(os.Args, " "), "get-clusters") > -1,
+		help:             strings.Index(strings.Join(os.Args, " "), "-help") > -1,
+		version:          strings.Index(strings.Join(os.Args, " "), "-version") > -1,
 	}
 
 	switch fc.Define(v) {

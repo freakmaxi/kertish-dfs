@@ -77,6 +77,16 @@ func main() {
 			os.Exit(50)
 		}
 		anim.Stop()
+	case "checkConsistency":
+		anim := common.NewAnimation("metadata file chunk consistency check is in process...")
+		anim.Start()
+
+		if err := manager.CheckConsistency([]string{fc.managerAddress}); err != nil {
+			anim.Cancel()
+			fmt.Printf("%s\n", err.Error())
+			os.Exit(55)
+		}
+		anim.Stop()
 	case "getCluster":
 		if err := manager.GetClusters([]string{fc.managerAddress}, fc.getCluster); err != nil {
 			fmt.Printf("%s\n", err.Error())
