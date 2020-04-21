@@ -113,12 +113,16 @@ func Change(headAddresses []string, sources []string, target string, overwrite b
 	return nil
 }
 
-func Delete(headAddresses []string, target string) error {
+func Delete(headAddresses []string, target string, killZombies bool) error {
 	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://%s%s", headAddresses[0], headEndPoint), nil)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("X-Path", createXPath([]string{target}))
+
+	if killZombies {
+		req.Header.Set("X-Kill-Zombies", "true")
+	}
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -132,6 +136,10 @@ func Delete(headAddresses []string, target string) error {
 		return fmt.Errorf("%s should be an absolute path", target)
 	case 500:
 		return fmt.Errorf("unable to delete from %s", target)
+	case 524:
+		return fmt.Errorf("%s is zombie or has zombie", target)
+	case 525:
+		return fmt.Errorf("%s is/has still alive zombie, try again to kill", target)
 	}
 
 	return nil
@@ -164,7 +172,7 @@ func Put(headAddresses []string, source string, target string, overwrite bool) e
 			return PutFile(headAddresses, p, targetPath, overwrite)
 		}
 		if overwrite {
-			if err := Delete(headAddresses, targetPath); err != nil {
+			if err := Delete(headAddresses, targetPath, false); err != nil {
 				return err
 			}
 		}

@@ -209,7 +209,7 @@ func (m *moveCommand) remoteToLocal() error {
 	}
 
 	for _, source := range m.sources {
-		if err := dfs.Delete(m.headAddresses, source); err != nil {
+		if err := dfs.Delete(m.headAddresses, source, false); err != nil {
 			anim.Cancel()
 			return err
 		}

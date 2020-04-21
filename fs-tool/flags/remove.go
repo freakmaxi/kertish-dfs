@@ -17,8 +17,9 @@ type removeCommand struct {
 	basePath      string
 	args          []string
 
-	confirm bool
-	targets []string
+	confirm     bool
+	killZombies bool
+	targets     []string
 }
 
 func NewRemove(headAddresses []string, output terminal.Output, basePath string, args []string) execution {
@@ -28,6 +29,7 @@ func NewRemove(headAddresses []string, output terminal.Output, basePath string, 
 		basePath:      basePath,
 		args:          args,
 		confirm:       true,
+		killZombies:   false,
 		targets:       make([]string, 0),
 	}
 }
@@ -39,6 +41,10 @@ func (r *removeCommand) Parse() error {
 		case "-f":
 			r.args = r.args[1:]
 			r.confirm = false
+			continue
+		case "-k":
+			r.args = r.args[1:]
+			r.killZombies = true
 			continue
 		case "-h":
 			return errors.ErrShowUsage
@@ -66,6 +72,7 @@ func (r *removeCommand) PrintUsage() {
 	r.output.Println("")
 	r.output.Println("arguments:")
 	r.output.Println("  -f          skip confirmation and removes")
+	r.output.Println("  -k          try to kill zombie file(s)")
 	r.output.Println("")
 	r.output.Refresh()
 }
@@ -111,7 +118,7 @@ func (r *removeCommand) Execute() error {
 			d = common.Join(r.basePath, d)
 		}
 
-		if err := dfs.Delete(r.headAddresses, d); err != nil {
+		if err := dfs.Delete(r.headAddresses, d, r.killZombies); err != nil {
 			anim.Cancel()
 			return err
 		}
