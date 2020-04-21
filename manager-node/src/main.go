@@ -65,14 +65,20 @@ func main() {
 	}
 	if err != nil {
 		fmt.Printf("ERROR: Mutex Setup is failed. %s\n", err.Error())
-		os.Exit(21)
+		os.Exit(20)
 	}
 	mutex := data.NewMutex(mutexClient)
 
 	conn, err := data.NewConnection(mongoConn)
 	if err != nil {
 		fmt.Printf("ERROR: MongoDB Connection is failed. %s\n", err.Error())
-		os.Exit(20)
+		os.Exit(21)
+	}
+
+	dataClusters, err := data.NewClusters(mutex, conn, mongoDb)
+	if err != nil {
+		fmt.Printf("ERROR: Cluster Data Manager is failed. %s\n", err.Error())
+		os.Exit(22)
 	}
 
 	var indexClient data.IndexClient
@@ -83,20 +89,20 @@ func main() {
 	}
 	if err != nil {
 		fmt.Printf("ERROR: Index Setup is failed. %s\n", err.Error())
-		os.Exit(22)
+		os.Exit(23)
 	}
 	index := data.NewIndex(indexClient, strings.ReplaceAll(mongoDb, " ", "_"), mutex)
 
-	dataClusters, err := data.NewClusters(mutex, conn, mongoDb)
+	metadata, err := data.NewMetadata(mutex, conn, mongoDb)
 	if err != nil {
-		fmt.Printf("ERROR: Cluster Data Manager is failed. %s\n", err.Error())
-		os.Exit(23)
+		fmt.Printf("ERROR: Metadata Manager is failed. %s\n", err.Error())
+		os.Exit(24)
 	}
 
-	managerCluster, err := manager.NewCluster(index, dataClusters)
+	managerCluster, err := manager.NewCluster(dataClusters, index, metadata)
 	if err != nil {
 		fmt.Printf("ERROR: Cluster Manager is failed. %s\n", err.Error())
-		os.Exit(24)
+		os.Exit(25)
 	}
 	if err := managerCluster.SyncClusters(); err != nil {
 		fmt.Printf("ERROR: Cluster Syncing is failed. %s\n", err.Error())
@@ -106,7 +112,7 @@ func main() {
 	managerNode, err := manager.NewNode(index, dataClusters)
 	if err != nil {
 		fmt.Printf("ERROR: Node Manager is failed. %s\n", err.Error())
-		os.Exit(24)
+		os.Exit(26)
 	}
 	nodeRouter := routing.NewNodeRouter(managerNode)
 

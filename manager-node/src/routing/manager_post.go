@@ -24,8 +24,15 @@ func (m *managerRouter) handlePost(w http.ResponseWriter, r *http.Request) {
 		m.handleRegister(w, r)
 	case "reserve":
 		m.handleReserve(w, r)
-	case "readMap", "deleteMap":
-		m.handleMap(w, r, strings.Compare(action, "deleteMap") == 0)
+	case "readMap", "createMap", "deleteMap":
+		mapType := common.MT_Read
+		switch action {
+		case "createMap":
+			mapType = common.MT_Create
+		case "deleteMap":
+			mapType = common.MT_Delete
+		}
+		m.handleMap(w, r, mapType)
 	default:
 		w.WriteHeader(406)
 	}
@@ -89,14 +96,14 @@ func (m *managerRouter) handleReserve(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (m *managerRouter) handleMap(w http.ResponseWriter, r *http.Request, deleteMap bool) {
+func (m *managerRouter) handleMap(w http.ResponseWriter, r *http.Request, mapType common.MapType) {
 	sha512HexList := strings.Split(r.Header.Get("X-Options"), ",")
 	if len(sha512HexList) == 0 {
 		w.WriteHeader(422)
 		return
 	}
 
-	clusterMapping, err := m.manager.Map(sha512HexList, deleteMap)
+	clusterMapping, err := m.manager.Map(sha512HexList, mapType)
 	if err == nil {
 		if err := json.NewEncoder(w).Encode(clusterMapping); err != nil {
 			fmt.Printf("ERROR: Post request is failed. %s\n", err.Error())
@@ -117,7 +124,7 @@ func (m *managerRouter) handleMap(w http.ResponseWriter, r *http.Request, delete
 
 func (m *managerRouter) validatePostAction(action string) bool {
 	switch action {
-	case "register", "reserve", "readMap", "deleteMap":
+	case "register", "reserve", "readMap", "createMap", "deleteMap":
 		return true
 	}
 	return false

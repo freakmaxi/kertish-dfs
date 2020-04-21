@@ -30,7 +30,7 @@ type Clusters interface {
 	ClusterIdOf(nodeId string) (*string, error)
 }
 
-const collection = "cluster"
+const clusterCollection = "cluster"
 const clustersLockKey = "clusters"
 
 type clusters struct {
@@ -40,7 +40,7 @@ type clusters struct {
 }
 
 func NewClusters(mutex Mutex, conn *Connection, database string) (Clusters, error) {
-	dfsCol := conn.client.Database(database).Collection(collection)
+	dfsCol := conn.client.Database(database).Collection(clusterCollection)
 
 	c := &clusters{
 		mutex: mutex,

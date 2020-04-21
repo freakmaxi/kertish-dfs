@@ -24,23 +24,26 @@ type Cluster interface {
 	Discard(reservationId string) error
 	SyncClusters() error
 	SyncCluster(clusterId string) error
+	CheckConsistency() error
 
 	GetClusters() (common.Clusters, error)
 	GetCluster(clusterId string) (*common.Cluster, error)
 
-	Map(sha512HexList []string, deleteMap bool) (map[string]string, error)
-	Find(sha512Hex string, deleteMap bool) (string, string, error)
+	Map(sha512HexList []string, mapType common.MapType) (map[string]string, error)
+	Find(sha512Hex string, mapType common.MapType) (string, string, error)
 }
 
 type cluster struct {
-	index    data.Index
 	clusters data.Clusters
+	index    data.Index
+	metadata data.Metadata
 }
 
-func NewCluster(index data.Index, clusters data.Clusters) (Cluster, error) {
+func NewCluster(clusters data.Clusters, index data.Index, metadata data.Metadata) (Cluster, error) {
 	return &cluster{
-		index:    index,
 		clusters: clusters,
+		index:    index,
+		metadata: metadata,
 	}, nil
 }
 
@@ -332,6 +335,61 @@ func (c *cluster) syncClusters(clusters common.Clusters) error {
 	return nil
 }
 
+func (c *cluster) CheckConsistency() error {
+	if err := c.checkStructure(); err != nil {
+		return err
+	}
+
+	clusters, err := c.GetClusters()
+	if err != nil {
+		return err
+	}
+
+	clusterIds := make([]string, len(clusters))
+	for i, cluster := range clusters {
+		clusterIds[i] = cluster.Id
+	}
+
+	return c.metadata.Cursor(func(folder *common.Folder) (bool, error) {
+		changed := false
+		for _, file := range folder.Files {
+			file.Resurrect()
+
+			missingChunkHashes := make([]string, 0)
+			for _, chunk := range file.Chunks {
+				if _, err := c.index.Find(clusterIds, chunk.Hash); err != nil {
+					if err != errors.ErrNotFound {
+						return false, err
+					}
+					missingChunkHashes = append(missingChunkHashes, chunk.Hash)
+				}
+			}
+			if len(missingChunkHashes) == 0 {
+				continue
+			}
+
+			file.Ingest([]string{}, missingChunkHashes)
+			changed = true
+		}
+		return changed, nil
+	})
+}
+
+func (c *cluster) checkStructure() error {
+	return c.metadata.LockTree(func(folders []*common.Folder) ([]*common.Folder, error) {
+		if len(folders) == 0 {
+			return nil, nil
+		}
+
+		tree := common.NewTree()
+		if err := tree.Fill(folders); err != nil {
+			return nil, err
+		}
+
+		return tree.Normalize(), nil
+	})
+}
+
 func (c *cluster) GetClusters() (common.Clusters, error) {
 	clusters := make(common.Clusters, 0)
 	err := c.clusters.LockAll(func(cs common.Clusters) error {
@@ -352,11 +410,14 @@ func (c *cluster) GetCluster(clusterId string) (*common.Cluster, error) {
 	return cluster, err
 }
 
-func (c *cluster) Map(sha512HexList []string, deleteMap bool) (map[string]string, error) {
+func (c *cluster) Map(sha512HexList []string, mapType common.MapType) (map[string]string, error) {
 	clusterMapping := make(map[string]string, 0)
 	for _, sha512Hex := range sha512HexList {
-		_, address, err := c.Find(sha512Hex, deleteMap)
+		_, address, err := c.Find(sha512Hex, mapType)
 		if err != nil {
+			if err == errors.ErrNotFound && mapType == common.MT_Delete {
+				continue
+			}
 			return nil, err
 		}
 		clusterMapping[sha512Hex] = address
@@ -364,13 +425,13 @@ func (c *cluster) Map(sha512HexList []string, deleteMap bool) (map[string]string
 	return clusterMapping, nil
 }
 
-func (c *cluster) Find(sha512Hex string, deleteMap bool) (string, string, error) {
+func (c *cluster) Find(sha512Hex string, mapType common.MapType) (string, string, error) {
 	clusterIds := make([]string, 0)
 	clusterMap := make(map[string]string)
 
 	if err := c.clusters.LockAll(func(clusters common.Clusters) error {
 		for _, cluster := range clusters {
-			node := c.chooseMostResponsiveNode(cluster, deleteMap)
+			node := c.chooseMostResponsiveNode(cluster, mapType)
 			if node == nil {
 				return errors.ErrNoAvailableNode
 			}

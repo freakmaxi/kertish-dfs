@@ -128,10 +128,10 @@ func (c *cluster) findBestMasterNodeCandidate(cluster *common.Cluster) *common.N
 	return nil
 }
 
-func (c *cluster) chooseMostResponsiveNode(cluster *common.Cluster, deleteMap bool) *common.Node {
+func (c *cluster) chooseMostResponsiveNode(cluster *common.Cluster, mapType common.MapType) *common.Node {
 	var selectedNode *common.Node
 
-	if deleteMap {
+	if mapType != common.MT_Read {
 		return cluster.Master()
 	}
 

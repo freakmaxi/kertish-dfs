@@ -20,6 +20,8 @@ func (m *managerRouter) handleGet(w http.ResponseWriter, r *http.Request) {
 	switch action {
 	case "sync":
 		m.handleSync(w, r)
+	case "check":
+		m.handleCheckConsistency(w, r)
 	case "clusters":
 		m.handleClusters(w, r)
 	case "find":
@@ -49,6 +51,23 @@ func (m *managerRouter) handleSync(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)
 	}
 	e := common.NewError(100, err.Error())
+	if err := json.NewEncoder(w).Encode(e); err != nil {
+		fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())
+	}
+}
+
+func (m *managerRouter) handleCheckConsistency(w http.ResponseWriter, r *http.Request) {
+	err := m.manager.CheckConsistency()
+	if err == nil {
+		return
+	}
+
+	if err == errors.ErrNotFound {
+		w.WriteHeader(404)
+	} else {
+		w.WriteHeader(500)
+	}
+	e := common.NewError(105, err.Error())
 	if err := json.NewEncoder(w).Encode(e); err != nil {
 		fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())
 	}
@@ -111,7 +130,7 @@ func (m *managerRouter) handleFind(w http.ResponseWriter, r *http.Request) {
 
 func (m *managerRouter) validateGetAction(action string) bool {
 	switch action {
-	case "sync", "clusters", "find":
+	case "sync", "check", "clusters", "find":
 		return true
 	}
 	return false
