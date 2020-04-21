@@ -79,7 +79,7 @@ Find action is to get the clusterId and data node of a file.
 
 - `X-Options` header is used to point the fileId. FileId is a sha512 encoded hex string. Ex: `e5c0adae0f05cf60f7e34b45bd44249f42627b1f3b1b453ae45e106adbfdfbdb`
 
-- Successful response contains `X-ClusterId` and `X-Address` for search result.
+- Successful response contains `X-Cluster-Id` and `X-Address` for search result.
 
 ##### Possible Status Codes
 - `404`: Not found
@@ -251,7 +251,7 @@ All failed responses comes with error json. code can be `300` for cluster or `35
 ##### Commit Reservation Action
 Commit Reservation action is to commit that reservation can move to the further process.
 
-- `X-ReservationId` header for registration id.
+- `X-Reservation-Id` header for registration id.
 - `X-Options` for committing details. It has a special format `clusterId=size,clusterId=size,...`
 
 clusterId can repeat and the size will grow base on clusterId matching.
@@ -276,7 +276,7 @@ All failed responses comes with error json. Ex:
 ##### Discard Reservation Action
 Discard Reservation action is to discard the reservation in all related clusters.
 
-- `X-ReservationId` header for registration id.
+- `X-Reservation-Id` header for registration id.
 
 when reservation is discarded once, unused space will be added to the cluster total space. 
 

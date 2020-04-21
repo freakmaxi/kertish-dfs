@@ -39,7 +39,7 @@ Will be used to have the stability of metadata of the file system
 `j,[sourcePath],[sourcePath]...`. `sourcePath`(s) should be url encoded
 
 ##### Optional Headers:
-- `X-CalculateUsage` (only folder) force to calculate the size of folders
+- `X-Calculate-Usage` (only folder) force to calculate the size of folders
 - `X-Download` works only with file request. It provides the data with `Content-Disposition` header. Values: `1` or `true`. Default: `false`
 - `Range` to grab the part of the file. 
 
@@ -98,12 +98,13 @@ Will be used to have the stability of metadata of the file system
 - `POST` is used to create folders and upload files.
 
 ##### Required Headers:
-- `X-ApplyTo` is the aim of operation. Values: `file` or `folder`
+- `X-Apply-To` is the aim of operation. Values: `file` or `folder`
 - `X-Path` folder/file location in dfs (should be urlencoded)
 - `Content-Type` (only file)
 - `Content-Length` (only file)
 
 ##### Optional Headers:
+- `X-Allow-Empty` (only file) allow zero length file upload. Values: `1` or `true`. Default: `false`
 - `X-Overwrite` (only file) ignore file existence and continue without conflict response. Values: `1` or `true`. Default: `false` 
 
 ##### Possible Status Codes
@@ -137,10 +138,13 @@ Will be used to have the stability of metadata of the file system
 
 ##### Required Headers:
 - `X-Path` source folder/file location in dfs (should be urlencoded)
+- `X-Kill-Zombies` force zombie file/folder to be removed. Values: `1` or `true`. Default: `false`
 
 ##### Possible Status Codes
 - `404`: Not found
 - `422`: Required Request Headers are not valid or absent
 - `500`: Operational failures
+- `524`: Zombie file or folder has zombie file(s)
+- `525`: Zombie file or folder is still alive, try again to kill
 - `200`: Accepted
 
