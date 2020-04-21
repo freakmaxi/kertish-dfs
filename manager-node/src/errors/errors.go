@@ -12,4 +12,6 @@ var (
 	ErrNoAvailableNode = errors.New("no available node on the cluster")
 	ErrNoDiskSpace     = errors.New("no available disk space for this operation")
 	ErrNotFound        = errors.New("cluster/node not found")
+	ErrZombie          = errors.New("path/file is zombie")
+	ErrJoinConflict    = errors.New("joining source folders will have conflict in target")
 )

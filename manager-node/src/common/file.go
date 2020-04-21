@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/freakmaxi/kertish-dfs/head-node/src/errors"
+	"github.com/freakmaxi/kertish-dfs/manager-node/src/errors"
 )
 
 type File struct {
