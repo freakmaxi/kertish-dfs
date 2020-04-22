@@ -138,7 +138,7 @@ func (m *metadata) Save(folderPaths []string, saveHandler func(folders map[strin
 	}
 
 	if err := saveHandler(folders); err != nil {
-		if err == errors.ErrZombie {
+		if err == errors.ErrZombie || err == errors.ErrLock {
 			if err := m.overwrite(folders); err != nil {
 				return err
 			}

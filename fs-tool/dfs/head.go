@@ -136,6 +136,8 @@ func Delete(headAddresses []string, target string, killZombies bool) error {
 		return fmt.Errorf("%s should be an absolute path", target)
 	case 500:
 		return fmt.Errorf("unable to delete from %s", target)
+	case 523:
+		return fmt.Errorf("%s is locked or has locked file(s)", target)
 	case 524:
 		return fmt.Errorf("%s is zombie or has zombie", target)
 	case 525:

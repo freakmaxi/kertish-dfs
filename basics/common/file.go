@@ -35,6 +35,9 @@ func CreateJoinedFile(files Files) (*File, error) {
 	sequenceCount := uint16(0)
 	joinedFile := newFile("")
 	for _, f := range files {
+		if f.Locked() {
+			return nil, errors.ErrLock
+		}
 		if f.Zombie {
 			return nil, errors.ErrZombie
 		}
