@@ -2,15 +2,14 @@ package flags
 
 import (
 	"fmt"
-	"path"
-	"path/filepath"
-	"strconv"
-	"strings"
-
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
 	"github.com/freakmaxi/kertish-dfs/basics/terminal"
 	"github.com/freakmaxi/kertish-dfs/fs-tool/dfs"
+	"path"
+	"path/filepath"
+	"strconv"
+	"strings"
 )
 
 type listCommand struct {
@@ -141,7 +140,7 @@ func (l *listCommand) printAsList(folder *common.Folder) {
 		lockChar := "-"
 		if f.Zombie {
 			lockChar = "↯"
-		} else if f.Locked {
+		} else if f.Locked() {
 			lockChar = "•"
 		}
 		l.output.Printf("%s %7v %s %s\n", lockChar, l.sizeToString(f.Size), f.Modified.Format("2006 Jan 02 03:04"), f.Name)

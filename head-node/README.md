@@ -88,7 +88,9 @@ Will be used to have the stability of metadata of the file system
           "hash": "e5c0adae0f05cf60f7e34b45bd44249f42627b1f3b1b453ae45e106adbfdfbdb"
         }
       ],
-      "locked": false
+      "lock": {
+        "till": "2020-01-13T13:14:11.627Z"
+      }       
     }
   ],
   "size": 0

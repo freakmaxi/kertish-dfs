@@ -224,7 +224,7 @@ func (f *Folder) CloneInto(target *Folder) {
 
 func (f *Folder) Locked() bool {
 	for _, file := range f.Files {
-		if file.Locked {
+		if file.Locked() {
 			return true
 		}
 	}

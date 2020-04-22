@@ -82,7 +82,7 @@ func (d *dfs) CreateFile(path string, mime string, size uint64, contentReader io
 			if !overwrite {
 				return os.ErrExist
 			}
-			file.Locked = true
+			file.Lock = common.NewFileLockForSize(size)
 			return nil
 		}
 
@@ -97,7 +97,7 @@ func (d *dfs) CreateFile(path string, mime string, size uint64, contentReader io
 		file.Ingest(deletedChunkHashes, missingChunkHashes)
 
 		if err != nil {
-			file.Locked = false
+			file.Lock.Cancel()
 			if err := d.update(path, file); err != nil {
 				return err
 			}
@@ -115,7 +115,7 @@ func (d *dfs) CreateFile(path string, mime string, size uint64, contentReader io
 
 	file.Reset(mime, size)
 	file.Chunks = append(file.Chunks, chunks...)
-	file.Locked = false
+	file.Lock.Cancel()
 
 	return d.update(path, file)
 }
@@ -149,7 +149,7 @@ func (d *dfs) Size(folderPath string) (uint64, error) {
 	if err := d.metadata.LockTree(folderPath, true, false, func(folders []*common.Folder) error {
 		for _, folder := range folders {
 			for _, file := range folder.Files {
-				if file.Locked {
+				if file.Locked() {
 					continue
 				}
 				size += file.Size
@@ -324,7 +324,7 @@ func (d *dfs) moveFile(sources []string, target string, overwrite bool) error {
 				return os.ErrNotExist
 			}
 
-			if sourceFile.Locked {
+			if sourceFile.Locked() {
 				return errors.ErrLock
 			}
 
@@ -335,7 +335,7 @@ func (d *dfs) moveFile(sources []string, target string, overwrite bool) error {
 		if err != nil {
 			return err
 		}
-		sourceFile.Locked = false
+		sourceFile.Lock = common.NewFileLock(0)
 
 		targetFolder := folders[target]
 		if targetFolder == nil {
@@ -429,7 +429,7 @@ func (d *dfs) copyFolder(sources []string, target string, overwrite bool) error 
 		joinedFolder.CloneInto(targetFolder)
 
 		for _, file := range targetFolder.Files {
-			if file.Locked {
+			if file.Locked() {
 				continue
 			}
 			if err := d.cluster.CreateShadow(file.Chunks); err != nil {
@@ -442,7 +442,7 @@ func (d *dfs) copyFolder(sources []string, target string, overwrite bool) error 
 				for _, sourceChild := range sourceChildren {
 					sourceChild.Full = strings.Replace(sourceChild.Full, sourceFolder.Full, targetFolder.Full, 1)
 					for _, file := range sourceChild.Files {
-						if file.Locked {
+						if file.Locked() {
 							continue
 						}
 						if err := d.cluster.CreateShadow(file.Chunks); err != nil {
@@ -497,7 +497,7 @@ func (d *dfs) copyFile(sources []string, target string, overwrite bool) error {
 				return os.ErrNotExist
 			}
 
-			if sourceFile.Locked {
+			if sourceFile.Locked() {
 				return errors.ErrLock
 			}
 
@@ -508,7 +508,7 @@ func (d *dfs) copyFile(sources []string, target string, overwrite bool) error {
 		if err != nil {
 			return err
 		}
-		sourceFile.Locked = false
+		sourceFile.Lock = common.NewFileLock(0)
 
 		targetFolder := folders[target]
 		if targetFolder == nil {
@@ -658,7 +658,7 @@ func (d *dfs) deleteFile(path string, killZombies bool) error {
 		}
 
 		return folder.DeleteFile(filename, func(file *common.File) error {
-			if file.Locked {
+			if file.Locked() {
 				return errors.ErrLock
 			}
 

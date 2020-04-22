@@ -18,7 +18,7 @@ type File struct {
 	Modified time.Time  `json:"modified"`
 	Chunks   DataChunks `json:"chunks"`
 	Missing  DataChunks `json:"missing"`
-	Locked   bool       `json:"locked"`
+	Lock     *FileLock  `json:"lock"`
 	Zombie   bool       `json:"zombie"`
 }
 
@@ -78,7 +78,7 @@ func newFile(name string) *File {
 		Modified: time.Now().UTC(),
 		Chunks:   make(DataChunks, 0),
 		Missing:  make(DataChunks, 0),
-		Locked:   true,
+		Lock:     NewFileLock(0),
 		Zombie:   false,
 	}
 }
@@ -131,6 +131,10 @@ func (f *File) Resurrect() {
 	f.Zombie = false
 }
 
+func (f *File) Locked() bool {
+	return f.Lock != nil && f.Lock.Till.After(time.Now())
+}
+
 func (f *File) Reset(mime string, size uint64) {
 	f.Mime = mime
 	f.Size = size
@@ -138,7 +142,7 @@ func (f *File) Reset(mime string, size uint64) {
 	f.Modified = time.Now().UTC()
 	f.Chunks = make(DataChunks, 0)
 	f.Missing = make(DataChunks, 0)
-	f.Locked = true
+	f.Lock = NewFileLock(0)
 	f.Zombie = false
 }
 
@@ -149,7 +153,7 @@ func (f *File) CloneInto(target *File) {
 
 	target.Mime = f.Mime
 	target.Size = f.Size
-	target.Locked = f.Locked
+	target.Lock = f.Lock
 
 	target.Chunks = make(DataChunks, 0)
 	for _, c := range f.Chunks {
