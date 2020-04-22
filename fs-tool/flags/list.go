@@ -2,14 +2,15 @@ package flags
 
 import (
 	"fmt"
-	"github.com/freakmaxi/kertish-dfs/basics/common"
-	"github.com/freakmaxi/kertish-dfs/basics/errors"
-	"github.com/freakmaxi/kertish-dfs/basics/terminal"
-	"github.com/freakmaxi/kertish-dfs/fs-tool/dfs"
 	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/freakmaxi/kertish-dfs/basics/common"
+	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"github.com/freakmaxi/kertish-dfs/basics/terminal"
+	"github.com/freakmaxi/kertish-dfs/fs-tool/dfs"
 )
 
 type listCommand struct {
@@ -77,6 +78,12 @@ func (l *listCommand) PrintUsage() {
 	l.output.Println("arguments:")
 	l.output.Println("  -l          shows in a listing format")
 	l.output.Println("  -u          calculate the size of folders")
+	l.output.Println("")
+	l.output.Println("marking:")
+	l.output.Println("  d           folder")
+	l.output.Println("  -           file")
+	l.output.Println("  •           locked")
+	l.output.Println("  ↯           zombie")
 	l.output.Println("")
 	l.output.Refresh()
 }
