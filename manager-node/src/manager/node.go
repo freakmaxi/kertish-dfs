@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/freakmaxi/kertish-dfs/basics/common"
+	"github.com/freakmaxi/kertish-dfs/basics/src/common"
 	cluster2 "github.com/freakmaxi/kertish-dfs/manager-node/src/cluster"
 	"github.com/freakmaxi/kertish-dfs/manager-node/src/data"
 )

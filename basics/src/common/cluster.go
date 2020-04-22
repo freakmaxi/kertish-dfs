@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"github.com/freakmaxi/kertish-dfs/basics/src/errors"
 )
 
 type Cluster struct {

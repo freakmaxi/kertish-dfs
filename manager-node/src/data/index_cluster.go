@@ -1,6 +1,6 @@
 package data
 
-import "github.com/go-redis/redis/v7"
+import "github.com/go-redis/redis"
 
 type indexCluster struct {
 	cluster *redis.ClusterClient

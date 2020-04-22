@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/freakmaxi/kertish-dfs/basics/common"
-	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"github.com/freakmaxi/kertish-dfs/basics/src/common"
+	"github.com/freakmaxi/kertish-dfs/basics/src/errors"
 )
 
 func (d *dfsRouter) handlePut(w http.ResponseWriter, r *http.Request) {

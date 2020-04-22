@@ -4,7 +4,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"github.com/freakmaxi/kertish-dfs/basics/src/errors"
 )
 
 type Tree struct {

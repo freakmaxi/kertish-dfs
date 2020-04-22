@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/freakmaxi/kertish-dfs/basics/common"
+	"github.com/freakmaxi/kertish-dfs/basics/src/common"
 )
 
 func (d *dfsRouter) handleGet(w http.ResponseWriter, r *http.Request) {

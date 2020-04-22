@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"github.com/freakmaxi/kertish-dfs/basics/src/errors"
 )
 
 func (n *nodeRouter) handlePost(w http.ResponseWriter, r *http.Request) {

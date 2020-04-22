@@ -7,8 +7,8 @@ import (
 	"io"
 	"sync"
 
-	"github.com/freakmaxi/kertish-dfs/basics/common"
-	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"github.com/freakmaxi/kertish-dfs/basics/src/common"
+	"github.com/freakmaxi/kertish-dfs/basics/src/errors"
 	cluster2 "github.com/freakmaxi/kertish-dfs/head-node/src/cluster"
 )
 

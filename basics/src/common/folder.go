@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"github.com/freakmaxi/kertish-dfs/basics/src/errors"
 )
 
 type Folder struct {

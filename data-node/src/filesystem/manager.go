@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"github.com/freakmaxi/kertish-dfs/basics/src/errors"
 	"github.com/freakmaxi/kertish-dfs/data-node/src/cluster"
 )
 

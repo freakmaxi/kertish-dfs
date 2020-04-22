@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"github.com/freakmaxi/kertish-dfs/basics/src/errors"
 )
 
 func (d *dfsRouter) handleDelete(w http.ResponseWriter, r *http.Request) {

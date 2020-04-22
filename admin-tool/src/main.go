@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/freakmaxi/kertish-dfs/admin-tool/manager"
-	"github.com/freakmaxi/kertish-dfs/basics/common"
-	"github.com/freakmaxi/kertish-dfs/basics/terminal"
+	"github.com/freakmaxi/kertish-dfs/admin-tool/src/manager"
+	"github.com/freakmaxi/kertish-dfs/basics/src/common"
+	"github.com/freakmaxi/kertish-dfs/basics/src/terminal"
 )
 
 var version = "XX.X.XXXX"

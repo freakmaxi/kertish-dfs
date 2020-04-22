@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/freakmaxi/kertish-dfs/basics/common"
-	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"github.com/freakmaxi/kertish-dfs/basics/src/common"
+	"github.com/freakmaxi/kertish-dfs/basics/src/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
