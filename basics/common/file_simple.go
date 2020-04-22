@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-type File struct {
+type FileSimple struct {
 	Name     string    `json:"name"`
 	Mime     string    `json:"mime"`
 	Size     uint64    `json:"size"`
@@ -15,7 +15,7 @@ type File struct {
 	Zombie   bool      `json:"zombie"`
 }
 
-type Files []*File
+type Files []*FileSimple
 
 func (f Files) Len() int           { return len(f) }
 func (f Files) Less(i, j int) bool { return strings.Compare(f[i].Name, f[j].Name) < 0 }

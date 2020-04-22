@@ -5,8 +5,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/freakmaxi/kertish-dfs/manager-node/src/common"
-	"github.com/freakmaxi/kertish-dfs/manager-node/src/errors"
+	"github.com/freakmaxi/kertish-dfs/basics/common"
+	"github.com/freakmaxi/kertish-dfs/basics/errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"

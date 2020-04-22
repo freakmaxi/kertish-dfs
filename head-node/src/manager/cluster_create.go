@@ -7,14 +7,14 @@ import (
 	"io"
 	"sync"
 
+	"github.com/freakmaxi/kertish-dfs/basics/common"
+	"github.com/freakmaxi/kertish-dfs/basics/errors"
 	cluster2 "github.com/freakmaxi/kertish-dfs/head-node/src/cluster"
-	"github.com/freakmaxi/kertish-dfs/head-node/src/common"
-	"github.com/freakmaxi/kertish-dfs/head-node/src/errors"
 )
 
 type create struct {
-	reservation *common.Reservation
-	failed      bool
+	reservationMap *common.ReservationMap
+	failed         bool
 
 	chunks     []dataState
 	chunksLock sync.Mutex
@@ -27,13 +27,13 @@ type dataState struct {
 	address string
 }
 
-func NewCreate(reservation *common.Reservation) *create {
+func NewCreate(reservationMap *common.ReservationMap) *create {
 	return &create{
-		reservation:  reservation,
-		failed:       false,
-		chunks:       make([]dataState, 0),
-		chunksLock:   sync.Mutex{},
-		clusterUsage: make(map[string]uint64),
+		reservationMap: reservationMap,
+		failed:         false,
+		chunks:         make([]dataState, 0),
+		chunksLock:     sync.Mutex{},
+		clusterUsage:   make(map[string]uint64),
 	}
 }
 
@@ -45,7 +45,7 @@ func (c *create) calculateHash(data []byte) string {
 
 func (c *create) process(reader io.Reader, findClusterHandler func(sha512Hex string) (string, string, error)) (common.DataChunks, map[string]uint64, error) {
 	wg := &sync.WaitGroup{}
-	for _, clusterMap := range c.reservation.Clusters {
+	for _, clusterMap := range c.reservationMap.Clusters {
 		if c.failed {
 			break
 		}
@@ -80,7 +80,7 @@ func (c *create) upload(wg *sync.WaitGroup, clusterMap common.ClusterMap, data [
 	sha512Hex := c.calculateHash(data)
 	clusterId, address, err := findClusterHandler(sha512Hex)
 	if err != nil {
-		if err != errors.ErrNoAvailableNode {
+		if err != errors.ErrNoAvailableActionNode {
 			c.failed = true
 
 			fmt.Printf("ERROR: Find Cluster is failed. index: %d, clusterId: %s -  %s\n", clusterMap.Chunk.Starts(), clusterMap.Id, err.Error())

@@ -10,7 +10,14 @@ type Error struct {
 	Message string `json:"message"`
 }
 
-func NewError(reader io.Reader) Error {
+func NewError(code int, message string) Error {
+	return Error{
+		Code:    code,
+		Message: message,
+	}
+}
+
+func NewErrorFromReader(reader io.Reader) Error {
 	var e Error
 	if err := json.NewDecoder(reader).Decode(&e); err != nil {
 		return Error{

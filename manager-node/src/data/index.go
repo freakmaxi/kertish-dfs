@@ -3,7 +3,7 @@ package data
 import (
 	"fmt"
 
-	"github.com/freakmaxi/kertish-dfs/manager-node/src/errors"
+	"github.com/freakmaxi/kertish-dfs/basics/errors"
 	"github.com/go-redis/redis/v7"
 )
 

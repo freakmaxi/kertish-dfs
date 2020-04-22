@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/freakmaxi/kertish-dfs/fs-tool/common"
+	"github.com/freakmaxi/kertish-dfs/basics/common"
 )
 
 const headEndPoint = "/client/dfs"

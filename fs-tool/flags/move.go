@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/freakmaxi/kertish-dfs/fs-tool/common"
+	"github.com/freakmaxi/kertish-dfs/basics/common"
+	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"github.com/freakmaxi/kertish-dfs/basics/terminal"
 	"github.com/freakmaxi/kertish-dfs/fs-tool/dfs"
-	"github.com/freakmaxi/kertish-dfs/fs-tool/errors"
-	"github.com/freakmaxi/kertish-dfs/fs-tool/terminal"
 	"github.com/google/uuid"
 )
 

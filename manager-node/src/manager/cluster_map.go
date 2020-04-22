@@ -3,9 +3,9 @@ package manager
 import (
 	"fmt"
 
+	"github.com/freakmaxi/kertish-dfs/basics/common"
+	"github.com/freakmaxi/kertish-dfs/basics/errors"
 	cluster2 "github.com/freakmaxi/kertish-dfs/manager-node/src/cluster"
-	"github.com/freakmaxi/kertish-dfs/manager-node/src/common"
-	"github.com/freakmaxi/kertish-dfs/manager-node/src/errors"
 	"github.com/google/uuid"
 )
 

@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/freakmaxi/kertish-dfs/admin-tool/common"
 	"github.com/freakmaxi/kertish-dfs/admin-tool/manager"
+	"github.com/freakmaxi/kertish-dfs/basics/common"
+	"github.com/freakmaxi/kertish-dfs/basics/terminal"
 )
 
 var version = "XX.X.XXXX"
@@ -68,7 +69,7 @@ func main() {
 			fmt.Println("node removal is canceled")
 		}
 	case "syncClusters":
-		anim := common.NewAnimation("clusters are in sync process...")
+		anim := common.NewAnimation(terminal.NewStdOut(), "clusters are in sync process...")
 		anim.Start()
 
 		if err := manager.SyncClusters([]string{fc.managerAddress}); err != nil {
@@ -78,7 +79,7 @@ func main() {
 		}
 		anim.Stop()
 	case "checkConsistency":
-		anim := common.NewAnimation("metadata file chunk consistency check is in process...")
+		anim := common.NewAnimation(terminal.NewStdOut(), "metadata file chunk consistency check is in process...")
 		anim.Start()
 
 		if err := manager.CheckConsistency([]string{fc.managerAddress}); err != nil {

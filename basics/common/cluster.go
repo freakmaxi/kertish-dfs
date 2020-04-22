@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/freakmaxi/kertish-dfs/manager-node/src/errors"
+	"github.com/freakmaxi/kertish-dfs/basics/errors"
 )
 
 type Cluster struct {
@@ -25,7 +25,7 @@ func NewCluster(id string) *Cluster {
 	return &Cluster{
 		Id:           id,
 		Nodes:        NodeList{},
-		Reservations: []*Reservation{},
+		Reservations: make([]*Reservation, 0),
 	}
 }
 

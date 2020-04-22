@@ -9,9 +9,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/freakmaxi/kertish-dfs/basics/errors"
 	"github.com/freakmaxi/kertish-dfs/data-node/src/cache"
 	"github.com/freakmaxi/kertish-dfs/data-node/src/cluster"
-	"github.com/freakmaxi/kertish-dfs/data-node/src/errors"
 	"github.com/freakmaxi/kertish-dfs/data-node/src/filesystem"
 	"github.com/freakmaxi/kertish-dfs/data-node/src/manager"
 )

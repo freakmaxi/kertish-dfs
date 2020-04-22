@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/freakmaxi/kertish-dfs/manager-node/src/errors"
+	"github.com/freakmaxi/kertish-dfs/basics/errors"
 )
 
 func (n *nodeRouter) handleDelete(w http.ResponseWriter, r *http.Request) {

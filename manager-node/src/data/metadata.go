@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/freakmaxi/kertish-dfs/manager-node/src/common"
+	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"

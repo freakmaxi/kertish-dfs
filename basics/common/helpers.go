@@ -91,3 +91,7 @@ func Absolute(basePath string, folderPath string) string {
 	}
 	return basePath
 }
+
+func ValidatePath(folderPath string) bool {
+	return strings.Index(folderPath, pathSeparator) == 0
+}

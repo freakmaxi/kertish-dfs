@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/freakmaxi/kertish-dfs/manager-node/src/common"
-	"github.com/freakmaxi/kertish-dfs/manager-node/src/errors"
+	"github.com/freakmaxi/kertish-dfs/basics/common"
+	"github.com/freakmaxi/kertish-dfs/basics/errors"
 )
 
 func (m *managerRouter) handlePost(w http.ResponseWriter, r *http.Request) {
@@ -111,7 +111,7 @@ func (m *managerRouter) handleMap(w http.ResponseWriter, r *http.Request, mapTyp
 		return
 	}
 
-	if err == errors.ErrNoAvailableNode {
+	if err == errors.ErrNoAvailableClusterNode {
 		w.WriteHeader(503)
 	} else {
 		w.WriteHeader(400)

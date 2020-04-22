@@ -5,8 +5,8 @@ import (
 	"os"
 	"path"
 
-	"github.com/freakmaxi/kertish-dfs/fs-tool/errors"
-	"github.com/freakmaxi/kertish-dfs/fs-tool/terminal"
+	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"github.com/freakmaxi/kertish-dfs/basics/terminal"
 )
 
 const local = "local:"

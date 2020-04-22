@@ -5,9 +5,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/freakmaxi/kertish-dfs/head-node/src/common"
+	"github.com/freakmaxi/kertish-dfs/basics/common"
+	"github.com/freakmaxi/kertish-dfs/basics/errors"
 	"github.com/freakmaxi/kertish-dfs/head-node/src/data"
-	"github.com/freakmaxi/kertish-dfs/head-node/src/errors"
 )
 
 type Dfs interface {

@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/freakmaxi/kertish-dfs/basics/common"
+	"github.com/freakmaxi/kertish-dfs/basics/errors"
 	cluster2 "github.com/freakmaxi/kertish-dfs/manager-node/src/cluster"
-	"github.com/freakmaxi/kertish-dfs/manager-node/src/common"
 	"github.com/freakmaxi/kertish-dfs/manager-node/src/data"
-	"github.com/freakmaxi/kertish-dfs/manager-node/src/errors"
 )
 
 const blockSize uint32 = 1024 * 1024 * 32 // 32Mb
@@ -433,7 +433,7 @@ func (c *cluster) Find(sha512Hex string, mapType common.MapType) (string, string
 		for _, cluster := range clusters {
 			node := c.chooseMostResponsiveNode(cluster, mapType)
 			if node == nil {
-				return errors.ErrNoAvailableNode
+				return errors.ErrNoAvailableClusterNode
 			}
 
 			clusterMap[cluster.Id] = node.Address

@@ -10,7 +10,7 @@ import (
 	"net"
 	"strings"
 
-	"github.com/freakmaxi/kertish-dfs/head-node/src/errors"
+	"github.com/freakmaxi/kertish-dfs/basics/errors"
 )
 
 const commandCreate = "CREA"

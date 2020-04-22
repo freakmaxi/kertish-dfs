@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/freakmaxi/kertish-dfs/fs-tool/terminal"
+	"github.com/freakmaxi/kertish-dfs/basics/terminal"
 )
 
 type execution interface {

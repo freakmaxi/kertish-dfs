@@ -12,9 +12,9 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/freakmaxi/kertish-dfs/basics/common"
+	"github.com/freakmaxi/kertish-dfs/basics/errors"
 	cluster2 "github.com/freakmaxi/kertish-dfs/head-node/src/cluster"
-	"github.com/freakmaxi/kertish-dfs/head-node/src/common"
-	"github.com/freakmaxi/kertish-dfs/head-node/src/errors"
 )
 
 const managerEndPoint = "/client/manager"
@@ -52,13 +52,13 @@ func (c *cluster) Create(size uint64, reader io.Reader) (common.DataChunks, erro
 	chunks, clusterUsageMap, err := create.process(reader, c.findCluster)
 	if err != nil {
 		if err := c.discardReservation(reservation.Id); err != nil {
-			fmt.Printf("ERROR: Discarding reservation (%s) is failed: %s\n", reservation.Id, err.Error())
+			fmt.Printf("ERROR: Discarding reservationMap (%s) is failed: %s\n", reservation.Id, err.Error())
 		}
 		return nil, err
 	}
 
 	if err := c.commitReservation(reservation.Id, clusterUsageMap); err != nil {
-		fmt.Printf("ERROR: Committing reservation (%s) is failed: %s\n", reservation.Id, err.Error())
+		fmt.Printf("ERROR: Committing reservationMap (%s) is failed: %s\n", reservation.Id, err.Error())
 	}
 
 	return chunks, nil
@@ -158,7 +158,7 @@ func (c *cluster) Delete(chunks common.DataChunks) ([]string, []string, error) {
 	return deletedHashes, missingHashes, nil
 }
 
-func (c *cluster) makeReservation(size uint64) (*common.Reservation, error) {
+func (c *cluster) makeReservation(size uint64) (*common.ReservationMap, error) {
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s%s", c.managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return nil, err
@@ -175,15 +175,15 @@ func (c *cluster) makeReservation(size uint64) (*common.Reservation, error) {
 		if res.StatusCode == 507 {
 			return nil, errors.ErrNoSpace
 		}
-		return nil, fmt.Errorf("cluster manager request is failed (makeReservation): %d - %s", res.StatusCode, common.NewError(res.Body).Message)
+		return nil, fmt.Errorf("cluster manager request is failed (makeReservation): %d - %s", res.StatusCode, common.NewErrorFromReader(res.Body).Message)
 	}
 
-	var reservation common.Reservation
-	if err := json.NewDecoder(res.Body).Decode(&reservation); err != nil {
+	var reservationMap common.ReservationMap
+	if err := json.NewDecoder(res.Body).Decode(&reservationMap); err != nil {
 		return nil, err
 	}
 
-	return &reservation, nil
+	return &reservationMap, nil
 }
 
 func (c *cluster) discardReservation(reservationId string) error {
@@ -200,7 +200,7 @@ func (c *cluster) discardReservation(reservationId string) error {
 	}
 
 	if res.StatusCode != 200 {
-		return fmt.Errorf("cluster manager request is failed (discardReservation): %d - %s", res.StatusCode, common.NewError(res.Body).Message)
+		return fmt.Errorf("cluster manager request is failed (discardReservation): %d - %s", res.StatusCode, common.NewErrorFromReader(res.Body).Message)
 	}
 
 	return nil
@@ -226,7 +226,7 @@ func (c *cluster) commitReservation(reservationId string, clusterUsageMap map[st
 	}
 
 	if res.StatusCode != 200 {
-		return fmt.Errorf("cluster manager request is failed (commitReservation): %d - %s", res.StatusCode, common.NewError(res.Body).Message)
+		return fmt.Errorf("cluster manager request is failed (commitReservation): %d - %s", res.StatusCode, common.NewErrorFromReader(res.Body).Message)
 	}
 
 	return nil
@@ -247,9 +247,9 @@ func (c *cluster) findCluster(sha512Hex string) (string, string, error) {
 
 	if res.StatusCode != 200 {
 		if res.StatusCode == 404 {
-			return "", "", errors.ErrNoAvailableNode
+			return "", "", errors.ErrNoAvailableActionNode
 		}
-		return "", "", fmt.Errorf("cluster manager request is failed (findCluster): %d - %s", res.StatusCode, common.NewError(res.Body).Message)
+		return "", "", fmt.Errorf("cluster manager request is failed (findCluster): %d - %s", res.StatusCode, common.NewErrorFromReader(res.Body).Message)
 	}
 
 	return res.Header.Get("X-Cluster-Id"), res.Header.Get("X-Address"), nil
@@ -292,10 +292,10 @@ func (c *cluster) requestClusterMap(sha512HexList []string, mapType common.MapTy
 
 	if res.StatusCode != 200 {
 		if res.StatusCode == 503 {
-			return nil, errors.ErrNoAvailableNode
+			return nil, errors.ErrNoAvailableActionNode
 		}
 
-		return nil, fmt.Errorf("cluster manager request is failed (requestClusterMap): %d - %s", res.StatusCode, common.NewError(res.Body).Message)
+		return nil, fmt.Errorf("cluster manager request is failed (requestClusterMap): %d - %s", res.StatusCode, common.NewErrorFromReader(res.Body).Message)
 	}
 
 	var clusterMapping map[string]string

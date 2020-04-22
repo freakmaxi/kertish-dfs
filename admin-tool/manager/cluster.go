@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/freakmaxi/kertish-dfs/admin-tool/common"
+	"github.com/freakmaxi/kertish-dfs/basics/common"
 )
 
 const managerEndPoint = "/client/manager"

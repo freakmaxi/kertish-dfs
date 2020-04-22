@@ -1,6 +1,6 @@
 module github.com/freakmaxi/kertish-dfs/fs-tool
 
-go 1.13
+go 1.14
 
 require (
 	github.com/gdamore/tcell v1.3.0

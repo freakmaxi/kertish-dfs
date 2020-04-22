@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/freakmaxi/kertish-dfs/data-node/src/common"
+	"github.com/freakmaxi/kertish-dfs/basics/common"
 )
 
 const managerEndPoint = "/client/node"
@@ -95,7 +95,7 @@ func (n *node) Handshake(hardwareAddr string, bindAddr string, size uint64) erro
 		if res.StatusCode == 404 {
 			return fmt.Errorf("data node is not registered")
 		}
-		return fmt.Errorf("node manager request is failed (Handshake): %d - %s", res.StatusCode, common.NewError(res.Body).Message)
+		return fmt.Errorf("node manager request is failed (Handshake): %d - %s", res.StatusCode, common.NewErrorFromReader(res.Body).Message)
 	}
 
 	n.clusterId = res.Header.Get("X-Cluster-Id")
@@ -125,7 +125,7 @@ func (n *node) Create(sha512Hex string) error {
 		if res.StatusCode == 404 {
 			return fmt.Errorf("data node is not registered")
 		}
-		return fmt.Errorf("node manager request is failed (Create): %d - %s", res.StatusCode, common.NewError(res.Body).Message)
+		return fmt.Errorf("node manager request is failed (Create): %d - %s", res.StatusCode, common.NewErrorFromReader(res.Body).Message)
 	}
 
 	return nil
@@ -152,7 +152,7 @@ func (n *node) Delete(sha512Hex string, shadow bool, size uint32) error {
 		if res.StatusCode == 404 {
 			return fmt.Errorf("data node is not registered")
 		}
-		return fmt.Errorf("node manager request is failed (Delete): %d - %s", res.StatusCode, common.NewError(res.Body).Message)
+		return fmt.Errorf("node manager request is failed (Delete): %d - %s", res.StatusCode, common.NewErrorFromReader(res.Body).Message)
 	}
 
 	return nil
