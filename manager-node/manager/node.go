@@ -13,6 +13,7 @@ import (
 const queueLimit = 500
 const semaphoreLimit = 10
 const syncGapLimit = 100 // millisecond
+const retryLimit = 10
 
 type Node interface {
 	Handshake(nodeHardwareAddr string, nodeAddress string, size uint64) (string, string, string, error)
@@ -38,6 +39,7 @@ type nodeSync struct {
 	sourceAddr string
 	sha512Hex  string
 	targets    common.NodeList
+	counters   map[string]int
 }
 
 func NewNode(index data.Index, clusters data.Clusters) (Node, error) {
@@ -93,6 +95,15 @@ func (n *node) processSync(ns nodeSync) {
 
 	wg := &sync.WaitGroup{}
 	for _, node := range ns.targets {
+		if ns.counters[node.Id] <= 0 {
+			if ns.create {
+				fmt.Printf("ERROR: Sync is failed: %s <- %s (CREATE)\n", node.Id, ns.sha512Hex)
+			} else {
+				fmt.Printf("ERROR: Sync is failed: %s <- %s (DELETE)\n", node.Id, ns.sha512Hex)
+			}
+			continue
+		}
+
 		wg.Add(1)
 		go func(wg *sync.WaitGroup, wn *common.Node) {
 			defer wg.Done()
@@ -100,16 +111,20 @@ func (n *node) processSync(ns nodeSync) {
 
 			if ns.create {
 				if !dn.SyncCreate(ns.sourceAddr, ns.sha512Hex) {
+					ns.counters[wn.Id]--
 					fmt.Printf("WARN: Sync is failed, will try again: %s <- %s (CREATE)\n", wn.Id, ns.sha512Hex)
 					addFailedFunc(wn)
 				}
+				delete(ns.counters, wn.Id)
 				return
 			}
 
 			if !dn.SyncDelete(ns.sha512Hex) {
+				ns.counters[wn.Id]--
 				fmt.Printf("WARN: Sync is failed, will try again: %s <- %s (DELETE)\n", wn.Id, ns.sha512Hex)
 				addFailedFunc(wn)
 			}
+			delete(ns.counters, wn.Id)
 		}(wg, node)
 	}
 	wg.Wait()
@@ -174,6 +189,11 @@ func (n *node) Create(nodeId string, sha512Hex string) error {
 			return nil // nothing to sync
 		}
 
+		counters := make(map[string]int)
+		for _, n := range others {
+			counters[n.Id] = retryLimit
+		}
+
 		n.syncChan <- nodeSync{
 			create:     true,
 			date:       time.Now().UTC(),
@@ -181,6 +201,7 @@ func (n *node) Create(nodeId string, sha512Hex string) error {
 			sourceAddr: node.Address,
 			sha512Hex:  sha512Hex,
 			targets:    others,
+			counters:   counters,
 		}
 		return nil
 	})
@@ -209,6 +230,11 @@ func (n *node) Delete(nodeId string, sha512Hex string, shadow bool, size uint64)
 			return nil // nothing to sync
 		}
 
+		counters := make(map[string]int)
+		for _, n := range others {
+			counters[n.Id] = retryLimit
+		}
+
 		n.syncChan <- nodeSync{
 			create:     false,
 			date:       time.Now().UTC(),
@@ -216,6 +242,7 @@ func (n *node) Delete(nodeId string, sha512Hex string, shadow bool, size uint64)
 			sourceAddr: node.Address,
 			sha512Hex:  sha512Hex,
 			targets:    others,
+			counters:   counters,
 		}
 
 		return nil
