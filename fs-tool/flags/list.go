@@ -144,13 +144,15 @@ func (l *listCommand) printAsList(folder *common.Folder) {
 	}
 
 	for _, f := range folder.Files {
+		name := f.Name
 		lockChar := "-"
 		if f.Zombie {
 			lockChar = "↯"
 		} else if f.Locked() {
 			lockChar = "•"
+			name = fmt.Sprintf("%s (locked till %s)", name, f.Lock.Till.Format("2006 Jan 02 03:04"))
 		}
-		l.output.Printf("%s %7v %s %s\n", lockChar, l.sizeToString(f.Size), f.Modified.Format("2006 Jan 02 03:04"), f.Name)
+		l.output.Printf("%s %7v %s %s\n", lockChar, l.sizeToString(f.Size), f.Modified.Format("2006 Jan 02 03:04"), name)
 	}
 
 	l.output.Refresh()
