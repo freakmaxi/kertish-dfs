@@ -335,7 +335,6 @@ func (d *dfs) moveFile(sources []string, target string, overwrite bool) error {
 		if err != nil {
 			return err
 		}
-		sourceFile.Lock = common.NewFileLock(0)
 
 		targetFolder := folders[target]
 		if targetFolder == nil {
@@ -363,6 +362,8 @@ func (d *dfs) moveFile(sources []string, target string, overwrite bool) error {
 				return err
 			}
 		}
+
+		targetFile.Lock.Cancel()
 
 		return nil
 	})
@@ -508,7 +509,6 @@ func (d *dfs) copyFile(sources []string, target string, overwrite bool) error {
 		if err != nil {
 			return err
 		}
-		sourceFile.Lock = common.NewFileLock(0)
 
 		targetFolder := folders[target]
 		if targetFolder == nil {
@@ -525,6 +525,7 @@ func (d *dfs) copyFile(sources []string, target string, overwrite bool) error {
 		}
 		targetFile.Reset(sourceFile.Mime, sourceFile.Size)
 		sourceFile.CloneInto(targetFile)
+		targetFile.Lock.Cancel()
 
 		return d.cluster.CreateShadow(targetFile.Chunks)
 	})
