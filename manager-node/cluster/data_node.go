@@ -505,7 +505,7 @@ func (d *dataNode) syncFull(sourceNodeAddr string) bool {
 }
 
 func (d *dataNode) ping() int64 {
-	starts := time.Now()
+	starts := time.Now().UTC()
 
 	if err := d.connect(); err != nil {
 		return -1
@@ -520,7 +520,7 @@ func (d *dataNode) ping() int64 {
 		return -1
 	}
 
-	return time.Now().Sub(starts).Milliseconds()
+	return time.Now().UTC().Sub(starts).Milliseconds()
 }
 
 func (d *dataNode) size() (uint64, error) {

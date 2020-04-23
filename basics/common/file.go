@@ -135,7 +135,7 @@ func (f *File) Resurrect() {
 }
 
 func (f *File) Locked() bool {
-	return f.Lock != nil && f.Lock.Till.After(time.Now())
+	return f.Lock != nil && f.Lock.Till.After(time.Now().UTC())
 }
 
 func (f *File) Reset(mime string, size uint64) {

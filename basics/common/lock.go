@@ -13,7 +13,7 @@ func NewFileLock(duration time.Duration) *FileLock {
 	if duration == 0 {
 		duration = fileLockDuration
 	}
-	return &FileLock{Till: time.Now().Add(duration)}
+	return &FileLock{Till: time.Now().UTC().Add(duration)}
 }
 
 func NewFileLockForSize(size uint64) *FileLock {
@@ -25,5 +25,5 @@ func NewFileLockForSize(size uint64) *FileLock {
 }
 
 func (f *FileLock) Cancel() {
-	f.Till = time.Now()
+	f.Till = time.Now().UTC()
 }

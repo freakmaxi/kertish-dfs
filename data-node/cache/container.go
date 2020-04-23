@@ -70,7 +70,7 @@ func (c *container) Query(sha512Hex string) []byte {
 	defer c.mutex.Unlock()
 
 	if index, has := c.index[sha512Hex]; has {
-		index.date = time.Now()
+		index.date = time.Now().UTC()
 		return index.data
 	}
 
@@ -88,7 +88,7 @@ func (c *container) Upsert(sha512Hex string, data []byte) {
 	item := &indexItem{
 		sha512Hex: sha512Hex,
 		data:      make([]byte, len(data)),
-		date:      time.Now(),
+		date:      time.Now().UTC(),
 	}
 	copy(item.data, data)
 
@@ -140,7 +140,7 @@ func (c *container) Purge() {
 	for _, indexItem := range indexItemList {
 		indexAge :=
 			indexItem.date.Add(c.lifetime)
-		if time.Now().Before(indexAge) {
+		if time.Now().UTC().Before(indexAge) {
 			return
 		}
 
