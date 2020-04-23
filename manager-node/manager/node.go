@@ -139,6 +139,7 @@ func (n *node) processSync(ns nodeSync) {
 				sourceAddr: cns.sourceAddr,
 				sha512Hex:  cns.sha512Hex,
 				targets:    fnl,
+				counters:   cns.counters,
 			}
 		}(ns, failed)
 	}
