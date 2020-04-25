@@ -52,6 +52,9 @@ func (m *manager) lock(sha512Hex string) {
 }
 
 func (m *manager) unLock(sha512Hex string) {
+	m.syncLock.Lock()
+	defer m.syncLock.Unlock()
+
 	m.createDeleteLock[sha512Hex].Unlock()
 }
 
