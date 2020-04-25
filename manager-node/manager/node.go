@@ -114,6 +114,7 @@ func (n *node) processSync(ns nodeSync) {
 					ns.counters[wn.Id]--
 					fmt.Printf("WARN: Sync is failed, will try again: %s <- %s (CREATE)\n", wn.Id, ns.sha512Hex)
 					addFailedFunc(wn)
+					return
 				}
 				delete(ns.counters, wn.Id)
 				return
@@ -123,6 +124,7 @@ func (n *node) processSync(ns nodeSync) {
 				ns.counters[wn.Id]--
 				fmt.Printf("WARN: Sync is failed, will try again: %s <- %s (DELETE)\n", wn.Id, ns.sha512Hex)
 				addFailedFunc(wn)
+				return
 			}
 			delete(ns.counters, wn.Id)
 		}(wg, node)
