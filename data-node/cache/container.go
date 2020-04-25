@@ -23,9 +23,17 @@ type indexItem struct {
 
 type indexItemList []*indexItem
 
-func (p indexItemList) Len() int           { return len(p) }
-func (p indexItemList) Less(i, j int) bool { return p[i].date.Before(p[j].date) }
-func (p indexItemList) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+func (p indexItemList) Len() int { return len(p) }
+func (p indexItemList) Less(i, j int) bool {
+	if p[i] == nil {
+		return false
+	}
+	if p[j] == nil {
+		return true
+	}
+	return p[i].date.Before(p[j].date)
+}
+func (p indexItemList) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
 
 type container struct {
 	limit    uint64
