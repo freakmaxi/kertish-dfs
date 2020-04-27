@@ -21,19 +21,11 @@ type indexItem struct {
 	date      time.Time
 }
 
-type indexItemList []*indexItem
+type indexItemList []indexItem
 
-func (p indexItemList) Len() int { return len(p) }
-func (p indexItemList) Less(i, j int) bool {
-	if p[i] == nil {
-		return false
-	}
-	if p[j] == nil {
-		return true
-	}
-	return p[i].date.Before(p[j].date)
-}
-func (p indexItemList) Swap(i, j int) { p[i], p[j] = p[j], p[i] }
+func (p indexItemList) Len() int           { return len(p) }
+func (p indexItemList) Less(i, j int) bool { return p[i].date.Before(p[j].date) }
+func (p indexItemList) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 type container struct {
 	limit    uint64
@@ -41,7 +33,7 @@ type container struct {
 	lifetime time.Duration
 
 	mutex *sync.Mutex
-	index map[string]*indexItem
+	index map[string]indexItem
 }
 
 func NewContainer(limit uint64, lifetime time.Duration) Container {
@@ -49,7 +41,7 @@ func NewContainer(limit uint64, lifetime time.Duration) Container {
 		limit:    limit,
 		lifetime: lifetime,
 		mutex:    &sync.Mutex{},
-		index:    make(map[string]*indexItem),
+		index:    make(map[string]indexItem),
 	}
 
 	if limit == 0 {
@@ -93,7 +85,7 @@ func (c *container) Upsert(sha512Hex string, data []byte) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	item := &indexItem{
+	item := indexItem{
 		sha512Hex: sha512Hex,
 		data:      make([]byte, len(data)),
 		date:      time.Now().UTC(),
@@ -142,7 +134,6 @@ func (c *container) Purge() {
 	for _, indexItem := range c.index {
 		indexItemList = append(indexItemList, indexItem)
 	}
-
 	sort.Sort(indexItemList)
 
 	for _, indexItem := range indexItemList {
@@ -169,7 +160,6 @@ func (c *container) trim(size int) {
 	for _, indexItem := range c.index {
 		indexItemList = append(indexItemList, indexItem)
 	}
-
 	sort.Sort(indexItemList)
 
 	for _, indexItem := range indexItemList {

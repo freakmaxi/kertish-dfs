@@ -45,6 +45,8 @@ type DataNode interface {
 
 	Ping() int64
 	Size() (uint64, error)
+
+	Clone() DataNode
 }
 
 type dataNode struct {
@@ -102,62 +104,6 @@ func (c *dataNode) hashAsHex() (string, error) {
 }
 
 func (d *dataNode) Create(data []byte) (string, error) {
-	return d.clone().create(data)
-}
-
-func (d *dataNode) Read(sha512Hex string, readHandler func([]byte) error) error {
-	return d.clone().read(sha512Hex, readHandler)
-}
-
-func (d *dataNode) Delete(sha512Hex string) error {
-	return d.clone().delete(sha512Hex)
-}
-
-func (d *dataNode) HardwareId() (string, error) {
-	return d.clone().hardwareId()
-}
-
-func (d *dataNode) Join(clusterId string, nodeId string, masterAddress string) bool {
-	return d.clone().join(clusterId, nodeId, masterAddress)
-}
-
-func (d *dataNode) Mode(master bool) bool {
-	return d.clone().mode(master)
-}
-
-func (d *dataNode) Leave() bool {
-	return d.clone().leave()
-}
-
-func (d *dataNode) Wipe() bool {
-	return d.clone().wipe()
-}
-
-func (d *dataNode) SyncCreate(sourceNodeAddr string, sha512Hex string) bool {
-	return d.clone().syncCreate(sourceNodeAddr, sha512Hex)
-}
-
-func (d *dataNode) SyncDelete(sha512Hex string) bool {
-	return d.clone().syncDelete(sha512Hex)
-}
-
-func (d *dataNode) SyncList() []string {
-	return d.clone().syncList()
-}
-
-func (d *dataNode) SyncFull(sourceNodeAddr string) bool {
-	return d.clone().syncFull(sourceNodeAddr)
-}
-
-func (d *dataNode) Ping() int64 {
-	return d.clone().ping()
-}
-
-func (d *dataNode) Size() (uint64, error) {
-	return d.clone().size()
-}
-
-func (d *dataNode) create(data []byte) (string, error) {
 	d.sha512.Reset()
 
 	if err := d.connect(); err != nil {
@@ -195,7 +141,7 @@ func (d *dataNode) create(data []byte) (string, error) {
 	return hex.EncodeToString(sha512Sum), nil
 }
 
-func (d *dataNode) read(sha512Hex string, readHandler func([]byte) error) error {
+func (d *dataNode) Read(sha512Hex string, readHandler func([]byte) error) error {
 	d.sha512.Reset()
 
 	if err := d.connect(); err != nil {
@@ -249,7 +195,7 @@ func (d *dataNode) read(sha512Hex string, readHandler func([]byte) error) error 
 	return nil
 }
 
-func (d *dataNode) delete(sha512Hex string) error {
+func (d *dataNode) Delete(sha512Hex string) error {
 	if err := d.connect(); err != nil {
 		return err
 	}
@@ -274,7 +220,7 @@ func (d *dataNode) delete(sha512Hex string) error {
 	return nil
 }
 
-func (d *dataNode) hardwareId() (string, error) {
+func (d *dataNode) HardwareId() (string, error) {
 	if err := d.connect(); err != nil {
 		return "", err
 	}
@@ -305,7 +251,7 @@ func (d *dataNode) hardwareId() (string, error) {
 	return string(readBuffer), nil
 }
 
-func (d *dataNode) join(clusterId string, nodeId string, masterAddress string) bool {
+func (d *dataNode) Join(clusterId string, nodeId string, masterAddress string) bool {
 	if err := d.connect(); err != nil {
 		return false
 	}
@@ -345,7 +291,7 @@ func (d *dataNode) join(clusterId string, nodeId string, masterAddress string) b
 	return d.result()
 }
 
-func (d *dataNode) mode(master bool) bool {
+func (d *dataNode) Mode(master bool) bool {
 	if err := d.connect(); err != nil {
 		return false
 	}
@@ -362,7 +308,7 @@ func (d *dataNode) mode(master bool) bool {
 	return d.result()
 }
 
-func (d *dataNode) leave() bool {
+func (d *dataNode) Leave() bool {
 	if err := d.connect(); err != nil {
 		return false
 	}
@@ -376,7 +322,7 @@ func (d *dataNode) leave() bool {
 }
 
 //TODO: wipe security mechanism should be implemented between manager and data node
-func (d *dataNode) wipe() bool {
+func (d *dataNode) Wipe() bool {
 	if err := d.connect(); err != nil {
 		return false
 	}
@@ -394,7 +340,7 @@ func (d *dataNode) wipe() bool {
 	return d.result()
 }
 
-func (d *dataNode) syncCreate(sourceNodeAddr string, sha512Hex string) bool {
+func (d *dataNode) SyncCreate(sourceNodeAddr string, sha512Hex string) bool {
 	sha512Sum, err := hex.DecodeString(sha512Hex)
 	if err != nil {
 		return false
@@ -425,7 +371,7 @@ func (d *dataNode) syncCreate(sourceNodeAddr string, sha512Hex string) bool {
 	return d.result()
 }
 
-func (d *dataNode) syncDelete(sha512Hex string) bool {
+func (d *dataNode) SyncDelete(sha512Hex string) bool {
 	sha512Sum, err := hex.DecodeString(sha512Hex)
 	if err != nil {
 		return false
@@ -447,7 +393,7 @@ func (d *dataNode) syncDelete(sha512Hex string) bool {
 	return d.result()
 }
 
-func (d *dataNode) syncList() []string {
+func (d *dataNode) SyncList() []string {
 	if err := d.connect(); err != nil {
 		return nil
 	}
@@ -482,7 +428,7 @@ func (d *dataNode) syncList() []string {
 	return sha512HexList
 }
 
-func (d *dataNode) syncFull(sourceNodeAddr string) bool {
+func (d *dataNode) SyncFull(sourceNodeAddr string) bool {
 	if err := d.connect(); err != nil {
 		return false
 	}
@@ -504,7 +450,7 @@ func (d *dataNode) syncFull(sourceNodeAddr string) bool {
 	return d.result()
 }
 
-func (d *dataNode) ping() int64 {
+func (d *dataNode) Ping() int64 {
 	starts := time.Now().UTC()
 
 	if err := d.connect(); err != nil {
@@ -523,7 +469,7 @@ func (d *dataNode) ping() int64 {
 	return time.Now().UTC().Sub(starts).Milliseconds()
 }
 
-func (d *dataNode) size() (uint64, error) {
+func (d *dataNode) Size() (uint64, error) {
 	if err := d.connect(); err != nil {
 		return 0, err
 	}
@@ -549,7 +495,7 @@ func (d *dataNode) size() (uint64, error) {
 	return size, nil
 }
 
-func (d *dataNode) clone() *dataNode {
+func (d *dataNode) Clone() DataNode {
 	return &dataNode{
 		address: d.address,
 		sha512:  sha512.New512_256(),
