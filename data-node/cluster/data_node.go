@@ -24,12 +24,15 @@ type dataNode struct {
 	conn *net.TCPConn
 }
 
-func NewDataNode(address string) DataNode {
-	addr, _ := net.ResolveTCPAddr("tcp", address)
+func NewDataNode(address string) (DataNode, error) {
+	addr, err := net.ResolveTCPAddr("tcp", address)
+	if err != nil {
+		return nil, err
+	}
 
 	return &dataNode{
 		address: addr,
-	}
+	}, nil
 }
 
 func (d *dataNode) connect() error {

@@ -26,16 +26,21 @@ type manager struct {
 	rootPath string
 	nodeSize uint64
 
-	syncLock         *sync.Mutex
+	syncLock         sync.Mutex
 	createDeleteLock map[string]*sync.Mutex
+
+	nodeCacheMutex sync.Mutex
+	nodeCache      map[string]cluster.DataNode
 }
 
 func NewManager(rootPath string, nodeSize uint64) Manager {
 	return &manager{
 		rootPath:         rootPath,
 		nodeSize:         nodeSize,
-		syncLock:         &sync.Mutex{},
+		syncLock:         sync.Mutex{},
 		createDeleteLock: make(map[string]*sync.Mutex),
+		nodeCacheMutex:   sync.Mutex{},
+		nodeCache:        make(map[string]cluster.DataNode),
 	}
 }
 
@@ -112,7 +117,83 @@ func (m *manager) Sync(sourceAddr string) error {
 	m.syncLock.Lock()
 	defer m.syncLock.Unlock()
 
-	createHandler := func(sha512Hex string, current uint64, total uint64) (resultError error) {
+	m.nodeCacheMutex.Lock()
+	dn, has := m.nodeCache[sourceAddr]
+	m.nodeCacheMutex.Unlock()
+
+	if !has {
+		var err error
+		dn, err = cluster.NewDataNode(sourceAddr)
+		if err != nil {
+			return err
+		}
+
+		m.nodeCacheMutex.Lock()
+		m.nodeCache[sourceAddr] = dn
+		m.nodeCacheMutex.Unlock()
+	}
+
+	currentSha512HexList, err := m.list()
+	if err != nil {
+		return err
+	}
+	sort.Strings(currentSha512HexList)
+
+	sourceSha512HexList := make([]string, 0)
+	if err := dn.SyncList(func(sha512Hex string, current uint64, total uint64) error {
+		sourceSha512HexList = append(sourceSha512HexList, sha512Hex)
+		return nil
+	}); err != nil {
+		return err
+	}
+	sort.Strings(sourceSha512HexList)
+
+	wipeList := make([]string, 0)
+	createList := make([]string, 0)
+
+	for len(sourceSha512HexList) > 0 {
+		sourceSha512Hex := sourceSha512HexList[0]
+
+		if len(currentSha512HexList) == 0 {
+			createList = append(createList, sourceSha512Hex)
+			sourceSha512HexList = sourceSha512HexList[1:]
+			continue
+		}
+
+		currentSha512Hex := currentSha512HexList[0]
+
+		if strings.Compare(sourceSha512Hex, currentSha512Hex) == 0 {
+			sourceSha512HexList = sourceSha512HexList[1:]
+			currentSha512HexList = currentSha512HexList[1:]
+
+			continue
+		}
+
+		wipe := false
+		for i, currentSha512Hex := range currentSha512HexList[1:] {
+			if strings.Compare(sourceSha512Hex, currentSha512Hex) == 0 {
+				wipeList = append(wipeList, currentSha512HexList[:i+1]...)
+				currentSha512HexList = currentSha512HexList[i+2:]
+				wipe = true
+				break
+			}
+		}
+		if wipe {
+			sourceSha512HexList = sourceSha512HexList[1:]
+			continue
+		}
+
+		createList = append(createList, sourceSha512Hex)
+		sourceSha512HexList = sourceSha512HexList[1:]
+	}
+
+	if len(currentSha512HexList) > 0 {
+		wipeList = append(wipeList, currentSha512HexList...)
+	}
+
+	fmt.Printf("INFO: Sync will, create: %d / delete: %d\n", len(createList), len(wipeList))
+
+	createHandler := func(sha512Hex string, current int, total int) (resultError error) {
 		fmt.Printf("INFO: Syncing (%s) - %d / %d...", sha512Hex, current, total)
 		defer func() {
 			if resultError == nil || resultError == errors.ErrQuit {
@@ -125,7 +206,7 @@ func (m *manager) Sync(sourceAddr string) error {
 		return m.File(sha512Hex, func(blockFile BlockFile) error {
 			usageCountBackup := uint16(1)
 
-			return cluster.NewDataNode(sourceAddr).SyncRead(
+			return dn.SyncRead(
 				sha512Hex,
 				func(usageCount uint16) bool {
 					usageCountBackup = usageCount
@@ -146,7 +227,11 @@ func (m *manager) Sync(sourceAddr string) error {
 				},
 				func() bool {
 					if usageCountBackup == 1 {
-						return blockFile.Verify()
+						verifyResult := blockFile.Verify()
+						if verifyResult {
+							fmt.Print(" done!")
+						}
+						return verifyResult
 					}
 
 					if err := blockFile.ResetUsage(usageCountBackup); err != nil {
@@ -168,76 +253,37 @@ func (m *manager) Sync(sourceAddr string) error {
 		})
 	}
 
-	currentSha512HexList, err := m.list()
-	if err != nil {
-		return err
-	}
-	sort.Strings(currentSha512HexList)
+	wg := &sync.WaitGroup{}
 
-	sourceSha512HexList := make([]string, 0)
-	if err := cluster.NewDataNode(sourceAddr).SyncList(func(sha512Hex string, current uint64, total uint64) error {
-		sourceSha512HexList = append(sourceSha512HexList, sha512Hex)
-		return nil
-	}); err != nil {
-		return err
-	}
-	sort.Strings(sourceSha512HexList)
+	wg.Add(1)
+	go func(wg *sync.WaitGroup) {
+		defer wg.Done()
 
-	totalNum := uint64(len(sourceSha512HexList))
-
-	for len(sourceSha512HexList) > 0 {
-		sha512Hex := sourceSha512HexList[0]
-		if len(currentSha512HexList) == 0 {
-			if err := createHandler(sha512Hex, (totalNum-uint64(len(sourceSha512HexList)))+1, totalNum); err != nil {
+		totalWipeCount := len(wipeList)
+		for len(wipeList) > 0 {
+			if err := deleteHandler(wipeList[0]); err != nil {
+				fmt.Printf("ERROR: Sync cannot delete (%s) - %d / %d: %s\n", wipeList[0], totalWipeCount-(len(wipeList)-1), totalWipeCount, err.Error())
 				continue
 			}
-			sourceSha512HexList = sourceSha512HexList[1:]
-			continue
+			wipeList = wipeList[1:]
 		}
-		currentSha512Hex := currentSha512HexList[0]
+	}(wg)
 
-		if strings.Compare(sha512Hex, currentSha512Hex) == 0 {
-			sourceSha512HexList = sourceSha512HexList[1:]
-			currentSha512HexList = currentSha512HexList[1:]
+	wg.Add(1)
+	go func(wg *sync.WaitGroup) {
+		defer wg.Done()
 
-			continue
-		}
-
-		var wipeList []string
-		for i, sSha512Hex := range currentSha512HexList[1:] {
-			if strings.Compare(sha512Hex, sSha512Hex) != 0 {
+		totalCreateCount := len(createList)
+		for len(createList) > 0 {
+			if err := createHandler(createList[0], totalCreateCount-(len(createList)-1), totalCreateCount); err != nil {
+				fmt.Printf("ERROR: Sync cannot create (%s) - %d / %d: %s\n", createList[0], totalCreateCount-(len(createList)-1), totalCreateCount, err.Error())
 				continue
 			}
-
-			wipeList = currentSha512HexList[:i]
-
-			sourceSha512HexList = sourceSha512HexList[1:]
-			currentSha512HexList = currentSha512HexList[i+1:]
-
-			break
+			createList = createList[1:]
 		}
+	}(wg)
 
-		if len(wipeList) > 0 {
-			for len(wipeList) > 0 {
-				if err := deleteHandler(wipeList[0]); err != nil {
-					continue
-				}
-				wipeList = wipeList[1:]
-			}
-		} else {
-			if err := createHandler(sha512Hex, (totalNum-uint64(len(sourceSha512HexList)))+1, totalNum); err != nil {
-				continue
-			}
-			sourceSha512HexList = sourceSha512HexList[1:]
-		}
-	}
-
-	for len(currentSha512HexList) > 0 {
-		if err := deleteHandler(currentSha512HexList[0]); err != nil {
-			continue
-		}
-		currentSha512HexList = currentSha512HexList[1:]
-	}
+	wg.Wait()
 
 	return nil
 }

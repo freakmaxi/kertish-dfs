@@ -29,6 +29,9 @@ type node struct {
 
 	semaphoreLock sync.Mutex
 	semaphores    map[string]chan bool
+
+	nodeCacheMutex sync.Mutex
+	nodeCache      map[string]cluster2.DataNode
 }
 
 type nodeSync struct {
@@ -44,10 +47,13 @@ type nodeSync struct {
 
 func NewNode(index data.Index, clusters data.Clusters) (Node, error) {
 	n := &node{
-		index:      index,
-		clusters:   clusters,
-		syncChan:   make(chan nodeSync, queueLimit),
-		semaphores: make(map[string]chan bool),
+		index:          index,
+		clusters:       clusters,
+		syncChan:       make(chan nodeSync, queueLimit),
+		semaphoreLock:  sync.Mutex{},
+		semaphores:     make(map[string]chan bool),
+		nodeCacheMutex: sync.Mutex{},
+		nodeCache:      make(map[string]cluster2.DataNode),
 	}
 	go n.start()
 
@@ -105,15 +111,34 @@ func (n *node) processSync(ns nodeSync) {
 		}
 
 		wg.Add(1)
-		go func(wg *sync.WaitGroup, wn *common.Node) {
+		go func(wg *sync.WaitGroup, wn common.Node) {
 			defer wg.Done()
-			dn, _ := cluster2.NewDataNode(wn.Address)
+
+			n.nodeCacheMutex.Lock()
+			dn, has := n.nodeCache[wn.Id]
+			n.nodeCacheMutex.Unlock()
+
+			if !has {
+				var err error
+				dn, err = cluster2.NewDataNode(wn.Address)
+				if err != nil {
+					fmt.Printf("WARN: Data Node Connection Creation is failed. nodeId: %s, address: %s - %s\n", wn.Id, wn.Address, err.Error())
+					addFailedFunc(&wn)
+					return
+				}
+
+				n.nodeCacheMutex.Lock()
+				n.nodeCache[wn.Id] = dn
+				n.nodeCacheMutex.Unlock()
+			}
+
+			dn = dn.Clone()
 
 			if ns.create {
 				if !dn.SyncCreate(ns.sourceAddr, ns.sha512Hex) {
 					ns.counters[wn.Id]--
 					fmt.Printf("WARN: Sync is failed, will try again: %s <- %s (CREATE)\n", wn.Id, ns.sha512Hex)
-					addFailedFunc(wn)
+					addFailedFunc(&wn)
 					return
 				}
 				delete(ns.counters, wn.Id)
@@ -123,11 +148,11 @@ func (n *node) processSync(ns nodeSync) {
 			if !dn.SyncDelete(ns.sha512Hex) {
 				ns.counters[wn.Id]--
 				fmt.Printf("WARN: Sync is failed, will try again: %s <- %s (DELETE)\n", wn.Id, ns.sha512Hex)
-				addFailedFunc(wn)
+				addFailedFunc(&wn)
 				return
 			}
 			delete(ns.counters, wn.Id)
-		}(wg, node)
+		}(wg, *node)
 	}
 	wg.Wait()
 

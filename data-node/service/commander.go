@@ -363,7 +363,12 @@ func (c *commander) sycr(conn net.Conn) error {
 	return c.fs.LockFile(sha512Hex, func(blockFile filesystem.BlockFile) error {
 		usageCountBackup := uint16(1)
 
-		return cluster.NewDataNode(sourceAddr).SyncRead(
+		dn, err := cluster.NewDataNode(sourceAddr)
+		if err != nil {
+			return err
+		}
+
+		return dn.SyncRead(
 			sha512Hex,
 			func(usageCount uint16) bool {
 				usageCountBackup = usageCount

@@ -66,7 +66,10 @@ func (c *cluster) Register(nodeAddresses []string) (*common.Cluster, error) {
 			masterAddress = node.Address
 		}
 
-		dn, _ := cluster2.NewDataNode(node.Address)
+		dn, err := cluster2.NewDataNode(node.Address)
+		if err != nil {
+			return nil, err
+		}
 		if !dn.Join(cluster.Id, node.Id, mA) {
 			return nil, errors.ErrMode
 		}
@@ -164,7 +167,10 @@ func (c *cluster) UnRegisterCluster(clusterId string) error {
 			return err
 		}
 		for _, node := range cluster.Nodes {
-			dn, _ := cluster2.NewDataNode(node.Address)
+			dn, err := cluster2.NewDataNode(node.Address)
+			if err != nil {
+				continue
+			}
 			dn.Wipe()
 		}
 		return nil
@@ -178,15 +184,15 @@ func (c *cluster) UnRegisterNode(nodeId string) error {
 			return c.SyncCluster(clusterId)
 		},
 		func(deletingNode *common.Node) error {
-			dn, _ := cluster2.NewDataNode(deletingNode.Address)
-			if !dn.Leave() {
+			dn, err := cluster2.NewDataNode(deletingNode.Address)
+			if err != nil || !dn.Leave() {
 				return errors.ErrMode
 			}
 			return nil
 		},
 		func(newMaster *common.Node) error {
-			dn, _ := cluster2.NewDataNode(newMaster.Address)
-			if !dn.Mode(true) {
+			dn, err := cluster2.NewDataNode(newMaster.Address)
+			if err != nil || !dn.Mode(true) {
 				return errors.ErrMode
 			}
 			return nil
@@ -252,8 +258,8 @@ func (c *cluster) syncClusters(clusters common.Clusters) error {
 		masterNode := cluster.Master()
 		slaveNodes := cluster.Slaves()
 
-		mdn, _ := cluster2.NewDataNode(masterNode.Address)
-		if !mdn.Join(cluster.Id, masterNode.Id, "") {
+		mdn, err := cluster2.NewDataNode(masterNode.Address)
+		if err != nil || !mdn.Join(cluster.Id, masterNode.Id, "") {
 			return errors.ErrJoin
 		}
 		if len(slaveNodes) == 0 {
@@ -280,8 +286,8 @@ func (c *cluster) syncClusters(clusters common.Clusters) error {
 			go func(wg *sync.WaitGroup, mN *common.Node, sN *common.Node) {
 				defer wg.Done()
 
-				sdn, _ := cluster2.NewDataNode(sN.Address)
-				if !sdn.Join(cluster.Id, sN.Id, masterNode.Address) {
+				sdn, err := cluster2.NewDataNode(sN.Address)
+				if err != nil || !sdn.Join(cluster.Id, sN.Id, masterNode.Address) {
 					fmt.Printf("ERROR: Syncing error: %s\n", errors.ErrJoin.Error())
 					hasError = true
 					return
