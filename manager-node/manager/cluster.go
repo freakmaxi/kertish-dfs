@@ -195,47 +195,17 @@ func (c *cluster) UnRegisterNode(nodeId string) error {
 
 func (c *cluster) Reserve(size uint64) (*common.ReservationMap, error) {
 	var reservationMap *common.ReservationMap
-	clusterShouldBeNotified := make(common.Clusters, 0)
 
 	if err := c.clusters.SaveAll(func(clusters common.Clusters) error {
-		masterMap := make(map[string]*common.Node)
-		for _, cluster := range clusters {
-			masterNode := cluster.Master()
-			masterMap[masterNode.Id] = masterNode
-		}
-
 		var err error
-		reservationMap, err = c.createMap(size, clusters)
-
-		for _, cluster := range clusters {
-			masterNode := cluster.Master()
-
-			if _, has := masterMap[masterNode.Id]; !has {
-				clusterShouldBeNotified = append(clusterShouldBeNotified, cluster)
-			}
-		}
+		reservationMap, err = c.createReservationMap(size, clusters)
 
 		return err
 	}); err != nil {
 		return nil, err
 	}
 
-	go c.notifyNewMastersInClusters(clusterShouldBeNotified)
-
 	return reservationMap, nil
-}
-
-func (c *cluster) notifyNewMastersInClusters(clusters common.Clusters) {
-	for _, cluster := range clusters {
-		for _, node := range cluster.Nodes {
-			dn, _ := cluster2.NewDataNode(node.Address)
-
-			if dn.Ping() == -1 {
-				continue
-			}
-			dn.Mode(node.Master)
-		}
-	}
 }
 
 func (c *cluster) Commit(reservationId string, clusterMap map[string]uint64) error {
@@ -431,7 +401,15 @@ func (c *cluster) Find(sha512Hex string, mapType common.MapType) (string, string
 
 	if err := c.clusters.LockAll(func(clusters common.Clusters) error {
 		for _, cluster := range clusters {
-			node := c.chooseMostResponsiveNode(cluster, mapType)
+			var node *common.Node
+
+			switch mapType {
+			case common.MT_Read:
+				node = cluster.HighQualityNode()
+			default:
+				node = cluster.Master()
+			}
+
 			if node == nil {
 				return errors.ErrNoAvailableClusterNode
 			}

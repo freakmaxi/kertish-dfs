@@ -120,6 +120,22 @@ func (c *Cluster) Slaves() NodeList {
 	return slaves
 }
 
+func (c *Cluster) HighQualityNode() *Node {
+	quality := int64(^uint(0) >> 1) // MaxIntNumber
+	nodeIndex := -1
+	for i, n := range c.Nodes {
+		if n.Quality < quality {
+			quality = n.Quality
+			nodeIndex = i
+		}
+	}
+
+	if nodeIndex > -1 {
+		return c.Nodes[nodeIndex]
+	}
+	return nil
+}
+
 func (c *Cluster) Others(nodeId string) NodeList {
 	found := false
 	others := make(NodeList, 0)

@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/freakmaxi/kertish-dfs/manager-node/data"
 	"github.com/freakmaxi/kertish-dfs/manager-node/manager"
@@ -29,6 +31,19 @@ func main() {
 		bindAddr = ":9400"
 	}
 	fmt.Printf("INFO: BIND_ADDRESS: %s\n", bindAddr)
+
+	healthTrackerIntervalString := os.Getenv("HEALTH_TRACKER_INTERVAL")
+	if len(healthTrackerIntervalString) == 0 {
+		healthTrackerIntervalString = "10"
+	}
+	healthTrackerInterval, err := strconv.ParseUint(healthTrackerIntervalString, 10, 64)
+	if err != nil {
+		fmt.Printf("ERROR: Health Tracker Interval is wrong: %s\n", err.Error())
+		os.Exit(5)
+	}
+	if healthTrackerInterval > 0 {
+		fmt.Printf("INFO: HEALTH_TRACKER_INTERVAL: %s second(s)\n", healthTrackerIntervalString)
+	}
 
 	mongoConn := os.Getenv("MONGO_CONN")
 	if len(mongoConn) == 0 {
@@ -57,7 +72,6 @@ func main() {
 	fmt.Printf("INFO: REDIS_CLUSTER_MODE: %t\n", len(redisClusterMode) > 0)
 
 	var mutexClient data.MutexClient
-	var err error
 	if len(redisClusterMode) == 0 {
 		mutexClient, err = data.NewMutexStandaloneClient(redisConn, redisPassword)
 	} else {
@@ -99,6 +113,8 @@ func main() {
 		os.Exit(24)
 	}
 
+	routerManager := routing.NewManager()
+
 	managerCluster, err := manager.NewCluster(dataClusters, index, metadata)
 	if err != nil {
 		fmt.Printf("ERROR: Cluster Manager is failed. %s\n", err.Error())
@@ -108,6 +124,7 @@ func main() {
 		fmt.Printf("ERROR: Cluster Syncing is failed. %s\n", err.Error())
 	}
 	managerRouter := routing.NewManagerRouter(managerCluster)
+	routerManager.Add(managerRouter)
 
 	managerNode, err := manager.NewNode(index, dataClusters)
 	if err != nil {
@@ -115,10 +132,10 @@ func main() {
 		os.Exit(26)
 	}
 	nodeRouter := routing.NewNodeRouter(managerNode)
-
-	routerManager := routing.NewManager()
-	routerManager.Add(managerRouter)
 	routerManager.Add(nodeRouter)
+
+	healthTracker := manager.NewHealthTracker(dataClusters, index, time.Second*time.Duration(healthTrackerInterval))
+	healthTracker.Start()
 
 	proxy := services.NewProxy(bindAddr, routerManager)
 	proxy.Start()

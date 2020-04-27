@@ -4,6 +4,7 @@ type Node struct {
 	Id      string `json:"nodeId"`
 	Address string `json:"address"`
 	Master  bool   `json:"master"`
+	Quality int64  `json:"quality"`
 }
 
 type NodeList []*Node

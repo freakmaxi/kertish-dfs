@@ -25,7 +25,8 @@ type Clusters interface {
 	Save(clusterId string, saveHandler func(cluster *common.Cluster) error) error
 	SaveAll(saveAllHandler func(clusters common.Clusters) error) error
 
-	SetNodeAsMaster(nodeId string) error
+	SetNewMaster(clusterId string, nodeId string) error
+	UpdateNodes(cluster *common.Cluster) error
 
 	ClusterIdOf(nodeId string) (*string, error)
 }
@@ -265,18 +266,23 @@ func (c *clusters) SaveAll(saveAllHandler func(clusters common.Clusters) error) 
 	return c.overwrite(clusters)
 }
 
-func (c *clusters) SetNodeAsMaster(nodeId string) error {
-	nodeCluster, err := c.getClusterByNodeId(nodeId)
-	if err != nil {
-		return err
-	}
-
-	return c.Save(nodeCluster.Id, func(cluster *common.Cluster) error {
-		if err := cluster.SetMaster(nodeId); err != nil {
+func (c *clusters) SetNewMaster(clusterId string, masterNodeId string) error {
+	return c.Save(clusterId, func(cluster *common.Cluster) error {
+		if err := cluster.SetMaster(masterNodeId); err != nil {
 			return err
 		}
 		return nil
 	})
+}
+
+func (c *clusters) UpdateNodes(cluster *common.Cluster) error {
+	c.mutex.Wait(cluster.Id)
+
+	filter := bson.M{"clusterId": cluster.Id}
+	update := bson.M{"$set": bson.M{"nodes": cluster.Nodes}}
+
+	_, err := c.col.UpdateOne(c.context(), filter, update)
+	return err
 }
 
 func (c *clusters) ClusterIdOf(nodeId string) (*string, error) {
