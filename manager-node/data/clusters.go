@@ -328,7 +328,7 @@ func (c *clusters) overwrite(clusters common.Clusters) error {
 
 			filter := bson.M{"clusterId": cluster.Id}
 			opts := (&options.UpdateOptions{}).SetUpsert(true)
-			if _, err := c.col.UpdateOne(c.context(), filter, bson.D{{"$set", cluster}}, opts); err != nil {
+			if _, err := c.col.UpdateOne(c.context(), filter, bson.M{"$set": cluster}, opts); err != nil {
 				return err
 			}
 		}

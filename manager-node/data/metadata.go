@@ -140,7 +140,7 @@ func (m *metadata) save(folders []*common.Folder, upsert bool) error {
 			filter := bson.M{"full": folder.Full}
 
 			opts := (&options.UpdateOptions{}).SetUpsert(upsert)
-			if _, err := m.col.UpdateOne(m.context(), filter, bson.D{{"$set", folder}}, opts); err != nil {
+			if _, err := m.col.UpdateOne(m.context(), filter, bson.M{"$set": folder}, opts); err != nil {
 				return err
 			}
 		}

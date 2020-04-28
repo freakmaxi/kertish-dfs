@@ -171,7 +171,7 @@ func (m *metadata) overwrite(folders map[string]*common.Folder) error {
 			}
 
 			opts := (&options.UpdateOptions{}).SetUpsert(true)
-			if _, err := m.col.UpdateOne(m.context(), filter, bson.D{{"$set", folder}}, opts); err != nil {
+			if _, err := m.col.UpdateOne(m.context(), filter, bson.M{"$set": folder}, opts); err != nil {
 				return err
 			}
 		}
