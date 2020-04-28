@@ -22,6 +22,8 @@ type DataNode interface {
 	CreateShadow(sha512Hex string) error
 	Read(sha512Hex string, readHandler func(data []byte) error) error
 	Delete(sha512Hex string) error
+
+	Clone() DataNode
 }
 
 type dataNode struct {
@@ -31,13 +33,16 @@ type dataNode struct {
 	conn *net.TCPConn
 }
 
-func NewDataNode(address string) DataNode {
-	addr, _ := net.ResolveTCPAddr("tcp", address)
+func NewDataNode(address string) (DataNode, error) {
+	addr, err := net.ResolveTCPAddr("tcp", address)
+	if err != nil {
+		return nil, err
+	}
 
 	return &dataNode{
 		address: addr,
 		sha512:  sha512.New512_256(),
-	}
+	}, nil
 }
 
 func (d *dataNode) connect() error {
@@ -197,6 +202,13 @@ func (d *dataNode) Delete(sha512Hex string) error {
 	}
 
 	return nil
+}
+
+func (d *dataNode) Clone() DataNode {
+	return &dataNode{
+		address: d.address,
+		sha512:  sha512.New512_256(),
+	}
 }
 
 var _ DataNode = &dataNode{}

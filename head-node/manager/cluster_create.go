@@ -13,8 +13,9 @@ import (
 )
 
 type create struct {
-	reservationMap *common.ReservationMap
-	failed         bool
+	reservationMap          *common.ReservationMap
+	dataNodeProviderHandler func(address string) (cluster2.DataNode, error)
+	failed                  bool
 
 	chunks     []dataState
 	chunksLock sync.Mutex
@@ -27,13 +28,14 @@ type dataState struct {
 	address string
 }
 
-func NewCreate(reservationMap *common.ReservationMap) *create {
+func NewCreate(reservationMap *common.ReservationMap, dataNodeProviderHandler func(address string) (cluster2.DataNode, error)) *create {
 	return &create{
-		reservationMap: reservationMap,
-		failed:         false,
-		chunks:         make([]dataState, 0),
-		chunksLock:     sync.Mutex{},
-		clusterUsage:   make(map[string]uint64),
+		reservationMap:          reservationMap,
+		dataNodeProviderHandler: dataNodeProviderHandler,
+		failed:                  false,
+		chunks:                  make([]dataState, 0),
+		chunksLock:              sync.Mutex{},
+		clusterUsage:            make(map[string]uint64),
 	}
 }
 
@@ -90,7 +92,15 @@ func (c *create) upload(wg *sync.WaitGroup, clusterMap common.ClusterMap, data [
 		address = clusterMap.Address
 	}
 
-	exists, sha512Hex, err := cluster2.NewDataNode(address).Create(data)
+	dn, err := c.dataNodeProviderHandler(address)
+	if err != nil {
+		c.failed = true
+
+		fmt.Printf("ERROR: Unable to find data node. index: %d, clusterId: %s, address: %s -  %s\n", clusterMap.Chunk.Starts(), clusterMap.Id, address, err.Error())
+		return
+	}
+
+	exists, sha512Hex, err := dn.Create(data)
 	if err != nil {
 		c.failed = true
 
@@ -105,10 +115,11 @@ func (c *create) addChunk(clusterId string, address string, sequence uint16, siz
 	c.chunksLock.Lock()
 	defer c.chunksLock.Unlock()
 
+	if _, has := c.clusterUsage[clusterId]; !has {
+		c.clusterUsage[clusterId] = 0
+	}
+
 	if !exists {
-		if _, has := c.clusterUsage[clusterId]; !has {
-			c.clusterUsage[clusterId] = 0
-		}
 		c.clusterUsage[clusterId] += uint64(size)
 	}
 
@@ -118,7 +129,16 @@ func (c *create) addChunk(clusterId string, address string, sequence uint16, siz
 func (c *create) revert() {
 	for len(c.chunks) > 0 {
 		chunk := c.chunks[0]
-		if err := cluster2.NewDataNode(chunk.address).Delete(chunk.Hash); err != nil {
+
+		dn, err := c.dataNodeProviderHandler(chunk.address)
+		if err != nil {
+			fmt.Printf("ERROR: Unable to find data node. address: %s -  %s\n", chunk.address, err.Error())
+
+			c.chunks = append(c.chunks[1:], chunk)
+			continue
+		}
+
+		if err := dn.Delete(chunk.Hash); err != nil {
 			fmt.Printf("ERROR: Revert create is failed. address: %s -  %s\n", chunk.address, err.Error())
 
 			c.chunks = append(c.chunks[1:], chunk)

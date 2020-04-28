@@ -60,6 +60,23 @@ func NewNode(index data.Index, clusters data.Clusters) (Node, error) {
 	return n, nil
 }
 
+func (n *node) getDataNode(node *common.Node) (cluster2.DataNode, error) {
+	n.nodeCacheMutex.Lock()
+	defer n.nodeCacheMutex.Unlock()
+
+	dn, has := n.nodeCache[node.Id]
+	if !has {
+		var err error
+		dn, err = cluster2.NewDataNode(node.Address)
+		if err != nil {
+			return nil, err
+		}
+		n.nodeCache[node.Address] = dn
+	}
+
+	return dn.Clone(), nil
+}
+
 func (n *node) start() {
 	for {
 		select {
@@ -114,25 +131,12 @@ func (n *node) processSync(ns nodeSync) {
 		go func(wg *sync.WaitGroup, wn common.Node) {
 			defer wg.Done()
 
-			n.nodeCacheMutex.Lock()
-			dn, has := n.nodeCache[wn.Id]
-			n.nodeCacheMutex.Unlock()
-
-			if !has {
-				var err error
-				dn, err = cluster2.NewDataNode(wn.Address)
-				if err != nil {
-					fmt.Printf("WARN: Data Node Connection Creation is failed. nodeId: %s, address: %s - %s\n", wn.Id, wn.Address, err.Error())
-					addFailedFunc(&wn)
-					return
-				}
-
-				n.nodeCacheMutex.Lock()
-				n.nodeCache[wn.Id] = dn
-				n.nodeCacheMutex.Unlock()
+			dn, err := n.getDataNode(&wn)
+			if err != nil {
+				fmt.Printf("WARN: Data Node Connection Creation is failed. nodeId: %s, address: %s - %s\n", wn.Id, wn.Address, err.Error())
+				addFailedFunc(&wn)
+				return
 			}
-
-			dn = dn.Clone()
 
 			if ns.create {
 				if !dn.SyncCreate(ns.sourceAddr, ns.sha512Hex) {

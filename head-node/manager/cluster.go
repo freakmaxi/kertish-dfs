@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
@@ -29,6 +30,9 @@ type Cluster interface {
 type cluster struct {
 	client      http.Client
 	managerAddr []string
+
+	nodeCacheMutex sync.Mutex
+	nodeCache      map[string]cluster2.DataNode
 }
 
 func NewCluster(managerAddresses []string) (Cluster, error) {
@@ -42,13 +46,30 @@ func NewCluster(managerAddresses []string) (Cluster, error) {
 	}, nil
 }
 
+func (c *cluster) getDataNode(address string) (cluster2.DataNode, error) {
+	c.nodeCacheMutex.Lock()
+	defer c.nodeCacheMutex.Unlock()
+
+	dn, has := c.nodeCache[address]
+	if !has {
+		var err error
+		dn, err = cluster2.NewDataNode(address)
+		if err != nil {
+			return nil, err
+		}
+		c.nodeCache[address] = dn
+	}
+
+	return dn.Clone(), nil
+}
+
 func (c *cluster) Create(size uint64, reader io.Reader) (common.DataChunks, error) {
 	reservation, err := c.makeReservation(size)
 	if err != nil {
 		return nil, err
 	}
 
-	create := NewCreate(reservation)
+	create := NewCreate(reservation, c.getDataNode)
 	chunks, clusterUsageMap, err := create.process(reader, c.findCluster)
 	if err != nil {
 		if err := c.discardReservation(reservation.Id); err != nil {
@@ -72,7 +93,12 @@ func (c *cluster) CreateShadow(chunks common.DataChunks) error {
 
 	for _, chunk := range chunks {
 		if address, has := m[chunk.Hash]; has {
-			if err := cluster2.NewDataNode(address).CreateShadow(chunk.Hash); err != nil {
+			dn, err := c.getDataNode(address)
+			if err != nil {
+				return err
+			}
+
+			if err := dn.CreateShadow(chunk.Hash); err != nil {
 				return err
 			}
 		}
@@ -120,7 +146,12 @@ func (c *cluster) Read(chunks common.DataChunks, w io.Writer, begins int64, ends
 			continue
 		}
 
-		if err := cluster2.NewDataNode(address).Read(chunk.Hash, func(buffer []byte) error {
+		dn, err := c.getDataNode(address)
+		if err != nil {
+			return err
+		}
+
+		if err := dn.Read(chunk.Hash, func(buffer []byte) error {
 			_, err := w.Write(buffer[startPoint:endPoint])
 			if errors2.Is(err, syscall.EPIPE) {
 				return nil
@@ -149,7 +180,13 @@ func (c *cluster) Delete(chunks common.DataChunks) ([]string, []string, error) {
 			missingHashes = append(missingHashes, chunk.Hash)
 			continue
 		}
-		if err := cluster2.NewDataNode(address).Delete(chunk.Hash); err != nil {
+
+		dn, err := c.getDataNode(address)
+		if err != nil {
+			return deletedHashes, missingHashes, err
+		}
+
+		if err := dn.Delete(chunk.Hash); err != nil {
 			return deletedHashes, missingHashes, err
 		}
 		deletedHashes = append(deletedHashes, chunk.Hash)

@@ -40,6 +40,23 @@ func NewHealthTracker(clusters data.Clusters, index data.Index, intervalDuration
 	}
 }
 
+func (h *healthTracker) getDataNode(node *common.Node) (cluster2.DataNode, error) {
+	h.nodeCacheMutex.Lock()
+	defer h.nodeCacheMutex.Unlock()
+
+	dn, has := h.nodeCache[node.Id]
+	if !has {
+		var err error
+		dn, err = cluster2.NewDataNode(node.Address)
+		if err != nil {
+			return nil, err
+		}
+		h.nodeCache[node.Address] = dn
+	}
+
+	return dn.Clone(), nil
+}
+
 func (h *healthTracker) Start() {
 	go func() {
 		for {
@@ -88,47 +105,23 @@ func (h *healthTracker) checkHealth(wg *sync.WaitGroup, cluster *common.Cluster)
 func (h *healthTracker) checkMasterAlive(cluster *common.Cluster) bool {
 	masterNode := cluster.Master()
 
-	h.nodeCacheMutex.Lock()
-	dn, has := h.nodeCache[masterNode.Id]
-	h.nodeCacheMutex.Unlock()
-
-	if has {
-		return dn.Clone().Ping() > -1
-	}
-
-	dn, err := cluster2.NewDataNode(masterNode.Address)
+	dn, err := h.getDataNode(masterNode)
 	if err != nil {
 		fmt.Printf("ERROR: Master Node Live Check is failed. clusterId: %s, nodeId: %s - %s\n", cluster.Id, masterNode.Id, err.Error())
 		return false
 	}
 
-	h.nodeCacheMutex.Lock()
-	h.nodeCache[masterNode.Id] = dn
-	h.nodeCacheMutex.Unlock()
-
-	return dn.Clone().Ping() > -1
+	return dn.Ping() > -1
 }
 
 func (h *healthTracker) findBestMasterNodeCandidate(cluster *common.Cluster) *common.Node {
 	for _, node := range cluster.Nodes {
-		h.nodeCacheMutex.Lock()
-		dn, has := h.nodeCache[node.Id]
-		h.nodeCacheMutex.Unlock()
-
-		if !has {
-			var err error
-			dn, err = cluster2.NewDataNode(node.Address)
-			if err != nil {
-				fmt.Printf("ERROR: Finding Best Master Node Candidate is failed. clusterId: %s, nodeId: %s - %s\n", cluster.Id, node.Id, err.Error())
-				continue
-			}
-
-			h.nodeCacheMutex.Lock()
-			h.nodeCache[node.Id] = dn
-			h.nodeCacheMutex.Unlock()
+		dn, err := h.getDataNode(node)
+		if err != nil {
+			fmt.Printf("ERROR: Finding Best Master Node Candidate is failed. clusterId: %s, nodeId: %s - %s\n", cluster.Id, node.Id, err.Error())
+			continue
 		}
 
-		dn = dn.Clone()
 		pr := dn.Ping()
 
 		if pr == -1 {
@@ -154,26 +147,14 @@ func (h *healthTracker) findBestMasterNodeCandidate(cluster *common.Cluster) *co
 
 func (h *healthTracker) prioritizeNodesByConnectionQuality(cluster *common.Cluster) {
 	for _, node := range cluster.Nodes {
-		h.nodeCacheMutex.Lock()
-		dn, has := h.nodeCache[node.Id]
-		h.nodeCacheMutex.Unlock()
+		dn, err := h.getDataNode(node)
+		if err != nil {
+			fmt.Printf("ERROR: Prioritizing Node Connection Quality is failed. clusterId: %s, nodeId: %s - %s\n", cluster.Id, node.Id, err.Error())
 
-		if !has {
-			var err error
-			dn, err = cluster2.NewDataNode(node.Address)
-			if err != nil {
-				fmt.Printf("ERROR: Prioritizing Node Connection Quality is failed. clusterId: %s, nodeId: %s - %s\n", cluster.Id, node.Id, err.Error())
-
-				node.Quality = int64(^uint(0) >> 1)
-				continue
-			}
-
-			h.nodeCacheMutex.Lock()
-			h.nodeCache[node.Id] = dn
-			h.nodeCacheMutex.Unlock()
+			node.Quality = int64(^uint(0) >> 1)
+			continue
 		}
 
-		dn = dn.Clone()
 		pr := dn.Ping()
 
 		if pr == -1 {
@@ -186,24 +167,11 @@ func (h *healthTracker) prioritizeNodesByConnectionQuality(cluster *common.Clust
 
 func (h *healthTracker) notifyNewMasterInCluster(cluster *common.Cluster) {
 	for _, node := range cluster.Nodes {
-		h.nodeCacheMutex.Lock()
-		dn, has := h.nodeCache[node.Id]
-		h.nodeCacheMutex.Unlock()
-
-		if !has {
-			var err error
-			dn, err = cluster2.NewDataNode(node.Address)
-			if err != nil {
-				fmt.Printf("ERROR: Notifing New Master Node is failed. clusterId: %s, nodeId: %s - %s\n", cluster.Id, node.Id, err.Error())
-				continue
-			}
-
-			h.nodeCacheMutex.Lock()
-			h.nodeCache[node.Id] = dn
-			h.nodeCacheMutex.Unlock()
+		dn, err := h.getDataNode(node)
+		if err != nil {
+			fmt.Printf("ERROR: Notifing New Master Node is failed. clusterId: %s, nodeId: %s - %s\n", cluster.Id, node.Id, err.Error())
+			continue
 		}
-
-		dn = dn.Clone()
 
 		if dn.Ping() == -1 {
 			continue
