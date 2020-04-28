@@ -53,29 +53,31 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 	}
 	defer cursor.Close(m.context())
 
+	handlerFunc := func(f *common.Folder) error {
+		m.mutex.Lock(f.Full)
+		defer m.mutex.UnLock(f.Full)
+
+		changed, err := folderHandler(f)
+		if err != nil {
+			return err
+		}
+		if !changed {
+			return nil
+		}
+
+		if err := m.save([]*common.Folder{f}, false); err != nil {
+			return err
+		}
+		return nil
+	}
+
 	for cursor.Next(m.context()) {
 		var folder *common.Folder
 		if err := cursor.Decode(&folder); err != nil {
 			return err
 		}
 
-		if err := func(f *common.Folder) error {
-			m.mutex.Lock(f.Full)
-			defer m.mutex.UnLock(f.Full)
-
-			changed, err := folderHandler(f)
-			if err != nil {
-				return err
-			}
-			if !changed {
-				return nil
-			}
-
-			if err := m.save([]*common.Folder{f}, false); err != nil {
-				return err
-			}
-			return nil
-		}(folder); err != nil {
+		if err := handlerFunc(folder); err != nil {
 			return err
 		}
 	}
