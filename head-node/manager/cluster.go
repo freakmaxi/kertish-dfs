@@ -41,8 +41,10 @@ func NewCluster(managerAddresses []string) (Cluster, error) {
 	}
 
 	return &cluster{
-		client:      http.Client{},
-		managerAddr: managerAddresses,
+		client:         http.Client{},
+		managerAddr:    managerAddresses,
+		nodeCacheMutex: sync.Mutex{},
+		nodeCache:      make(map[string]cluster2.DataNode),
 	}, nil
 }
 
