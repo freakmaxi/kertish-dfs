@@ -23,7 +23,7 @@ type Clusters interface {
 	LockAll(clusterHandler func(clusters common.Clusters) error) error
 
 	Save(clusterId string, saveHandler func(cluster *common.Cluster) error) error
-	SaveAll(saveAllHandler func(clusters common.Clusters) error) error
+	SaveAll(saveAllHandler func(clusters map[string]*common.Cluster) error) error
 
 	SetNewMaster(clusterId string, nodeId string) error
 	UpdateNodes(cluster *common.Cluster) error
@@ -228,7 +228,7 @@ func (c *clusters) Save(clusterId string, saveHandler func(cluster *common.Clust
 	return c.overwrite(common.Clusters{cluster})
 }
 
-func (c *clusters) SaveAll(saveAllHandler func(clusters common.Clusters) error) error {
+func (c *clusters) SaveAll(saveAllHandler func(clusters map[string]*common.Cluster) error) error {
 	c.mutex.Lock(clustersLockKey)
 	defer c.mutex.UnLock(clustersLockKey)
 
@@ -242,14 +242,14 @@ func (c *clusters) SaveAll(saveAllHandler func(clusters common.Clusters) error) 
 	defer cur.Close(c.context())
 
 	clusterIds := make([]string, 0)
-	clusters := make(common.Clusters, 0)
+	clusters := make(map[string]*common.Cluster, 0)
 	for cur.Next(c.context()) {
 		var cluster *common.Cluster
 		if err := cur.Decode(&cluster); err != nil {
 			return err
 		}
 
-		clusters = append(clusters, cluster)
+		clusters[cluster.Id] = cluster
 		clusterIds = append(clusterIds, cluster.Id)
 		c.mutex.Lock(cluster.Id)
 	}
@@ -259,11 +259,18 @@ func (c *clusters) SaveAll(saveAllHandler func(clusters common.Clusters) error) 
 		}
 	}()
 
-	sort.Sort(clusters)
 	if err := saveAllHandler(clusters); err != nil {
 		return err
 	}
-	return c.overwrite(clusters)
+
+	savingClusters := make(common.Clusters, 0)
+	for _, v := range clusters {
+		if v == nil {
+			continue
+		}
+		savingClusters = append(savingClusters, v)
+	}
+	return c.overwrite(savingClusters)
 }
 
 func (c *clusters) SetNewMaster(clusterId string, masterNodeId string) error {

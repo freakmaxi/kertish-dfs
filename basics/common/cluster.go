@@ -8,11 +8,11 @@ import (
 )
 
 type Cluster struct {
-	Id           string         `json:"clusterId"`
-	Size         uint64         `json:"size"`
-	Used         uint64         `json:"used"`
-	Nodes        NodeList       `json:"nodes"`
-	Reservations []*Reservation `json:"reservations"`
+	Id           string            `json:"clusterId"`
+	Size         uint64            `json:"size"`
+	Used         uint64            `json:"used"`
+	Nodes        NodeList          `json:"nodes"`
+	Reservations map[string]uint64 `json:"reservations"`
 }
 
 type Clusters []*Cluster
@@ -25,41 +25,38 @@ func NewCluster(id string) *Cluster {
 	return &Cluster{
 		Id:           id,
 		Nodes:        NodeList{},
-		Reservations: make([]*Reservation, 0),
+		Reservations: make(map[string]uint64),
 	}
 }
 
 func (c *Cluster) Reserve(id string, size uint64) {
-	for _, reservation := range c.Reservations {
-		if strings.Compare(reservation.Id, id) == 0 {
-			c.Used += size
-			reservation.Size += size
-			return
-		}
+	if _, has := c.Reservations[id]; !has {
+		c.Reservations[id] = 0
 	}
+
+	c.Reservations[id] += size
 	c.Used += size
-	c.Reservations = append(c.Reservations, &Reservation{Id: id, Size: size})
 }
 
 func (c *Cluster) Commit(id string, size uint64) {
-	for i, reservation := range c.Reservations {
-		if strings.Compare(reservation.Id, id) == 0 {
-			reservation.Size -= size
-			c.Used -= reservation.Size
-			c.Reservations = append(c.Reservations[:i], c.Reservations[i+1:]...)
-			return
-		}
+	if _, has := c.Reservations[id]; !has {
+		return
 	}
+
+	c.Reservations[id] -= size
+	c.Used -= c.Reservations[id]
+
+	delete(c.Reservations, id)
 }
 
 func (c *Cluster) Discard(id string) {
-	for i, reservation := range c.Reservations {
-		if strings.Compare(reservation.Id, id) == 0 {
-			c.Used -= reservation.Size
-			c.Reservations = append(c.Reservations[:i], c.Reservations[i+1:]...)
-			return
-		}
+	if _, has := c.Reservations[id]; !has {
+		return
 	}
+
+	c.Used -= c.Reservations[id]
+
+	delete(c.Reservations, id)
 }
 
 func (c *Cluster) Available() uint64 {

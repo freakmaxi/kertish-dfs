@@ -202,9 +202,14 @@ func (c *cluster) UnRegisterNode(nodeId string) error {
 func (c *cluster) Reserve(size uint64) (*common.ReservationMap, error) {
 	var reservationMap *common.ReservationMap
 
-	if err := c.clusters.SaveAll(func(clusters common.Clusters) error {
+	if err := c.clusters.SaveAll(func(clusters map[string]*common.Cluster) error {
+		reservationClusters := make(common.Clusters, 0)
+		for _, v := range clusters {
+			reservationClusters = append(reservationClusters, v)
+		}
+
 		var err error
-		reservationMap, err = c.createReservationMap(size, clusters)
+		reservationMap, err = c.createReservationMap(size, reservationClusters)
 
 		return err
 	}); err != nil {
@@ -215,7 +220,7 @@ func (c *cluster) Reserve(size uint64) (*common.ReservationMap, error) {
 }
 
 func (c *cluster) Commit(reservationId string, clusterMap map[string]uint64) error {
-	return c.clusters.SaveAll(func(clusters common.Clusters) error {
+	return c.clusters.SaveAll(func(clusters map[string]*common.Cluster) error {
 		for _, cluster := range clusters {
 			v, has := clusterMap[cluster.Id]
 			if !has {
@@ -228,7 +233,7 @@ func (c *cluster) Commit(reservationId string, clusterMap map[string]uint64) err
 }
 
 func (c *cluster) Discard(reservationId string) error {
-	return c.clusters.SaveAll(func(clusters common.Clusters) error {
+	return c.clusters.SaveAll(func(clusters map[string]*common.Cluster) error {
 		for _, cluster := range clusters {
 			cluster.Discard(reservationId)
 		}
