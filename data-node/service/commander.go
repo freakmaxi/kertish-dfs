@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
 	"github.com/freakmaxi/kertish-dfs/data-node/cache"
@@ -16,7 +17,8 @@ import (
 	"github.com/freakmaxi/kertish-dfs/data-node/manager"
 )
 
-const commandBuffer = 4 // 4b
+const commandBuffer = 4             // 4b
+const defaultTransferSpeed = 625000 // bytes/s
 
 type Commander interface {
 	Handler(net.Conn)
@@ -39,13 +41,52 @@ func NewCommander(fs filesystem.Manager, cc cache.Container, node manager.Node, 
 	}, nil
 }
 
+func (c *commander) setDeadline(conn net.Conn, expectedTransferSize int) error {
+	seconds := expectedTransferSize / defaultTransferSpeed
+	if seconds < 0 {
+		seconds = 0
+	}
+	seconds += 30
+
+	return conn.SetDeadline(time.Now().Add(time.Second * time.Duration(seconds)))
+}
+
+func (c *commander) readWithTimeout(conn net.Conn, buffer []byte, size int) error {
+	if err := c.setDeadline(conn, size); err != nil {
+		return err
+	}
+	_, err := io.ReadAtLeast(conn, buffer, size)
+	return err
+}
+
+func (c *commander) readBinaryWithTimeout(conn net.Conn, data interface{}) error {
+	if err := c.setDeadline(conn, 0); err != nil {
+		return err
+	}
+	return binary.Read(conn, binary.LittleEndian, data)
+}
+
+func (c *commander) writeWithTimeout(conn net.Conn, b []byte) error {
+	if err := c.setDeadline(conn, len(b)); err != nil {
+		return err
+	}
+	_, err := conn.Write(b)
+	return err
+}
+
+func (c *commander) writeBinaryWithTimeout(conn net.Conn, data interface{}) error {
+	if err := c.setDeadline(conn, 0); err != nil {
+		return err
+	}
+	return binary.Write(conn, binary.LittleEndian, data)
+}
+
 func (c *commander) Handler(conn net.Conn) {
 	defer conn.Close()
 
 	buffer := make([]byte, commandBuffer)
 
-	_, err := io.ReadAtLeast(conn, buffer, len(buffer))
-	if err != nil {
+	if err := c.readWithTimeout(conn, buffer, len(buffer)); err != nil {
 		fmt.Printf("ERROR: Stream unable to read: Connection: %s, %s\n", conn.RemoteAddr().String(), err.Error())
 		return
 	}
@@ -54,11 +95,11 @@ func (c *commander) Handler(conn net.Conn) {
 		if err != errors.ErrQuit {
 			fmt.Printf("ERROR: Unable to process command (%s): Connection: %s, %s\n", string(buffer), conn.RemoteAddr().String(), err.Error())
 		}
-		conn.Write([]byte("-"))
+		_ = c.writeWithTimeout(conn, []byte("-"))
 		return
 	}
 
-	conn.Write([]byte("+"))
+	_ = c.writeWithTimeout(conn, []byte("+"))
 }
 
 func (c *commander) process(command string, conn net.Conn) error {
@@ -100,20 +141,16 @@ func (c *commander) process(command string, conn net.Conn) error {
 
 func (c *commander) hashAsHex(conn net.Conn) (string, error) {
 	h := make([]byte, 32)
-	total, err := io.ReadAtLeast(conn, h, len(h))
+	err := c.readWithTimeout(conn, h, len(h))
 	if err != nil {
 		return "", err
-	}
-	if total != 32 {
-		return "", fmt.Errorf("hash size is not 32 bytes length")
 	}
 	return hex.EncodeToString(h), nil
 }
 
 func (c *commander) result(conn net.Conn) bool {
 	b := make([]byte, 1)
-	_, err := conn.Read(b)
-	if err != nil {
+	if err := c.readWithTimeout(conn, b, len(b)); err != nil {
 		return false
 	}
 
@@ -138,17 +175,17 @@ func (c *commander) crea(conn net.Conn) error {
 
 			return errors.ErrQuit
 		}
-		if _, err := conn.Write([]byte{'+'}); err != nil {
+		if err := c.writeWithTimeout(conn, []byte{'+'}); err != nil {
 			return err
 		}
 
 		var blockSize uint32
-		if err := binary.Read(conn, binary.LittleEndian, &blockSize); err != nil {
+		if err := c.readBinaryWithTimeout(conn, &blockSize); err != nil {
 			return err
 		}
 
 		chunkBuffer := make([]byte, blockSize)
-		if _, err := io.ReadAtLeast(conn, chunkBuffer, len(chunkBuffer)); err != nil {
+		if err := c.readWithTimeout(conn, chunkBuffer, len(chunkBuffer)); err != nil {
 			return err
 		}
 
@@ -180,18 +217,18 @@ func (c *commander) read(conn net.Conn) error {
 
 	// Check cache first
 	if content := c.cache.Query(sha512Hex); content != nil {
-		if _, err := conn.Write([]byte{'+'}); err != nil {
+		if err := c.writeWithTimeout(conn, []byte{'+'}); err != nil {
 			return err
 		}
 
 		sizeBuffer := make([]byte, 4)
 		binary.LittleEndian.PutUint32(sizeBuffer, uint32(len(content)))
 
-		if _, err := conn.Write(sizeBuffer); err != nil {
+		if err := c.writeWithTimeout(conn, sizeBuffer); err != nil {
 			return err
 		}
 
-		if _, err := conn.Write(content); err != nil {
+		if err := c.writeWithTimeout(conn, content); err != nil {
 			return err
 		}
 
@@ -202,7 +239,7 @@ func (c *commander) read(conn net.Conn) error {
 		if blockFile.Temporary() {
 			return os.ErrNotExist
 		}
-		if _, err := conn.Write([]byte{'+'}); err != nil {
+		if err := c.writeWithTimeout(conn, []byte{'+'}); err != nil {
 			return err
 		}
 
@@ -211,7 +248,7 @@ func (c *commander) read(conn net.Conn) error {
 			return err
 		}
 
-		if _, err := conn.Write(sizeBuffer); err != nil {
+		if err := c.writeWithTimeout(conn, sizeBuffer); err != nil {
 			return err
 		}
 
@@ -221,8 +258,7 @@ func (c *commander) read(conn net.Conn) error {
 				// Compile For Cache
 				cacheData = append(cacheData, data...)
 
-				_, err := conn.Write(data)
-				return err
+				return c.writeWithTimeout(conn, data)
 			},
 			func() error {
 				// Add/Update Cache
@@ -262,7 +298,7 @@ func (c *commander) dele(conn net.Conn) error {
 		}
 
 		// No need to track errors on this call
-		c.node.Delete(sha512Hex, usageCount > 1, size)
+		_ = c.node.Delete(sha512Hex, usageCount > 1, size)
 
 		// Remove from cache
 		c.cache.Remove(sha512Hex)
@@ -272,16 +308,16 @@ func (c *commander) dele(conn net.Conn) error {
 }
 
 func (c *commander) hwid(conn net.Conn) error {
-	if _, err := conn.Write([]byte{'+'}); err != nil {
+	if err := c.writeWithTimeout(conn, []byte{'+'}); err != nil {
 		return err
 	}
 
 	hardwareIdLength := byte(len(c.hardwareAddr))
-	if err := binary.Write(conn, binary.LittleEndian, hardwareIdLength); err != nil {
+	if err := c.writeBinaryWithTimeout(conn, hardwareIdLength); err != nil {
 		return err
 	}
 
-	if _, err := conn.Write([]byte(c.hardwareAddr)); err != nil {
+	if err := c.writeWithTimeout(conn, []byte(c.hardwareAddr)); err != nil {
 		return err
 	}
 
@@ -290,35 +326,32 @@ func (c *commander) hwid(conn net.Conn) error {
 
 func (c *commander) join(conn net.Conn) error {
 	var clusterIdLength uint8
-	if err := binary.Read(conn, binary.LittleEndian, &clusterIdLength); err != nil {
+	if err := c.readBinaryWithTimeout(conn, &clusterIdLength); err != nil {
 		return err
 	}
 
 	bC := make([]byte, clusterIdLength)
-	_, err := io.ReadAtLeast(conn, bC, len(bC))
-	if err != nil {
+	if err := c.readWithTimeout(conn, bC, len(bC)); err != nil {
 		return err
 	}
 
 	var nodeIdLength uint8
-	if err := binary.Read(conn, binary.LittleEndian, &nodeIdLength); err != nil {
+	if err := c.readBinaryWithTimeout(conn, &nodeIdLength); err != nil {
 		return err
 	}
 
 	bN := make([]byte, nodeIdLength)
-	_, err = io.ReadAtLeast(conn, bN, len(bN))
-	if err != nil {
+	if err := c.readWithTimeout(conn, bN, len(bN)); err != nil {
 		return err
 	}
 
 	var masterAddrLength uint8
-	if err := binary.Read(conn, binary.LittleEndian, &masterAddrLength); err != nil {
+	if err := c.readBinaryWithTimeout(conn, &masterAddrLength); err != nil {
 		return err
 	}
 
 	bM := make([]byte, masterAddrLength)
-	_, err = io.ReadAtLeast(conn, bM, len(bM))
-	if err != nil {
+	if err := c.readWithTimeout(conn, bM, len(bM)); err != nil {
 		return err
 	}
 
@@ -329,7 +362,7 @@ func (c *commander) join(conn net.Conn) error {
 
 func (c *commander) mode(conn net.Conn) error {
 	var master bool
-	if err := binary.Read(conn, binary.LittleEndian, &master); err != nil {
+	if err := c.readBinaryWithTimeout(conn, &master); err != nil {
 		return err
 	}
 
@@ -345,12 +378,12 @@ func (c *commander) leav(conn net.Conn) error {
 
 func (c *commander) sycr(conn net.Conn) error {
 	var sourceAddrLength uint8
-	if err := binary.Read(conn, binary.LittleEndian, &sourceAddrLength); err != nil {
+	if err := c.readBinaryWithTimeout(conn, &sourceAddrLength); err != nil {
 		return err
 	}
 
 	sourceAddrBuf := make([]byte, sourceAddrLength)
-	if _, err := io.ReadAtLeast(conn, sourceAddrBuf, len(sourceAddrBuf)); err != nil {
+	if err := c.readWithTimeout(conn, sourceAddrBuf, len(sourceAddrBuf)); err != nil {
 		return err
 	}
 	sourceAddr := string(sourceAddrBuf)
@@ -405,7 +438,7 @@ func (c *commander) syrd(conn net.Conn) error {
 		if blockFile.Temporary() {
 			return os.ErrNotExist
 		}
-		if _, err := conn.Write([]byte{'+'}); err != nil {
+		if err := c.writeWithTimeout(conn, []byte{'+'}); err != nil {
 			return err
 		}
 
@@ -414,7 +447,7 @@ func (c *commander) syrd(conn net.Conn) error {
 			return err
 		}
 
-		if _, err := conn.Write(usageCountBuffer); err != nil {
+		if err := c.writeWithTimeout(conn, usageCountBuffer); err != nil {
 			return err
 		}
 
@@ -427,14 +460,13 @@ func (c *commander) syrd(conn net.Conn) error {
 			return err
 		}
 
-		if _, err := conn.Write(sizeBuffer); err != nil {
+		if err := c.writeWithTimeout(conn, sizeBuffer); err != nil {
 			return err
 		}
 
 		return blockFile.Read(
 			func(data []byte) error {
-				_, err := conn.Write(data)
-				return err
+				return c.writeWithTimeout(conn, data)
 			},
 			func() error {
 				return nil
@@ -467,12 +499,12 @@ func (c *commander) syls(conn net.Conn) error {
 		return err
 	}
 
-	if _, err := conn.Write([]byte{'+'}); err != nil {
+	if err := c.writeWithTimeout(conn, []byte{'+'}); err != nil {
 		return err
 	}
 
 	sha512HexListLength := uint64(len(sha512HexList))
-	if err := binary.Write(conn, binary.LittleEndian, sha512HexListLength); err != nil {
+	if err := c.writeBinaryWithTimeout(conn, sha512HexListLength); err != nil {
 		return err
 	}
 
@@ -482,7 +514,7 @@ func (c *commander) syls(conn net.Conn) error {
 			return err
 		}
 
-		if _, err := conn.Write(sha512Sum); err != nil {
+		if err := c.writeWithTimeout(conn, sha512Sum); err != nil {
 			return err
 		}
 	}
@@ -492,12 +524,12 @@ func (c *commander) syls(conn net.Conn) error {
 
 func (c *commander) syfl(conn net.Conn) error {
 	var sourceAddrLength uint8
-	if err := binary.Read(conn, binary.LittleEndian, &sourceAddrLength); err != nil {
+	if err := c.readBinaryWithTimeout(conn, &sourceAddrLength); err != nil {
 		return err
 	}
 
 	sourceAddrBuf := make([]byte, sourceAddrLength)
-	if _, err := io.ReadAtLeast(conn, sourceAddrBuf, len(sourceAddrBuf)); err != nil {
+	if err := c.readWithTimeout(conn, sourceAddrBuf, len(sourceAddrBuf)); err != nil {
 		return err
 	}
 	sourceAddr := string(sourceAddrBuf)
@@ -519,11 +551,11 @@ func (c *commander) wipe(conn net.Conn) error {
 }
 
 func (c *commander) size(conn net.Conn) error {
-	if _, err := conn.Write([]byte{'+'}); err != nil {
+	if err := c.writeWithTimeout(conn, []byte{'+'}); err != nil {
 		return err
 	}
 
-	return binary.Write(conn, binary.LittleEndian, c.fs.NodeSize())
+	return c.writeBinaryWithTimeout(conn, c.fs.NodeSize())
 }
 
 var _ Commander = &commander{}
