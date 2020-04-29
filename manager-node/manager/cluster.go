@@ -202,14 +202,9 @@ func (c *cluster) UnRegisterNode(nodeId string) error {
 func (c *cluster) Reserve(size uint64) (*common.ReservationMap, error) {
 	var reservationMap *common.ReservationMap
 
-	if err := c.clusters.SaveAll(func(clusters map[string]*common.Cluster) error {
-		reservationClusters := make(common.Clusters, 0)
-		for _, v := range clusters {
-			reservationClusters = append(reservationClusters, v)
-		}
-
+	if err := c.clusters.SaveAll(func(clusters common.Clusters) error {
 		var err error
-		reservationMap, err = c.createReservationMap(size, reservationClusters)
+		reservationMap, err = c.createReservationMap(size, clusters)
 
 		return err
 	}); err != nil {
@@ -220,7 +215,7 @@ func (c *cluster) Reserve(size uint64) (*common.ReservationMap, error) {
 }
 
 func (c *cluster) Commit(reservationId string, clusterMap map[string]uint64) error {
-	return c.clusters.SaveAll(func(clusters map[string]*common.Cluster) error {
+	return c.clusters.SaveAll(func(clusters common.Clusters) error {
 		for _, cluster := range clusters {
 			v, has := clusterMap[cluster.Id]
 			if !has {
@@ -233,7 +228,7 @@ func (c *cluster) Commit(reservationId string, clusterMap map[string]uint64) err
 }
 
 func (c *cluster) Discard(reservationId string) error {
-	return c.clusters.SaveAll(func(clusters map[string]*common.Cluster) error {
+	return c.clusters.SaveAll(func(clusters common.Clusters) error {
 		for _, cluster := range clusters {
 			cluster.Discard(reservationId)
 		}
@@ -242,15 +237,19 @@ func (c *cluster) Discard(reservationId string) error {
 }
 
 func (c *cluster) SyncClusters() error {
-	return c.clusters.LockAll(func(clusters common.Clusters) error {
-		return c.syncClusters(clusters)
-	})
+	clusters, err := c.clusters.GetAll()
+	if err != nil {
+		return err
+	}
+	return c.syncClusters(clusters)
 }
 
 func (c *cluster) SyncCluster(clusterId string) error {
-	return c.clusters.Lock(clusterId, func(cluster *common.Cluster) error {
-		return c.syncClusters(common.Clusters{cluster})
-	})
+	cluster, err := c.clusters.Get(clusterId)
+	if err != nil {
+		return err
+	}
+	return c.syncClusters(common.Clusters{cluster})
 }
 
 func (c *cluster) syncClusters(clusters common.Clusters) error {
@@ -372,23 +371,11 @@ func (c *cluster) checkStructure() error {
 }
 
 func (c *cluster) GetClusters() (common.Clusters, error) {
-	clusters := make(common.Clusters, 0)
-	err := c.clusters.LockAll(func(cs common.Clusters) error {
-		for _, c := range cs {
-			clusters = append(clusters, c)
-		}
-		return nil
-	})
-	return clusters, err
+	return c.clusters.GetAll()
 }
 
 func (c *cluster) GetCluster(clusterId string) (*common.Cluster, error) {
-	var cluster *common.Cluster
-	err := c.clusters.Lock(clusterId, func(c *common.Cluster) error {
-		cluster = c
-		return nil
-	})
-	return cluster, err
+	return c.clusters.Get(clusterId)
 }
 
 func (c *cluster) Map(sha512HexList []string, mapType common.MapType) (map[string]string, error) {
@@ -407,30 +394,30 @@ func (c *cluster) Map(sha512HexList []string, mapType common.MapType) (map[strin
 }
 
 func (c *cluster) Find(sha512Hex string, mapType common.MapType) (string, string, error) {
+	clusters, err := c.clusters.GetAll()
+	if err != nil {
+		return "", "", err
+	}
+
 	clusterIds := make([]string, 0)
 	clusterMap := make(map[string]string)
 
-	if err := c.clusters.LockAll(func(clusters common.Clusters) error {
-		for _, cluster := range clusters {
-			var node *common.Node
+	for _, cluster := range clusters {
+		var node *common.Node
 
-			switch mapType {
-			case common.MT_Read:
-				node = cluster.HighQualityNode()
-			default:
-				node = cluster.Master()
-			}
-
-			if node == nil {
-				return errors.ErrNoAvailableClusterNode
-			}
-
-			clusterMap[cluster.Id] = node.Address
-			clusterIds = append(clusterIds, cluster.Id)
+		switch mapType {
+		case common.MT_Read:
+			node = cluster.HighQualityNode()
+		default:
+			node = cluster.Master()
 		}
-		return nil
-	}); err != nil {
-		return "", "", err
+
+		if node == nil {
+			return "", "", errors.ErrNoAvailableClusterNode
+		}
+
+		clusterMap[cluster.Id] = node.Address
+		clusterIds = append(clusterIds, cluster.Id)
 	}
 
 	clusterId, err := c.index.Find(clusterIds, sha512Hex)

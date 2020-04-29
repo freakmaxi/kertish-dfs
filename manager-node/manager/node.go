@@ -184,11 +184,8 @@ func (n *node) Handshake(nodeHardwareAddr string, nodeAddress string, size uint6
 		return "", "", "", err
 	}
 
-	var cluster *common.Cluster
-	if err := n.clusters.Lock(*clusterId, func(c *common.Cluster) error {
-		cluster = c
-		return nil
-	}); err != nil {
+	cluster, err := n.clusters.Get(*clusterId)
+	if err != nil {
 		return "", "", "", err
 	}
 
@@ -207,36 +204,39 @@ func (n *node) Create(nodeId string, sha512Hex string) error {
 		return err
 	}
 
-	return n.clusters.Lock(*clusterId, func(cluster *common.Cluster) error {
-		if err := n.index.Add(*clusterId, sha512Hex); err != nil {
-			return fmt.Errorf("adding to index failed: \n    clusterId: %s\n    sha512Hex: %s\n        error: %s\n", *clusterId, sha512Hex, err.Error())
-		}
+	if err := n.index.Add(*clusterId, sha512Hex); err != nil {
+		return fmt.Errorf("adding to index failed: \n    clusterId: %s\n    sha512Hex: %s\n        error: %s\n", *clusterId, sha512Hex, err.Error())
+	}
 
-		node := cluster.Node(nodeId)
-		others := cluster.Others(nodeId)
-		if others == nil {
-			return fmt.Errorf("node id didn't match to get others: %s\n", nodeId)
-		}
-		if len(others) == 0 {
-			return nil // nothing to sync
-		}
+	cluster, err := n.clusters.Get(*clusterId)
+	if err != nil {
+		return fmt.Errorf("getting cluster is failed: \n    clusterId: %s\n    sha512Hex: %s\n        error: %s\n", *clusterId, sha512Hex, err.Error())
+	}
 
-		counters := make(map[string]int)
-		for _, n := range others {
-			counters[n.Id] = retryLimit
-		}
+	node := cluster.Node(nodeId)
+	others := cluster.Others(nodeId)
+	if others == nil {
+		return fmt.Errorf("node id didn't match to get others: %s\n", nodeId)
+	}
+	if len(others) == 0 {
+		return nil // nothing to sync
+	}
 
-		n.syncChan <- nodeSync{
-			create:     true,
-			date:       time.Now().UTC(),
-			clusterId:  cluster.Id,
-			sourceAddr: node.Address,
-			sha512Hex:  sha512Hex,
-			targets:    others,
-			counters:   counters,
-		}
-		return nil
-	})
+	counters := make(map[string]int)
+	for _, n := range others {
+		counters[n.Id] = retryLimit
+	}
+
+	n.syncChan <- nodeSync{
+		create:     true,
+		date:       time.Now().UTC(),
+		clusterId:  cluster.Id,
+		sourceAddr: node.Address,
+		sha512Hex:  sha512Hex,
+		targets:    others,
+		counters:   counters,
+	}
+	return nil
 }
 
 func (n *node) Delete(nodeId string, sha512Hex string, shadow bool, size uint64) error {

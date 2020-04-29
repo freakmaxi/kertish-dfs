@@ -131,11 +131,12 @@ func (m *metadata) save(folders []*common.Folder, upsert bool) error {
 	if err != nil {
 		return err
 	}
-	if err = session.StartTransaction(); err != nil {
-		return err
-	}
 
 	if err = mongo.WithSession(m.context(), session, func(sc mongo.SessionContext) error {
+		if err = sc.StartTransaction(); err != nil {
+			return err
+		}
+
 		for _, folder := range folders {
 			filter := bson.M{"full": folder.Full}
 

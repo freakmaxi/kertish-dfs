@@ -64,19 +64,12 @@ func (h *healthTracker) Start() {
 			case <-time.After(h.intervalDuration):
 				wg := &sync.WaitGroup{}
 
-				var registeredClusters common.Clusters
-				_ = h.clusters.LockAll(func(clusters common.Clusters) error {
-					registeredClusters = make(common.Clusters, len(clusters))
-					copy(registeredClusters, clusters)
-
-					return nil
-				})
-
-				if registeredClusters == nil {
+				clusters, err := h.clusters.GetAll()
+				if err != nil {
 					continue
 				}
 
-				for _, cluster := range registeredClusters {
+				for _, cluster := range clusters {
 					wg.Add(1)
 					go h.checkHealth(wg, cluster)
 				}

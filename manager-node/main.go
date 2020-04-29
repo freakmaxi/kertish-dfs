@@ -89,7 +89,7 @@ func main() {
 		os.Exit(21)
 	}
 
-	dataClusters, err := data.NewClusters(mutex, conn, mongoDb)
+	dataClusters, err := data.NewClusters(conn, mongoDb)
 	if err != nil {
 		fmt.Printf("ERROR: Cluster Data Manager is failed. %s\n", err.Error())
 		os.Exit(22)
@@ -105,7 +105,7 @@ func main() {
 		fmt.Printf("ERROR: Index Setup is failed. %s\n", err.Error())
 		os.Exit(23)
 	}
-	index := data.NewIndex(indexClient, strings.ReplaceAll(mongoDb, " ", "_"), mutex)
+	index := data.NewIndex(indexClient, strings.ReplaceAll(mongoDb, " ", "_"))
 
 	metadata, err := data.NewMetadata(mutex, conn, mongoDb)
 	if err != nil {

@@ -2,6 +2,7 @@ package data
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
 	"github.com/go-redis/redis/v7"
@@ -25,16 +26,17 @@ type Index interface {
 }
 
 type index struct {
-	mutex     Mutex
+	mutex *sync.Mutex
+
 	client    IndexClient
 	keyPrefix string
 }
 
-func NewIndex(client IndexClient, keyPrefix string, mutex Mutex) Index {
+func NewIndex(client IndexClient, keyPrefix string) Index {
 	return &index{
 		client:    client,
 		keyPrefix: keyPrefix,
-		mutex:     mutex,
+		mutex:     &sync.Mutex{},
 	}
 }
 
@@ -43,18 +45,18 @@ func (i *index) key(name string) string {
 }
 
 func (i *index) Add(clusterId string, sha512Hex string) error {
-	indexKey := i.key(clusterId)
-	i.mutex.Wait(indexKey)
+	i.mutex.Lock()
+	defer i.mutex.Unlock()
 
-	return i.client.HSet(indexKey, sha512Hex, clusterId).Err()
+	return i.client.HSet(i.key(clusterId), sha512Hex, clusterId).Err()
 }
 
 func (i *index) Find(clusterIds []string, sha512Hex string) (string, error) {
-	for _, clusterId := range clusterIds {
-		indexKey := i.key(clusterId)
-		i.mutex.Wait(indexKey)
+	i.mutex.Lock()
+	defer i.mutex.Unlock()
 
-		clusterIdBackup, err := i.client.HGet(indexKey, sha512Hex).Result()
+	for _, clusterId := range clusterIds {
+		clusterIdBackup, err := i.client.HGet(i.key(clusterId), sha512Hex).Result()
 		if err != nil {
 			if err != redis.Nil {
 				return "", err
@@ -67,10 +69,10 @@ func (i *index) Find(clusterIds []string, sha512Hex string) (string, error) {
 }
 
 func (i *index) Remove(clusterId string, sha512Hex string) error {
-	indexKey := i.key(clusterId)
-	i.mutex.Wait(indexKey)
+	i.mutex.Lock()
+	defer i.mutex.Unlock()
 
-	return i.client.HDel(indexKey, sha512Hex).Err()
+	return i.client.HDel(i.key(clusterId), sha512Hex).Err()
 }
 
 func (i *index) Replace(clusterId string, sha512HexList []string) error {
@@ -106,11 +108,10 @@ func (i *index) Compare(clusterId string, sha512HexList []string) (uint64, error
 }
 
 func (i index) lock(clusterId string, lockHandler func(index map[string]string) error) error {
+	i.mutex.Lock()
+	defer i.mutex.Unlock()
+
 	indexKey := i.key(clusterId)
-
-	i.mutex.Lock(indexKey)
-	defer i.mutex.UnLock(indexKey)
-
 	index, err := i.client.HGetAll(indexKey).Result()
 	if err != nil {
 		if err != redis.Nil {
