@@ -121,7 +121,7 @@ export REDIS_CONN="127.0.0.1:6379"                      # Modify the values acco
 
 export MANAGER_ADDRESS="http://127.0.0.1:9400" 
 export MONGO_CONN="mongodb://root:pass@127.0.0.1:27017" # Modify the values according to your setup
-export LOCKING_CENTER="127.0.0.1:6379"                  # Modify the values according to your setup
+export LOCKING_CENTER="127.0.0.1:22119"                 # Modify the values according to your setup
 /usr/local/bin/kertish-dfs-head
 ```
 - Give execution permission to the file `sudo chmod +x [Saved File Location]`
