@@ -18,6 +18,12 @@ they'll be used in the same cluster. Size value should be uint64. Ex: `107374182
 
 - `ROOT_PATH` (optional) : The path to store file blocks. Default: `/opt`
 
+- `CACHE_LIMIT` (optional): Small sized files can be cached for fast access. Value should be uint64 in byte format
+Default: `0` (disabled)
+
+- `CACHE_LIFETIME` (optional): Cache lifetime. When it reaches to the limit, garbage collector will free up the memory.
+Value should be uint64 in minutes. Default: `360` (6 hours)
+
 ### Data Node
 Data nodes are smart enough to sync each other. Every create and delete request will be distributed between nodes
 using the manager as a gateway. On the first run, if manager node is not accessible, it will start as stand-alone. When 
