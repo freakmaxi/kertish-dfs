@@ -56,6 +56,7 @@ Kertish-dfs farm consist of minimum
 - 1 Data Node
 - Mongo DB
 - Redis DSS
+- Locking-Center Server
 
 `Head Node` is for filesystem interaction. When the data is wanted to access, the application should
 make the request to this node. It works as REST service. Filesystem command-line tool communicate directly to 
@@ -78,14 +79,17 @@ I'll setup a farm using
 - 4 Data Nodes in 2 Clusters working as Master/Slave
 - Mongo DB
 - Redis DSS
+- Locking-Center Server
 
 Whole setup will be done on the same machine. This is just for testing purpose. In real world, you 
-will need 6 server for this setup. It is okay to keep the Mongo DB, Redis DSS and Manager Node in the same machine if
-it covers the DB and DSS expectations. 
+will need 6 servers for this setup. It is okay to keep the Mongo DB, Redis DSS, Locking-Center Server and Manager Node
+in the same machine if it covers the DB and DSS expectations. 
 
-You will not find the Mongo DB and Redis DSS setup. Please follow the instruction on their web sites.
-- [https://www.mongodb.com][Mongo DB]
-- [https://redis.io][Redis DSS]
+You will not find the Mongo DB, Redis DSS, Locking-Center Server setup. Please follow the instruction on their web
+sites.
+- [Mongo DB](https://www.mongodb.com)
+- [Redis DSS](https://redis.io)
+- [Locking-Center Server](https://github.com/freakmaxi/locking-center)
 
 #### Preperation
 
@@ -250,7 +254,3 @@ When you setup the cluster and the cluster starts taking data blocks, consider t
 the cluster will cause you data inconsistency and lost. Due to this reason, when you are creating the structure of
 your farm, pay attention to your cluster setups the most. Moving, Splitting and Joining the clusters will be introduced
 in future releases.
-
-[Mongo DB]: https://www.mongodb.com
-
-[Redis DSS]: https://redis.io

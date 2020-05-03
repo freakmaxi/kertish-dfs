@@ -24,11 +24,9 @@ Metadata of the file system will be kept in Mongo DB.
 
 - `MONGO_DATABASE` (optional) : Mongo DB name. Default: `kertish-dfs`
 
-- `REDIS_CONN` (mandatory) : Redis dss. Ex: `127.0.0.1:6379`
+- `LOCKING_CENTER` (mandatory) : Locking-Center Server. Ex: `127.0.0.1:22119`
 
 Will be used to have the stability of metadata of the file system
-
-- `REDIS_CLUSTER_MODE` : Redis cluster mode activation Ex: `true`
 
 ### File System Manipulation Requests
 
