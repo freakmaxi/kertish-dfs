@@ -3,11 +3,11 @@ package data
 import (
 	"context"
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"github.com/freakmaxi/locking-center-client-go/mutex"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -33,19 +33,20 @@ type Clusters interface {
 }
 
 const clusterCollection = "cluster"
+const clusterLockKey = "clusters"
 
 type clusters struct {
-	mutex *sync.Mutex
+	mutex mutex.LockingCenter
 
 	conn *Connection
 	col  *mongo.Collection
 }
 
-func NewClusters(conn *Connection, database string) (Clusters, error) {
+func NewClusters(conn *Connection, database string, mutex mutex.LockingCenter) (Clusters, error) {
 	dfsCol := conn.client.Database(database).Collection(clusterCollection)
 
 	c := &clusters{
-		mutex: &sync.Mutex{},
+		mutex: mutex,
 		conn:  conn,
 		col:   dfsCol,
 	}
@@ -70,8 +71,8 @@ func (c *clusters) setupIndices() error {
 }
 
 func (c *clusters) RegisterCluster(cluster *common.Cluster) error {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+	c.mutex.Lock(clusterLockKey)
+	defer c.mutex.Unlock(clusterLockKey)
 
 	filter := bson.M{"clusterId": cluster.Id}
 
@@ -94,8 +95,8 @@ func (c *clusters) UnRegisterCluster(clusterId string, clusterHandler func(clust
 		return err
 	}
 
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+	c.mutex.Lock(clusterLockKey)
+	defer c.mutex.Unlock(clusterLockKey)
 
 	if _, err := c.col.DeleteOne(c.context(), bson.M{"clusterId": clusterId}); err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -196,8 +197,8 @@ func (c *clusters) GetAll() (common.Clusters, error) {
 }
 
 func (c *clusters) Save(clusterId string, saveHandler func(cluster *common.Cluster) error) error {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+	c.mutex.Lock(clusterLockKey)
+	defer c.mutex.Unlock(clusterLockKey)
 
 	var cluster *common.Cluster
 	filter := bson.M{"clusterId": clusterId}
@@ -216,8 +217,8 @@ func (c *clusters) Save(clusterId string, saveHandler func(cluster *common.Clust
 }
 
 func (c *clusters) SaveAll(saveAllHandler func(clusters common.Clusters) error) error {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+	c.mutex.Lock(clusterLockKey)
+	defer c.mutex.Unlock(clusterLockKey)
 
 	getClustersFunc := func() (common.Clusters, error) {
 		cur, err := c.col.Find(c.context(), bson.M{})
@@ -253,16 +254,13 @@ func (c *clusters) SaveAll(saveAllHandler func(clusters common.Clusters) error) 
 
 func (c *clusters) SetNewMaster(clusterId string, masterNodeId string) error {
 	return c.Save(clusterId, func(cluster *common.Cluster) error {
-		if err := cluster.SetMaster(masterNodeId); err != nil {
-			return err
-		}
-		return nil
+		return cluster.SetMaster(masterNodeId)
 	})
 }
 
 func (c *clusters) UpdateNodes(cluster *common.Cluster) error {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
+	c.mutex.Lock(clusterLockKey)
+	defer c.mutex.Unlock(clusterLockKey)
 
 	filter := bson.M{"clusterId": cluster.Id}
 	update := bson.M{"$set": bson.M{"nodes": cluster.Nodes}}

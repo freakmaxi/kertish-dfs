@@ -11,6 +11,7 @@ import (
 	"github.com/freakmaxi/kertish-dfs/manager-node/manager"
 	"github.com/freakmaxi/kertish-dfs/manager-node/routing"
 	"github.com/freakmaxi/kertish-dfs/manager-node/services"
+	"github.com/freakmaxi/locking-center-client-go/mutex"
 )
 
 var version = "XX.X.XXXX"
@@ -71,17 +72,18 @@ func main() {
 	redisClusterMode := os.Getenv("REDIS_CLUSTER_MODE")
 	fmt.Printf("INFO: REDIS_CLUSTER_MODE: %t\n", len(redisClusterMode) > 0)
 
-	var mutexClient data.MutexClient
-	if len(redisClusterMode) == 0 {
-		mutexClient, err = data.NewMutexStandaloneClient(redisConn, redisPassword)
-	} else {
-		mutexClient, err = data.NewMutexClusterClient(strings.Split(redisConn, ","), redisPassword)
+	mutexConn := os.Getenv("LOCKING_CENTER")
+	if len(mutexConn) == 0 {
+		fmt.Println("ERROR: LOCKING_CENTER have to be specified")
+		os.Exit(15)
 	}
+	fmt.Printf("INFO: LOCKING_CENTER: %s\n", mutexConn)
+
+	m, err := mutex.NewLockingCenter(mutexConn)
 	if err != nil {
 		fmt.Printf("ERROR: Mutex Setup is failed. %s\n", err.Error())
 		os.Exit(20)
 	}
-	mutex := data.NewMutex(mutexClient)
 
 	conn, err := data.NewConnection(mongoConn)
 	if err != nil {
@@ -89,7 +91,7 @@ func main() {
 		os.Exit(21)
 	}
 
-	dataClusters, err := data.NewClusters(conn, mongoDb)
+	dataClusters, err := data.NewClusters(conn, mongoDb, m)
 	if err != nil {
 		fmt.Printf("ERROR: Cluster Data Manager is failed. %s\n", err.Error())
 		os.Exit(22)
@@ -107,7 +109,7 @@ func main() {
 	}
 	index := data.NewIndex(indexClient, strings.ReplaceAll(mongoDb, " ", "_"))
 
-	metadata, err := data.NewMetadata(mutex, conn, mongoDb)
+	metadata, err := data.NewMetadata(m, conn, mongoDb)
 	if err != nil {
 		fmt.Printf("ERROR: Metadata Manager is failed. %s\n", err.Error())
 		os.Exit(24)

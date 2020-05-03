@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
+	"github.com/freakmaxi/locking-center-client-go/mutex"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -20,12 +21,12 @@ type Metadata interface {
 const metadataCollection = "metadata"
 
 type metadata struct {
-	mutex Mutex
+	mutex mutex.LockingCenter
 	conn  *Connection
 	col   *mongo.Collection
 }
 
-func NewMetadata(mutex Mutex, conn *Connection, database string) (Metadata, error) {
+func NewMetadata(mutex mutex.LockingCenter, conn *Connection, database string) (Metadata, error) {
 	dfsCol := conn.client.Database(database).Collection(metadataCollection)
 
 	return &metadata{
@@ -55,7 +56,7 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 
 	handlerFunc := func(f *common.Folder) error {
 		m.mutex.Lock(f.Full)
-		defer m.mutex.UnLock(f.Full)
+		defer m.mutex.Unlock(f.Full)
 
 		changed, err := folderHandler(f)
 		if err != nil {
@@ -102,7 +103,7 @@ func (m *metadata) LockTree(folderHandler func(folders []*common.Folder) ([]*com
 	folders := make([]*common.Folder, 0)
 	defer func() {
 		for _, folder := range folders {
-			m.mutex.UnLock(folder.Full)
+			m.mutex.Unlock(folder.Full)
 		}
 	}()
 	for cursor.Next(m.context()) {

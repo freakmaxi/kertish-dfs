@@ -9,6 +9,7 @@ import (
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"github.com/freakmaxi/locking-center-client-go/mutex"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -24,12 +25,12 @@ type Metadata interface {
 const metadataCollection = "metadata"
 
 type metadata struct {
-	mutex Mutex
+	mutex mutex.LockingCenter
 	conn  *Connection
 	col   *mongo.Collection
 }
 
-func NewMetadata(mutex Mutex, conn *Connection, database string) (Metadata, error) {
+func NewMetadata(mutex mutex.LockingCenter, conn *Connection, database string) (Metadata, error) {
 	dfsCol := conn.db.Database(database).Collection(metadataCollection)
 
 	m := &metadata{
@@ -124,7 +125,7 @@ func (m *metadata) Save(folderPaths []string, saveHandler func(folders map[strin
 	}
 	defer func() {
 		for _, folderPath := range folderPaths {
-			m.mutex.UnLock(folderPath)
+			m.mutex.Unlock(folderPath)
 		}
 	}()
 
