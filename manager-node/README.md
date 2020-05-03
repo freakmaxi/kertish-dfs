@@ -22,7 +22,7 @@ Cluster and Data node setup and information will be kept in Mongo DB.
 
 - `REDIS_CONN` (mandatory) : Redis dss. Ex: `127.0.0.1:6379`
 
-Will be used to have the stability of cluster and data node setup and file indexing information.
+Will be used to index file information.
 
 - `REDIS_CLUSTER_MODE` : Redis cluster mode activation Ex: `true`
 
