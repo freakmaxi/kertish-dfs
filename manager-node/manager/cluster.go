@@ -403,6 +403,10 @@ func (c *cluster) Find(sha512Hex string, mapType common.MapType) (string, string
 	clusterMap := make(map[string]string)
 
 	for _, cluster := range clusters {
+		if cluster.Paralyzed {
+			return "", "", errors.ErrNoAvailableClusterNode
+		}
+
 		var node *common.Node
 
 		switch mapType {

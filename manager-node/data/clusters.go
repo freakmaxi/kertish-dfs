@@ -263,7 +263,12 @@ func (c *clusters) UpdateNodes(cluster *common.Cluster) error {
 	defer c.mutex.Unlock(clusterLockKey)
 
 	filter := bson.M{"clusterId": cluster.Id}
-	update := bson.M{"$set": bson.M{"nodes": cluster.Nodes}}
+	update := bson.M{
+		"$set": bson.M{
+			"nodes":     cluster.Nodes,
+			"paralyzed": cluster.Paralyzed,
+		},
+	}
 
 	_, err := c.col.UpdateOne(c.context(), filter, update)
 	return err

@@ -285,7 +285,7 @@ func (c *cluster) findCluster(sha512Hex string) (string, string, error) {
 	}
 
 	if res.StatusCode != 200 {
-		if res.StatusCode == 404 {
+		if res.StatusCode == 404 || res.StatusCode == 503 {
 			return "", "", errors.ErrNoAvailableActionNode
 		}
 		return "", "", fmt.Errorf("cluster manager request is failed (findCluster): %d - %s", res.StatusCode, common.NewErrorFromReader(res.Body).Message)

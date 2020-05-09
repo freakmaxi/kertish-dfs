@@ -83,9 +83,18 @@ func (h *healthTracker) Start() {
 func (h *healthTracker) checkHealth(wg *sync.WaitGroup, cluster *common.Cluster) {
 	defer wg.Done()
 
+	cluster.Paralyzed = false
+
 	if !h.checkMasterAlive(cluster) {
 		newMaster := h.findBestMasterNodeCandidate(cluster)
-		if newMaster != nil && strings.Compare(newMaster.Id, cluster.Master().Id) != 0 {
+		if newMaster == nil {
+			cluster.Paralyzed = true
+			_ = h.clusters.UpdateNodes(cluster)
+
+			return
+		}
+
+		if strings.Compare(newMaster.Id, cluster.Master().Id) != 0 {
 			if err := h.clusters.SetNewMaster(cluster.Id, newMaster.Id); err == nil {
 				_ = cluster.SetMaster(newMaster.Id)
 				h.notifyNewMasterInCluster(cluster)

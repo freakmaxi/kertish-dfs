@@ -19,6 +19,11 @@ func (c *cluster) createReservationMap(size uint64, clusters common.Clusters) (*
 		sort.Sort(clusters)
 		cluster := clusters[0]
 
+		if cluster.Paralyzed {
+			chunks = chunks[1:]
+			continue
+		}
+
 		if cluster.Available() < uint64(chunk.Size) {
 			return nil, errors.ErrNoDiskSpace
 		}

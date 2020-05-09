@@ -91,9 +91,9 @@ func (d *dataNode) result() bool {
 	return strings.Compare("+", string(b)) == 0
 }
 
-func (c *dataNode) hashAsHex() (string, error) {
+func (d *dataNode) hashAsHex() (string, error) {
 	h := make([]byte, 32)
-	total, err := io.ReadAtLeast(c.conn, h, len(h))
+	total, err := io.ReadAtLeast(d.conn, h, len(h))
 	if err != nil {
 		return "", err
 	}
@@ -457,6 +457,10 @@ func (d *dataNode) Ping() int64 {
 		return -1
 	}
 	defer d.close()
+
+	if err := d.conn.SetDeadline(time.Now().Add(time.Second * 5)); err != nil {
+		return -1
+	}
 
 	if _, err := d.conn.Write([]byte(commandPing)); err != nil {
 		return -1
