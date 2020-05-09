@@ -20,6 +20,8 @@ type Metadata interface {
 	Lock(folderPaths []string, folderHandler func(folders []*common.Folder) error) error
 	LockTree(folderPath string, includeItself bool, reverseSort bool, folderHandler func(folders []*common.Folder) error) error
 	Save(folderPaths []string, saveHandler func(folders map[string]*common.Folder) error) error
+
+	MatchTree(folderPaths []string) ([]string, error)
 }
 
 const metadataCollection = "metadata"
@@ -149,6 +151,26 @@ func (m *metadata) Save(folderPaths []string, saveHandler func(folders map[strin
 	}
 
 	return m.overwrite(folders)
+}
+
+func (m *metadata) MatchTree(folderPaths []string) ([]string, error) {
+	folderPaths = m.cleanDuplicates(folderPaths)
+
+	matches := make([]string, 0)
+	for _, folderPath := range folderPaths {
+		m.mutex.Wait(folderPath)
+
+		if err := m.col.FindOne(m.context(), bson.M{"full": folderPath}).Err(); err != nil {
+			if err == mongo.ErrNoDocuments {
+				break
+			}
+			return nil, err
+		}
+
+		matches = append(matches, folderPath)
+	}
+
+	return matches, nil
 }
 
 func (m *metadata) overwrite(folders map[string]*common.Folder) error {

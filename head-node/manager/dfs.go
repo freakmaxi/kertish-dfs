@@ -40,13 +40,19 @@ func (d *dfs) CreateFolder(folderPath string) error {
 	folderPath = common.CorrectPath(folderPath)
 	folderTree := common.PathTree(folderPath)
 
+	matchFolderTree, err := d.metadata.MatchTree(folderTree)
+	if err != nil {
+		return err
+	}
+	folderTree = d.filterFolderTree(matchFolderTree, folderTree)
+
 	return d.metadata.Save(folderTree, func(folders map[string]*common.Folder) error {
 		folder := folders[folderPath]
 		if folder != nil {
 			return os.ErrExist
 		}
 
-		if _, err := d.createFolderTree(folderPath, folders); err != nil {
+		if _, err := d.createFolderTree(folderTree[0], folderPath, folders); err != nil {
 			return err
 		}
 		return nil
@@ -63,6 +69,12 @@ func (d *dfs) CreateFile(path string, mime string, size uint64, contentReader io
 	}
 	folderTree := common.PathTree(folderPath)
 
+	matchFolderTree, err := d.metadata.MatchTree(folderTree)
+	if err != nil {
+		return err
+	}
+	folderTree = d.filterFolderTree(matchFolderTree, folderTree)
+
 	var folder *common.Folder
 	var file *common.File
 
@@ -71,7 +83,7 @@ func (d *dfs) CreateFile(path string, mime string, size uint64, contentReader io
 
 		folder = folders[folderPath]
 		if folder == nil {
-			folder, err = d.createFolderTree(folderPath, folders)
+			folder, err = d.createFolderTree(folderTree[0], folderPath, folders)
 			if err != nil {
 				return err
 			}
@@ -254,7 +266,7 @@ func (d *dfs) moveFolder(sources []string, target string, overwrite bool) error 
 			return os.ErrExist
 		} else {
 			var err error
-			targetFolder, err = d.createFolderTree(target, folders)
+			targetFolder, err = d.createFolderTree("/", target, folders)
 			if err != nil {
 				return err
 			}
@@ -339,7 +351,7 @@ func (d *dfs) moveFile(sources []string, target string, overwrite bool) error {
 		targetFolder := folders[target]
 		if targetFolder == nil {
 			var err error
-			targetFolder, err = d.createFolderTree(targetParent, folders)
+			targetFolder, err = d.createFolderTree("/", targetParent, folders)
 			if err != nil {
 				return err
 			}
@@ -421,7 +433,7 @@ func (d *dfs) copyFolder(sources []string, target string, overwrite bool) error 
 			return os.ErrExist
 		} else {
 			var err error
-			targetFolder, err = d.createFolderTree(target, folders)
+			targetFolder, err = d.createFolderTree("/", target, folders)
 			if err != nil {
 				return err
 			}
@@ -513,7 +525,7 @@ func (d *dfs) copyFile(sources []string, target string, overwrite bool) error {
 		targetFolder := folders[target]
 		if targetFolder == nil {
 			var err error
-			targetFolder, err = d.createFolderTree(targetParent, folders)
+			targetFolder, err = d.createFolderTree("/", targetParent, folders)
 			if err != nil {
 				return err
 			}
@@ -542,11 +554,33 @@ func (d *dfs) copyFile(sources []string, target string, overwrite bool) error {
 	return nil
 }
 
-func (d *dfs) createFolderTree(folderPath string, folders map[string]*common.Folder) (*common.Folder, error) {
+func (d *dfs) filterFolderTree(matches []string, folderTree []string) []string {
+	if len(matches) == 0 {
+		return folderTree
+	}
+
+	for len(folderTree) > 0 {
+		if strings.Compare(matches[len(matches)-1], folderTree[0]) == 0 {
+			break
+		}
+		folderTree = folderTree[1:]
+	}
+
+	return folderTree
+}
+
+func (d *dfs) createFolderTree(base string, folderPath string, folders map[string]*common.Folder) (*common.Folder, error) {
 	folderTree := common.PathTree(folderPath)
 
 	folder := folders[folderPath]
 	if folder == nil {
+		for len(folderTree) > 0 {
+			if strings.Compare(base, folderTree[0]) == 0 {
+				break
+			}
+			folderTree = folderTree[1:]
+		}
+
 		var parentFolder *common.Folder
 		for _, k := range folderTree {
 			if folders[k] != nil {
