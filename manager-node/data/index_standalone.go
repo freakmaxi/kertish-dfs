@@ -1,18 +1,20 @@
 package data
 
-import "github.com/go-redis/redis/v7"
+import "github.com/mediocregopher/radix/v3"
 
 type indexStandalone struct {
-	client *redis.Client
+	client *radix.Pool
 }
 
 func NewIndexStandaloneClient(address string, password string) (IndexClient, error) {
-	client := redis.NewClient(&redis.Options{
-		Addr:     address,
-		Password: password,
-	})
-
-	_, err := client.Ping().Result()
+	connFunc := func(network string, addr string) (radix.Conn, error) {
+		return radix.Dial(
+			network,
+			addr,
+			radix.DialAuthPass(password),
+		)
+	}
+	client, err := radix.NewPool("tcp", address, 10, radix.PoolConnFunc(connFunc))
 	if err != nil {
 		return nil, err
 	}
@@ -22,28 +24,65 @@ func NewIndexStandaloneClient(address string, password string) (IndexClient, err
 	}, nil
 }
 
-func (r indexStandalone) Del(keys ...string) *redis.IntCmd {
-	return r.client.Del(keys...)
+func (r indexStandalone) Del(keys ...string) error {
+	return r.client.Do(radix.Cmd(nil, "DEL", keys...))
 }
 
-func (r indexStandalone) HSet(key, field string, value interface{}) *redis.IntCmd {
-	return r.client.HSet(key, field, value)
+func (r indexStandalone) HSet(key, field string, value string) error {
+	return r.client.Do(radix.Cmd(nil, "HSET", key, field, value))
 }
 
-func (r indexStandalone) HGet(key, field string) *redis.StringCmd {
-	return r.client.HGet(key, field)
+func (r indexStandalone) HGet(key, field string) (*string, error) {
+	var result string
+	value := radix.MaybeNil{
+		Rcv: &result,
+	}
+	err := r.client.Do(radix.Cmd(&value, "HGET", key, field))
+	if err != nil {
+		return nil, err
+	}
+	if value.Nil {
+		return nil, nil
+	}
+	return &result, nil
 }
 
-func (r indexStandalone) HDel(key string, fields ...string) *redis.IntCmd {
-	return r.client.HDel(key, fields...)
+func (r indexStandalone) HDel(key string, fields ...string) error {
+	args := make([]string, 0)
+	args = append(args, key)
+	args = append(args, fields...)
+
+	return r.client.Do(radix.Cmd(nil, "HDEL", args...))
 }
 
-func (r indexStandalone) HGetAll(key string) *redis.StringStringMapCmd {
-	return r.client.HGetAll(key)
+func (r indexStandalone) HGetAll(key string) (map[string]string, error) {
+	var value map[string]string
+	err := r.client.Do(radix.Cmd(&value, "HGETALL", key))
+	if err != nil {
+		return nil, err
+	}
+	return value, nil
 }
 
-func (r indexStandalone) HMSet(key string, values ...interface{}) *redis.BoolCmd {
-	return r.client.HMSet(key, values...)
+func (r indexStandalone) HMSet(key string, values map[string]string) error {
+	args := make([]string, 0)
+	args = append(args, key)
+	for k, v := range values {
+		args = append(args, k)
+		args = append(args, v)
+
+		if len(args) > multiSetStepLimit {
+			if err := r.client.Do(radix.Cmd(nil, "HMSET", args...)); err != nil {
+				return err
+			}
+			args = make([]string, 0)
+			args = append(args, key)
+		}
+	}
+	if len(args) == 1 {
+		return nil
+	}
+	return r.client.Do(radix.Cmd(nil, "HMSET", args...))
 }
 
 var _ IndexClient = &indexStandalone{}

@@ -5,16 +5,17 @@ import (
 	"sync"
 
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
-	"github.com/go-redis/redis/v7"
 )
 
+const multiSetStepLimit = 50000
+
 type IndexClient interface {
-	Del(keys ...string) *redis.IntCmd
-	HSet(key, field string, value interface{}) *redis.IntCmd
-	HGet(key, field string) *redis.StringCmd
-	HDel(key string, fields ...string) *redis.IntCmd
-	HGetAll(key string) *redis.StringStringMapCmd
-	HMSet(key string, values ...interface{}) *redis.BoolCmd
+	Del(keys ...string) error
+	HSet(key, field string, value string) error
+	HGet(key, field string) (*string, error)
+	HDel(key string, fields ...string) error
+	HGetAll(key string) (map[string]string, error)
+	HMSet(key string, values map[string]string) error
 }
 
 type Index interface {
@@ -48,7 +49,7 @@ func (i *index) Add(clusterId string, sha512Hex string) error {
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
 
-	return i.client.HSet(i.key(clusterId), sha512Hex, clusterId).Err()
+	return i.client.HSet(i.key(clusterId), sha512Hex, clusterId)
 }
 
 func (i *index) Find(clusterIds []string, sha512Hex string) (string, error) {
@@ -56,14 +57,14 @@ func (i *index) Find(clusterIds []string, sha512Hex string) (string, error) {
 	defer i.mutex.Unlock()
 
 	for _, clusterId := range clusterIds {
-		clusterIdBackup, err := i.client.HGet(i.key(clusterId), sha512Hex).Result()
+		clusterIdBackup, err := i.client.HGet(i.key(clusterId), sha512Hex)
 		if err != nil {
-			if err != redis.Nil {
-				return "", err
-			}
+			return "", err
+		}
+		if clusterIdBackup == nil {
 			continue
 		}
-		return clusterIdBackup, nil
+		return *clusterIdBackup, nil
 	}
 	return "", errors.ErrNotFound
 }
@@ -72,7 +73,7 @@ func (i *index) Remove(clusterId string, sha512Hex string) error {
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
 
-	return i.client.HDel(i.key(clusterId), sha512Hex).Err()
+	return i.client.HDel(i.key(clusterId), sha512Hex)
 }
 
 func (i *index) Replace(clusterId string, sha512HexList []string) error {
@@ -112,11 +113,11 @@ func (i index) lock(clusterId string, lockHandler func(index map[string]string) 
 	defer i.mutex.Unlock()
 
 	indexKey := i.key(clusterId)
-	index, err := i.client.HGetAll(indexKey).Result()
+	index, err := i.client.HGetAll(indexKey)
 	if err != nil {
-		if err != redis.Nil {
-			return err
-		}
+		return err
+	}
+	if index == nil {
 		index = make(map[string]string, 0)
 	}
 
@@ -124,20 +125,12 @@ func (i index) lock(clusterId string, lockHandler func(index map[string]string) 
 		return err
 	}
 
-	indexShadow := make([]interface{}, len(index)*2)
-	shadowIndex := 0
-	for k, v := range index {
-		indexShadow[shadowIndex] = k
-		indexShadow[shadowIndex+1] = v
-		shadowIndex += 2
-	}
-
-	if err := i.client.Del(indexKey).Err(); err != nil && err != redis.Nil {
+	if err := i.client.Del(indexKey); err != nil {
 		return err
 	}
 
-	if len(indexShadow) > 0 {
-		return i.client.HMSet(indexKey, indexShadow...).Err()
+	if len(index) > 0 {
+		return i.client.HMSet(indexKey, index)
 	}
 
 	return nil
