@@ -105,6 +105,7 @@ func (m *metadata) LockTree(folderPath string, includeItself bool, reverseSort b
 		}
 		return err
 	}
+	defer cursor.Close(m.context())
 
 	folders := make([]*common.Folder, 0)
 	for cursor.Next(m.context()) {

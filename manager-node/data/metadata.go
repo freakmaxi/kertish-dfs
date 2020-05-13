@@ -99,6 +99,7 @@ func (m *metadata) LockTree(folderHandler func(folders []*common.Folder) ([]*com
 		}
 		return err
 	}
+	defer cursor.Close(m.context())
 
 	folders := make([]*common.Folder, 0)
 	defer func() {
