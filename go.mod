@@ -3,7 +3,7 @@ module github.com/freakmaxi/kertish-dfs
 go 1.14
 
 require (
-	github.com/freakmaxi/locking-center-client-go v0.1.1
+	github.com/freakmaxi/locking-center-client-go v0.1.2
 	github.com/gdamore/tcell v1.3.0
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/mux v1.7.4
