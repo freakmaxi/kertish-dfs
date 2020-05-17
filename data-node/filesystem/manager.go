@@ -20,6 +20,7 @@ type Manager interface {
 	Sync(sourceAddr string) error
 	Wipe() error
 	NodeSize() uint64
+	Used() (uint64, error)
 }
 
 type manager struct {
@@ -315,6 +316,29 @@ func (m *manager) Wipe() error {
 
 func (m *manager) NodeSize() uint64 {
 	return m.nodeSize
+}
+
+func (m *manager) Used() (uint64, error) {
+	if err := m.prepareRoot(); err != nil {
+		return 0, err
+	}
+
+	used := uint64(0)
+	if err := filepath.Walk(m.rootPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && len(info.Name()) == 64 {
+			if size := info.Size(); size > 0 {
+				used = uint64(size)
+			}
+		}
+		return nil
+	}); err != nil {
+		return 0, err
+	}
+
+	return used, nil
 }
 
 func (m *manager) prepareRoot() error {

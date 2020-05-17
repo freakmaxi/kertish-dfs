@@ -132,6 +132,8 @@ func (c *commander) process(command string, conn net.Conn) error {
 		return c.wipe(conn)
 	case "SIZE":
 		return c.size(conn)
+	case "USED":
+		return c.used(conn)
 	case "PING":
 		return nil
 	default:
@@ -556,6 +558,19 @@ func (c *commander) size(conn net.Conn) error {
 	}
 
 	return c.writeBinaryWithTimeout(conn, c.fs.NodeSize())
+}
+
+func (c *commander) used(conn net.Conn) error {
+	used, err := c.fs.Used()
+	if err != nil {
+		return err
+	}
+
+	if err := c.writeWithTimeout(conn, []byte{'+'}); err != nil {
+		return err
+	}
+
+	return c.writeBinaryWithTimeout(conn, used)
 }
 
 var _ Commander = &commander{}

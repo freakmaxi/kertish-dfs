@@ -241,7 +241,22 @@ func (c *cluster) SyncClusters() error {
 	if err != nil {
 		return err
 	}
-	return c.syncClusters(clusters)
+
+	for len(clusters) > 0 {
+		cluster := clusters[0]
+
+		if err := c.syncCluster(cluster); err != nil {
+			if err == errors.ErrPing {
+				clusters = append(clusters[1:], cluster)
+				continue
+			}
+			return err
+		}
+
+		clusters = clusters[1:]
+	}
+
+	return nil
 }
 
 func (c *cluster) SyncCluster(clusterId string) error {
@@ -249,68 +264,65 @@ func (c *cluster) SyncCluster(clusterId string) error {
 	if err != nil {
 		return err
 	}
-	return c.syncClusters(common.Clusters{cluster})
+	return c.syncCluster(cluster)
 }
 
-func (c *cluster) syncClusters(clusters common.Clusters) error {
-	hasError := false
+func (c *cluster) syncCluster(cluster *common.Cluster) error {
+	if err := c.clusters.SetFreeze(cluster.Id, true); err != nil {
+		return err
+	}
+	defer func() {
+		_ = c.clusters.ResetStats(cluster)
+
+		if err := c.clusters.SetFreeze(cluster.Id, false); err != nil {
+			fmt.Printf("ERROR: Syncing error: unfreezing is failed for %s\n", cluster.Id)
+		}
+	}()
+
+	masterNode := cluster.Master()
+	slaveNodes := cluster.Slaves()
+
+	mdn, err := cluster2.NewDataNode(masterNode.Address)
+	if err != nil || !mdn.Join(cluster.Id, masterNode.Id, "") {
+		return errors.ErrJoin
+	}
+
+	cluster.Reservations = make(map[string]uint64)
+	cluster.Used, _ = mdn.Used()
+
+	if len(slaveNodes) == 0 {
+		return nil
+	}
+
+	sha512HexList := mdn.SyncList()
+	if sha512HexList == nil {
+		fmt.Printf("ERROR: Syncing error: node (%s) didn't response for SyncList\n", masterNode.Id)
+		return errors.ErrPing
+	}
+
+	if err := c.index.Replace(cluster.Id, sha512HexList); err != nil {
+		fmt.Printf("ERROR: Index replacement error: %s\n", err.Error())
+		return errors.ErrPing
+	}
 
 	wg := &sync.WaitGroup{}
-	for len(clusters) > 0 {
-		cluster := clusters[0]
+	for _, slaveNode := range slaveNodes {
+		wg.Add(1)
+		go func(wg *sync.WaitGroup, mN *common.Node, sN *common.Node) {
+			defer wg.Done()
 
-		masterNode := cluster.Master()
-		slaveNodes := cluster.Slaves()
+			sdn, err := cluster2.NewDataNode(sN.Address)
+			if err != nil || !sdn.Join(cluster.Id, sN.Id, masterNode.Address) {
+				fmt.Printf("ERROR: Syncing error: %s\n", errors.ErrJoin.Error())
+				return
+			}
 
-		mdn, err := cluster2.NewDataNode(masterNode.Address)
-		if err != nil || !mdn.Join(cluster.Id, masterNode.Id, "") {
-			return errors.ErrJoin
-		}
-		if len(slaveNodes) == 0 {
-			clusters = clusters[1:]
-			continue
-		}
-
-		sha512HexList := mdn.SyncList()
-		if sha512HexList == nil {
-			fmt.Printf("ERROR: Syncing error: node (%s) didn't response for SyncList\n", masterNode.Id)
-			clusters = append(clusters[1:], cluster)
-			continue
-		}
-
-		if err := c.index.Replace(cluster.Id, sha512HexList); err != nil {
-			fmt.Printf("ERROR: Index replacement error: %s\n", err.Error())
-
-			clusters = append(clusters[1:], cluster)
-			continue
-		}
-
-		for _, slaveNode := range slaveNodes {
-			wg.Add(1)
-			go func(wg *sync.WaitGroup, mN *common.Node, sN *common.Node) {
-				defer wg.Done()
-
-				sdn, err := cluster2.NewDataNode(sN.Address)
-				if err != nil || !sdn.Join(cluster.Id, sN.Id, masterNode.Address) {
-					fmt.Printf("ERROR: Syncing error: %s\n", errors.ErrJoin.Error())
-					hasError = true
-					return
-				}
-
-				if !sdn.SyncFull(mN.Address) {
-					fmt.Printf("ERROR: Syncing node (%s) is failed. Source: %s\n", sN.Id, mN.Address)
-					hasError = true
-				}
-			}(wg, masterNode, slaveNode)
-		}
-
-		clusters = clusters[1:]
+			if !sdn.SyncFull(mN.Address) {
+				fmt.Printf("ERROR: Syncing node (%s) is failed. Source: %s\n", sN.Id, mN.Address)
+			}
+		}(wg, masterNode, slaveNode)
 	}
 	wg.Wait()
-
-	if hasError {
-		return fmt.Errorf("syncing can not continue because of data node errors")
-	}
 
 	return nil
 }

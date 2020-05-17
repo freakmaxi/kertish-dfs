@@ -70,6 +70,10 @@ func (h *healthTracker) Start() {
 				}
 
 				for _, cluster := range clusters {
+					if cluster.Frozen {
+						continue
+					}
+
 					wg.Add(1)
 					go h.checkHealth(wg, cluster)
 				}

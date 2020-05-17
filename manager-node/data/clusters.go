@@ -28,6 +28,8 @@ type Clusters interface {
 
 	SetNewMaster(clusterId string, nodeId string) error
 	UpdateNodes(cluster *common.Cluster) error
+	ResetStats(cluster *common.Cluster) error
+	SetFreeze(clusterId string, frozen bool) error
 
 	ClusterIdOf(nodeId string) (*string, error)
 }
@@ -267,6 +269,38 @@ func (c *clusters) UpdateNodes(cluster *common.Cluster) error {
 		"$set": bson.M{
 			"nodes":     cluster.Nodes,
 			"paralyzed": cluster.Paralyzed,
+		},
+	}
+
+	_, err := c.col.UpdateOne(c.context(), filter, update)
+	return err
+}
+
+func (c *clusters) ResetStats(cluster *common.Cluster) error {
+	c.mutex.Lock(clusterLockKey)
+	defer c.mutex.Unlock(clusterLockKey)
+
+	filter := bson.M{"clusterId": cluster.Id}
+	update := bson.M{
+		"$set": bson.M{
+			"reservations": cluster.Reservations,
+			"used":         cluster.Used,
+		},
+	}
+
+	_, err := c.col.UpdateOne(c.context(), filter, update)
+	return err
+}
+
+func (c *clusters) SetFreeze(clusterId string, frozen bool) error {
+	c.mutex.Lock(clusterLockKey)
+	defer c.mutex.Unlock(clusterLockKey)
+
+	filter := bson.M{"clusterId": clusterId}
+	update := bson.M{
+		"$set": bson.M{
+			"paralyzed": true,
+			"frozen":    frozen,
 		},
 	}
 

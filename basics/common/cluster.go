@@ -14,6 +14,7 @@ type Cluster struct {
 	Nodes        NodeList          `json:"nodes"`
 	Reservations map[string]uint64 `json:"reservations"`
 	Paralyzed    bool              `json:"paralyzed"`
+	Frozen       bool              `json:"frozen"`
 }
 
 type Clusters []*Cluster

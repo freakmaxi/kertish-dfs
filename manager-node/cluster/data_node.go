@@ -26,6 +26,7 @@ const commandSyncList = "SYLS"
 const commandSyncFull = "SYFL"
 const commandPing = "PING"
 const commandSize = "SIZE"
+const commandUsed = "USED"
 
 type DataNode interface {
 	Create(data []byte) (string, error)
@@ -45,6 +46,7 @@ type DataNode interface {
 
 	Ping() int64
 	Size() (uint64, error)
+	Used() (uint64, error)
 
 	Clone() DataNode
 }
@@ -497,6 +499,32 @@ func (d *dataNode) Size() (uint64, error) {
 	}
 
 	return size, nil
+}
+
+func (d *dataNode) Used() (uint64, error) {
+	if err := d.connect(); err != nil {
+		return 0, err
+	}
+	defer d.close()
+
+	if _, err := d.conn.Write([]byte(commandUsed)); err != nil {
+		return 0, err
+	}
+
+	if !d.result() {
+		return 0, fmt.Errorf("data node refused the used request")
+	}
+
+	var used uint64
+	if err := binary.Read(d.conn, binary.LittleEndian, &used); err != nil {
+		return 0, err
+	}
+
+	if !d.result() {
+		return 0, fmt.Errorf("used command is failed on data node")
+	}
+
+	return used, nil
 }
 
 func (d *dataNode) Clone() DataNode {
