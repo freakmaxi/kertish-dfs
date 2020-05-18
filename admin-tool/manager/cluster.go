@@ -282,8 +282,7 @@ func GetClusters(managerAddr []string, clusterId string) error {
 			fmt.Printf("      Data Node: %s %s -> %s\n", n.Address, mode, n.Id)
 		}
 		fmt.Printf("      Size:      %d (%d Gb)\n", cluster.Size, cluster.Size/(1024*1024*1024))
-		available := cluster.Size - cluster.Used
-		fmt.Printf("      Available: %d (%d Gb)\n", available, available/(1024*1024*1024))
+		fmt.Printf("      Available: %d (%d Gb)\n", cluster.Available(), cluster.Available()/(1024*1024*1024))
 		state := "Online"
 		if cluster.Paralyzed {
 			state = "Paralyzed"
