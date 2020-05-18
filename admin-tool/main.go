@@ -68,6 +68,12 @@ func main() {
 		default:
 			fmt.Println("node removal is canceled")
 		}
+	case "unFreeze":
+		if err := manager.Unfreeze([]string{fc.managerAddress}, fc.unfreeze); err != nil {
+			fmt.Printf("ERROR: %s\n", err.Error())
+			os.Exit(45)
+		}
+		fmt.Println("ok.")
 	case "syncClusters":
 		anim := common.NewAnimation(terminal.NewStdOut(), "clusters are in sync process...")
 		anim.Start()

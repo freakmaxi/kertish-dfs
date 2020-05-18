@@ -42,6 +42,7 @@ type flagContainer struct {
 	deleteCluster    string
 	addNode          addNode
 	removeNode       string
+	unfreeze         []string
 	syncClusters     bool
 	checkConsistency bool
 	getCluster       string
@@ -84,6 +85,11 @@ func (f *flagContainer) Define(v string) int {
 	if len(f.removeNode) != 0 {
 		activeCount++
 		f.active = "removeNode"
+	}
+
+	if len(f.unfreeze) != 0 {
+		activeCount++
+		f.active = "unFreeze"
 	}
 
 	if f.syncClusters {
@@ -147,6 +153,9 @@ Ex: clusterId=192.168.0.1:9430,192.168.0.2:9430`)
 	var removeNode string
 	set.StringVar(&removeNode, `remove-node`, "", `Removes the node from its cluster.`)
 
+	var unFreeze string
+	set.StringVar(&unFreeze, `unfreeze`, "", `Unfreeze the frozen clusters to accept data. Ex: clusterId,clusterId,... or *`)
+
 	set.Bool(`sync-clusters`, false, `Synchronise all clusters and their nodes for data consistency`)
 	set.Bool(`check-consistency`, false, `Check file chunk node distribution consistency in metadata and mark as zombie for the broken ones`)
 	set.Bool(`help`, false, `Print this usage documentation`)
@@ -159,12 +168,18 @@ Ex: clusterId=192.168.0.1:9430,192.168.0.2:9430`)
 		cc = []string{}
 	}
 
+	uf := strings.Split(unFreeze, ",")
+	if strings.Compare(unFreeze, "*") == 0 || len(uf) > 0 && len(uf[0]) == 0 {
+		uf = []string{}
+	}
+
 	fc := &flagContainer{
 		managerAddress:   managerAddress,
 		createCluster:    cc,
 		deleteCluster:    deleteCluster,
 		addNode:          addNode,
 		removeNode:       removeNode,
+		unfreeze:         uf,
 		syncClusters:     strings.Index(strings.Join(os.Args, " "), "sync-clusters") > -1,
 		checkConsistency: strings.Index(strings.Join(os.Args, " "), "check-consistency") > -1,
 		getCluster:       getCluster,

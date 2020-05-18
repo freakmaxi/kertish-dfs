@@ -39,7 +39,7 @@ func CreateCluster(managerAddr []string, addresses []string) error {
 	if err := json.NewDecoder(res.Body).Decode(&c); err != nil {
 		return err
 	}
-	fmt.Printf("Cluster is created: %s\n", c.Id)
+	fmt.Printf("Cluster is created as frozen: %s\n", c.Id)
 	for _, n := range c.Nodes {
 		mode := "SLAVE"
 		if n.Master {
@@ -140,6 +140,32 @@ func RemoveNode(managerAddr []string, nodeId string) error {
 	return nil
 }
 
+func Unfreeze(managerAddr []string, clusterIds []string) error {
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Action", "unfreeze")
+	req.Header.Set("X-Options", strings.Join(clusterIds, ","))
+
+	res, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
+	}
+
+	if res.StatusCode != 200 {
+		var e common.Error
+		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
+			return err
+		}
+		return fmt.Errorf(e.Message)
+	}
+
+	fmt.Println("Clusters are unfrozen...")
+
+	return nil
+}
+
 func SyncClusters(managerAddr []string) error {
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
 	if err != nil {
@@ -212,7 +238,12 @@ func GetClusters(managerAddr []string, clusterId string) error {
 		return err
 	}
 	for _, cluster := range c {
-		fmt.Printf("Cluster Details: %s\n", cluster.Id)
+		frozen := ""
+		if cluster.Frozen {
+			frozen = " (FROZEN)"
+		}
+
+		fmt.Printf("Cluster Details: %s%s\n", cluster.Id, frozen)
 		for _, n := range cluster.Nodes {
 			mode := "SLAVE"
 			if n.Master {
