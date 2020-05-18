@@ -50,6 +50,8 @@ func (m *managerRouter) handleSync(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.WriteHeader(500)
 	}
+	fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())
+
 	e := common.NewError(100, err.Error())
 	if err := json.NewEncoder(w).Encode(e); err != nil {
 		fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())
@@ -100,6 +102,8 @@ func (m *managerRouter) handleClusters(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.WriteHeader(500)
 	}
+	fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())
+
 	e := common.NewError(110, err.Error())
 	if err := json.NewEncoder(w).Encode(e); err != nil {
 		fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())
@@ -124,6 +128,8 @@ func (m *managerRouter) handleFind(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.WriteHeader(500)
 	}
+	fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())
+
 	e := common.NewError(120, err.Error())
 	if err := json.NewEncoder(w).Encode(e); err != nil {
 		fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())

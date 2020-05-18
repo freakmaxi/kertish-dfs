@@ -1,6 +1,7 @@
 package routing
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"strconv"
@@ -42,6 +43,7 @@ func (n *nodeRouter) handleHandshake(w http.ResponseWriter, r *http.Request) {
 		} else {
 			w.WriteHeader(500)
 		}
+		fmt.Printf("ERROR: Post request is failed. %s\n", err.Error())
 		return
 	}
 
@@ -64,6 +66,7 @@ func (n *nodeRouter) handleSyncCreate(w http.ResponseWriter, r *http.Request) {
 		} else {
 			w.WriteHeader(500)
 		}
+		fmt.Printf("ERROR: Post request is failed. %s\n", err.Error())
 		return
 	}
 

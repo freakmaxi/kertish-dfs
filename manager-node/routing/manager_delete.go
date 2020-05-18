@@ -49,6 +49,8 @@ func (m *managerRouter) handleUnRegister(w http.ResponseWriter, r *http.Request)
 			} else {
 				w.WriteHeader(500)
 			}
+			fmt.Printf("ERROR: Delete request is failed. %s\n", err.Error())
+
 			e := common.NewError(300, err.Error())
 			if err := json.NewEncoder(w).Encode(e); err != nil {
 				fmt.Printf("ERROR: Delete request is failed. %s\n", err.Error())
@@ -64,6 +66,8 @@ func (m *managerRouter) handleUnRegister(w http.ResponseWriter, r *http.Request)
 			} else {
 				w.WriteHeader(500)
 			}
+			fmt.Printf("ERROR: Delete request is failed. %s\n", err.Error())
+
 			e := common.NewError(350, err.Error())
 			if err := json.NewEncoder(w).Encode(e); err != nil {
 				fmt.Printf("ERROR: Delete request is failed. %s\n", err.Error())
@@ -80,6 +84,7 @@ func (m *managerRouter) handleUnFreeze(w http.ResponseWriter, r *http.Request) {
 
 	if err := m.manager.UnFreezeClusters(clusterIds); err != nil {
 		w.WriteHeader(500)
+		fmt.Printf("ERROR: Unfreeze request is failed. %s\n", err.Error())
 
 		e := common.NewError(355, err.Error())
 		if err := json.NewEncoder(w).Encode(e); err != nil {
