@@ -26,6 +26,7 @@ type Cluster interface {
 	SyncClusters() error
 	SyncCluster(clusterId string) error
 	CheckConsistency() error
+	MoveCluster(sourceClusterId string, targetClusterId string) error
 
 	GetClusters() (common.Clusters, error)
 	GetCluster(clusterId string) (*common.Cluster, error)
@@ -392,6 +393,79 @@ func (c *cluster) CheckConsistency() error {
 		}
 		return changed, nil
 	})
+}
+
+func (c *cluster) MoveCluster(sourceClusterId string, targetClusterId string) (e error) {
+	sourceCluster, err := c.clusters.Get(sourceClusterId)
+	if err != nil {
+		return err
+	}
+
+	targetCluster, err := c.clusters.Get(targetClusterId)
+	if err != nil {
+		return err
+	}
+
+	if sourceCluster.Used > 0 && sourceCluster.Frozen {
+		return errors.ErrNotAvailableForClusterAction
+	}
+
+	if err := c.clusters.SetFreeze(sourceClusterId, true); err != nil {
+		return err
+	}
+
+	if targetCluster.Used > 0 && targetCluster.Frozen {
+		return errors.ErrNotAvailableForClusterAction
+	}
+
+	if err := c.clusters.SetFreeze(targetClusterId, true); err != nil {
+		return err
+	}
+
+	if sourceCluster.Used > targetCluster.Used {
+		return errors.ErrNoSpace
+	}
+
+	sourceMasterNode := sourceCluster.Master()
+	smdn, err := cluster2.NewDataNode(sourceMasterNode.Address)
+	if err != nil {
+		return err
+	}
+
+	targetMasterNode := targetCluster.Master()
+	tmdn, err := cluster2.NewDataNode(targetMasterNode.Address)
+	if err != nil {
+		return err
+	}
+
+	sourceSyncList := smdn.SyncList()
+	if sourceSyncList == nil {
+		return errors.ErrPing
+	}
+
+	var syncErr error
+	for len(sourceSyncList) > 0 {
+		sourceSyncSha512Hex := sourceSyncList[0]
+
+		if !tmdn.SyncMove(sourceMasterNode.Address, sourceSyncSha512Hex) {
+			syncErr = errors.ErrSync
+		}
+
+		sourceSyncList = sourceSyncList[1:]
+	}
+
+	syncClustersFunc := func(wg *sync.WaitGroup, cluster *common.Cluster) {
+		defer wg.Done()
+		_ = c.syncCluster(cluster)
+	}
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go syncClustersFunc(wg, sourceCluster)
+	wg.Add(1)
+	go syncClustersFunc(wg, targetCluster)
+	wg.Wait()
+
+	return syncErr
 }
 
 func (c *cluster) checkStructure() error {

@@ -22,6 +22,7 @@ const commandLeave = "LEAV"
 const commandWipe = "WIPE"
 const commandSyncCreate = "SYCR"
 const commandSyncDelete = "SYDE"
+const commandSyncMove = "SYMV"
 const commandSyncList = "SYLS"
 const commandSyncFull = "SYFL"
 const commandPing = "PING"
@@ -41,6 +42,7 @@ type DataNode interface {
 
 	SyncCreate(sourceNodeAddr string, sha512Hex string) bool
 	SyncDelete(sha512Hex string) bool
+	SyncMove(sourceNodeAddr string, sha512Hex string) bool
 	SyncList() []string
 	SyncFull(sourceNodeAddr string) bool
 
@@ -403,6 +405,37 @@ func (d *dataNode) SyncDelete(sha512Hex string) bool {
 	defer d.close()
 
 	if _, err := d.conn.Write([]byte(commandSyncDelete)); err != nil {
+		return false
+	}
+
+	if _, err := d.conn.Write(sha512Sum); err != nil {
+		return false
+	}
+
+	return d.result()
+}
+
+func (d *dataNode) SyncMove(sourceNodeAddr string, sha512Hex string) bool {
+	sha512Sum, err := hex.DecodeString(sha512Hex)
+	if err != nil {
+		return false
+	}
+
+	if err := d.connect(); err != nil {
+		return false
+	}
+	defer d.close()
+
+	if _, err := d.conn.Write([]byte(commandSyncMove)); err != nil {
+		return false
+	}
+
+	sourceBindAddrLength := uint8(len(sourceNodeAddr))
+	if err := binary.Write(d.conn, binary.LittleEndian, sourceBindAddrLength); err != nil {
+		return false
+	}
+
+	if _, err := d.conn.Write([]byte(sourceNodeAddr)); err != nil {
 		return false
 	}
 

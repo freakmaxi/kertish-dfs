@@ -28,6 +28,7 @@ func NewCluster(id string) *Cluster {
 		Id:           id,
 		Nodes:        NodeList{},
 		Reservations: make(map[string]uint64),
+		Paralyzed:    true,
 		Frozen:       true,
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
@@ -22,6 +23,8 @@ func (m *managerRouter) handleGet(w http.ResponseWriter, r *http.Request) {
 		m.handleSync(w, r)
 	case "check":
 		m.handleCheckConsistency(w, r)
+	case "move":
+		m.handleMove(w, r)
 	case "clusters":
 		m.handleClusters(w, r)
 	case "find":
@@ -69,9 +72,37 @@ func (m *managerRouter) handleCheckConsistency(w http.ResponseWriter, r *http.Re
 	} else {
 		w.WriteHeader(500)
 	}
+	fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())
+
 	e := common.NewError(105, err.Error())
 	if err := json.NewEncoder(w).Encode(e); err != nil {
 		fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())
+	}
+}
+
+func (m *managerRouter) handleMove(w http.ResponseWriter, r *http.Request) {
+	sourceClusterId, targetClusterId, valid := m.describeMoveOptions(r.Header.Get("X-Options"))
+	if !valid {
+		w.WriteHeader(422)
+		return
+	}
+
+	if err := m.manager.MoveCluster(sourceClusterId, targetClusterId); err != nil {
+		if err == errors.ErrNotFound {
+			w.WriteHeader(404)
+		} else if err == errors.ErrNotAvailableForClusterAction {
+			w.WriteHeader(503)
+		} else if err == errors.ErrNoSpace {
+			w.WriteHeader(507)
+		} else {
+			w.WriteHeader(500)
+		}
+		fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())
+
+		e := common.NewError(130, err.Error())
+		if err := json.NewEncoder(w).Encode(e); err != nil {
+			fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())
+		}
 	}
 }
 
@@ -138,8 +169,21 @@ func (m *managerRouter) handleFind(w http.ResponseWriter, r *http.Request) {
 
 func (m *managerRouter) validateGetAction(action string) bool {
 	switch action {
-	case "sync", "check", "clusters", "find":
+	case "sync", "check", "move", "clusters", "find":
 		return true
 	}
 	return false
+}
+
+func (m *managerRouter) describeMoveOptions(options string) (string, string, bool) {
+	sourceClusterId := ""
+	targetClusterId := ""
+
+	eqIdx := strings.Index(options, ",")
+	if eqIdx > -1 {
+		sourceClusterId = options[:eqIdx]
+		targetClusterId = options[eqIdx+1:]
+	}
+
+	return sourceClusterId, targetClusterId, len(sourceClusterId) > 0 && len(targetClusterId) > 0
 }
