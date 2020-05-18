@@ -273,7 +273,7 @@ func (c *cluster) SyncClusters() error {
 	for len(clusters) > 0 {
 		cluster := clusters[0]
 
-		if err := c.syncCluster(cluster); err != nil {
+		if err := c.syncCluster(cluster, false); err != nil {
 			if err == errors.ErrPing {
 				clusters = append(clusters[1:], cluster)
 				continue
@@ -292,15 +292,18 @@ func (c *cluster) SyncCluster(clusterId string) error {
 	if err != nil {
 		return err
 	}
-	return c.syncCluster(cluster)
+	return c.syncCluster(cluster, false)
 }
 
-func (c *cluster) syncCluster(cluster *common.Cluster) error {
+func (c *cluster) syncCluster(cluster *common.Cluster, keepFrozen bool) error {
 	if err := c.clusters.SetFreeze(cluster.Id, true); err != nil {
 		return err
 	}
 	defer func() {
 		_ = c.clusters.ResetStats(cluster)
+		if keepFrozen {
+			return
+		}
 
 		if err := c.clusters.SetFreeze(cluster.Id, false); err != nil {
 			fmt.Printf("ERROR: Syncing error: unfreezing is failed for %s\n", cluster.Id)
@@ -422,7 +425,7 @@ func (c *cluster) MoveCluster(sourceClusterId string, targetClusterId string) (e
 		return err
 	}
 
-	if sourceCluster.Used > targetCluster.Used {
+	if sourceCluster.Used > targetCluster.Available() {
 		return errors.ErrNoSpace
 	}
 
@@ -454,15 +457,15 @@ func (c *cluster) MoveCluster(sourceClusterId string, targetClusterId string) (e
 		sourceSyncList = sourceSyncList[1:]
 	}
 
-	syncClustersFunc := func(wg *sync.WaitGroup, cluster *common.Cluster) {
+	syncClustersFunc := func(wg *sync.WaitGroup, cluster *common.Cluster, keepFrozen bool) {
 		defer wg.Done()
-		_ = c.syncCluster(cluster)
+		_ = c.syncCluster(cluster, keepFrozen)
 	}
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
-	go syncClustersFunc(wg, sourceCluster)
+	go syncClustersFunc(wg, sourceCluster, true)
 	wg.Add(1)
-	go syncClustersFunc(wg, targetCluster)
+	go syncClustersFunc(wg, targetCluster, false)
 	wg.Wait()
 
 	return syncErr
