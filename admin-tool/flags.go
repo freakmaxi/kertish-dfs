@@ -40,6 +40,7 @@ type flagContainer struct {
 	managerAddress   string
 	createCluster    []string
 	deleteCluster    string
+	moveCluster      []string
 	addNode          addNode
 	removeNode       string
 	unfreeze         []string
@@ -75,6 +76,11 @@ func (f *flagContainer) Define(v string) int {
 	if len(f.deleteCluster) != 0 {
 		activeCount++
 		f.active = "deleteCluster"
+	}
+
+	if len(f.moveCluster) != 0 {
+		activeCount++
+		f.active = "moveCluster"
 	}
 
 	if len(f.addNode.clusterId) > 0 && len(f.addNode.addresses) > 0 {
@@ -141,6 +147,10 @@ Ex: 192.168.0.1:9430,192.168.0.2:9430`)
 	var deleteCluster string
 	set.StringVar(&deleteCluster, `delete-cluster`, "", `Deletes data nodes cluster. Provide cluster id to delete.`)
 
+	var moveCluster string
+	set.StringVar(&moveCluster, `move-cluster`, "", `Moves cluster data between clusters. Provide cluster source and target ids to move cluster.
+Ex: sourceClusterId,targetClusterId`)
+
 	var getCluster string
 	set.StringVar(&getCluster, `get-cluster`, "", `Gets and prints cluster information.`)
 
@@ -168,6 +178,11 @@ Ex: clusterId=192.168.0.1:9430,192.168.0.2:9430`)
 		cc = []string{}
 	}
 
+	mc := strings.Split(moveCluster, ",")
+	if len(mc) != 2 && len(mc[0]) == 0 && len(mc[1]) == 0 {
+		mc = []string{}
+	}
+
 	uf := strings.Split(unFreeze, ",")
 	if strings.Compare(unFreeze, "*") == 0 || len(uf) > 0 && len(uf[0]) == 0 {
 		uf = []string{}
@@ -177,6 +192,7 @@ Ex: clusterId=192.168.0.1:9430,192.168.0.2:9430`)
 		managerAddress:   managerAddress,
 		createCluster:    cc,
 		deleteCluster:    deleteCluster,
+		moveCluster:      mc,
 		addNode:          addNode,
 		removeNode:       removeNode,
 		unfreeze:         uf,

@@ -77,6 +77,30 @@ func DeleteCluster(managerAddr []string, clusterId string) error {
 	return nil
 }
 
+func MoveCluster(managerAddr []string, clusterIds []string) error {
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Action", "move")
+	req.Header.Set("X-Options", strings.Join(clusterIds, ","))
+
+	res, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
+	}
+
+	if res.StatusCode != 200 {
+		var e common.Error
+		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
+			return err
+		}
+		return fmt.Errorf(e.Message)
+	}
+
+	return nil
+}
+
 func AddNode(managerAddr []string, clusterId string, addresses []string) error {
 	req, err := http.NewRequest("POST", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
 	if err != nil {
