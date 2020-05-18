@@ -35,7 +35,7 @@ Will be used to synchronize accesses between services
 - `GET` is used to sync cluster/clusters, list cluster/clusters and nodes and find the cluster information for file.
 
 ##### Required Headers:
-- `X-Action` defines the behaviour of get request. Values: `sync` or `clusters` or `find`
+- `X-Action` defines the behaviour of get request. Values: `sync` or `check` or `move` or `clusters` or `find`
 
 ##### Possible Status Codes
 - `422`: Required Request Headers are not valid or absent
@@ -55,12 +55,50 @@ All failed responses comes with error json. Ex:
 ```json
 {
   "code": 100,
-  "message": "cluster is already exists"
+  "message": "clusters are not available for sync"
+}
+```
+
+##### Check Action
+Check action is to trigger the consistency and integrity check operation on cluster/clusters.
+
+##### Possible Status Codes
+- `404`: Not found
+- `500`: Operational failures
+- `200`: Successful
+
+All failed responses comes with error json. Ex:
+
+```json
+{
+  "code": 105,
+  "message": "clusters are not available for check"
+}
+```
+
+##### Move Action
+Move action is to move one cluster content to other one. Target cluster should have enough space for move operation.
+
+- `X-Options` header is used to point the source and target clusters for move operation. `sourceClusterId,targetClusterId`
+
+##### Possible Status Codes
+- `404`: Not found
+- `500`: Operational failures
+- `503`: Service Unavailable
+- `507`: Insufficient Space
+- `200`: Successful
+
+All failed responses comes with error json. Ex:
+
+```json
+{
+  "code": 130,
+  "message": "cluster is not available for cluster wide actions"
 }
 ```
 
 ##### Clusters Action
-Clusters action is to get the information about the cluster/clusters and depended data nodes.
+Clusters action is to get the information about the cluster/clusters and depended on data nodes.
 
 - `X-Options` header is used to point the cluster or omit it to get al clusters information.
 
