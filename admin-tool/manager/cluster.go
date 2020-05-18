@@ -237,7 +237,13 @@ func GetClusters(managerAddr []string, clusterId string) error {
 	if err := json.NewDecoder(res.Body).Decode(&c); err != nil {
 		return err
 	}
+
+	total := uint64(0)
+	used := uint64(0)
 	for _, cluster := range c {
+		total += cluster.Size
+		used += cluster.Used
+
 		frozen := ""
 		if cluster.Frozen {
 			frozen = " (FROZEN)"
@@ -245,12 +251,31 @@ func GetClusters(managerAddr []string, clusterId string) error {
 
 		fmt.Printf("Cluster Details: %s%s\n", cluster.Id, frozen)
 		for _, n := range cluster.Nodes {
-			mode := "SLAVE"
+			mode := "(SLAVE) "
 			if n.Master {
-				mode = "MASTER"
+				mode = "(MASTER)"
 			}
-			fmt.Printf("      Data Node: %s (%s) -> %s\n", n.Address, mode, n.Id)
+			fmt.Printf("      Data Node: %s %s -> %s\n", n.Address, mode, n.Id)
 		}
+		fmt.Printf("      Size:      %d (%d Gb)\n", cluster.Size, cluster.Size/(1024*1024*1024))
+		available := cluster.Size - cluster.Used
+		fmt.Printf("      Available: %d (%d Gb)\n", available, available/(1024*1024*1024))
+		state := "Online"
+		if cluster.Paralyzed {
+			state = "Paralyzed"
+		}
+		if cluster.Frozen {
+			state = "Frozen"
+		}
+		fmt.Printf("      Status:    %s\n", state)
+		fmt.Println()
+	}
+
+	if len(clusterId) == 0 {
+		fmt.Println("Setup Summary:")
+		fmt.Printf("      Total Size:      %d (%d Gb)\n", total, total/(1024*1024*1024))
+		available := total - used
+		fmt.Printf("      Total Available: %d (%d Gb)\n", available, available/(1024*1024*1024))
 		fmt.Println()
 	}
 
