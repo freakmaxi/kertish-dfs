@@ -330,7 +330,7 @@ func (m *manager) Used() (uint64, error) {
 		}
 		if !info.IsDir() && len(info.Name()) == 64 {
 			if size := info.Size(); size > 0 {
-				used = uint64(size)
+				used += uint64(size)
 			}
 		}
 		return nil
