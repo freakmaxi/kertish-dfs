@@ -16,6 +16,7 @@ type Cluster interface {
 	Register(nodeAddresses []string) (*common.Cluster, error)
 	RegisterNodesTo(clusterId string, nodeAddresses []string) error
 
+	UnFreezeClusters(clusterIds []string) error
 	UnRegisterCluster(clusterId string) error
 	UnRegisterNode(nodeId string) error
 
@@ -159,6 +160,32 @@ func (c *cluster) prepareNodes(nodeAddresses []string, clusterSize uint64) (comm
 	}
 
 	return r, clusterSize, nil
+}
+
+func (c *cluster) UnFreezeClusters(clusterIds []string) error {
+	if len(clusterIds) == 0 {
+		clusters, err := c.clusters.GetAll()
+		if err != nil {
+			return err
+		}
+		for _, cluster := range clusters {
+			if !cluster.Frozen {
+				continue
+			}
+			if err := c.clusters.SetFreeze(cluster.Id, false); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	for _, clusterId := range clusterIds {
+		if err := c.clusters.SetFreeze(clusterId, false); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (c *cluster) UnRegisterCluster(clusterId string) error {

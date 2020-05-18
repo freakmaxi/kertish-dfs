@@ -23,6 +23,8 @@ func (m *managerRouter) handleDelete(w http.ResponseWriter, r *http.Request) {
 	switch action {
 	case "unregister":
 		m.handleUnRegister(w, r)
+	case "unfreeze":
+		m.handleUnFreeze(w, r)
 	case "commit":
 		m.handleCommit(w, r)
 	case "discard":
@@ -73,6 +75,22 @@ func (m *managerRouter) handleUnRegister(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(200)
 }
 
+func (m *managerRouter) handleUnFreeze(w http.ResponseWriter, r *http.Request) {
+	clusterIds := strings.Split(r.Header.Get("X-Options"), ",")
+
+	if err := m.manager.UnFreezeClusters(clusterIds); err != nil {
+		w.WriteHeader(500)
+
+		e := common.NewError(355, err.Error())
+		if err := json.NewEncoder(w).Encode(e); err != nil {
+			fmt.Printf("ERROR: Unfreeze request is failed. %s\n", err.Error())
+		}
+		return
+	}
+
+	w.WriteHeader(200)
+}
+
 func (m *managerRouter) handleCommit(w http.ResponseWriter, r *http.Request) {
 	reservationId := r.Header.Get("X-Reservation-Id")
 	clusterMap, err := m.describeReservationCommitOptions(r.Header.Get("X-Options"))
@@ -115,7 +133,7 @@ func (m *managerRouter) handleDiscard(w http.ResponseWriter, r *http.Request) {
 
 func (m *managerRouter) validateDeleteAction(action string) bool {
 	switch action {
-	case "unregister", "commit", "discard":
+	case "unregister", "unfreeze", "commit", "discard":
 		return true
 	}
 	return false
