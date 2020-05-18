@@ -124,9 +124,9 @@ func main() {
 	}
 	fmt.Print("INFO: Syncing Clusters...\n")
 	if err := managerCluster.SyncClusters(); err != nil {
-		fmt.Printf("Sync is failed! %s\n", err.Error())
+		fmt.Printf("ERROR: Sync is failed! %s\n", err.Error())
 	} else {
-		fmt.Print("Sync is done!\n")
+		fmt.Print("INFO: Sync is done!\n")
 	}
 	managerRouter := routing.NewManagerRouter(managerCluster)
 	routerManager.Add(managerRouter)
