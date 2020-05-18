@@ -14,7 +14,7 @@ const commandSyncList = "SYLS"
 const chunkSize = 1024 * 1024 // 1mb
 
 type DataNode interface {
-	SyncRead(sha512Hex string, usageCountHandler func(usageCount uint16) bool, dataHandler func(data []byte) error, verifyHandler func() bool) error
+	SyncRead(sha512Hex string, drop bool, usageCountHandler func(usageCount uint16) bool, dataHandler func(data []byte) error, verifyHandler func() bool) error
 	SyncList(readHandler func(sha512Hex string, current uint64, total uint64) error) error
 }
 
@@ -70,13 +70,17 @@ func (d *dataNode) hashAsHex() (string, error) {
 	return hex.EncodeToString(h), nil
 }
 
-func (d *dataNode) SyncRead(sha512Hex string, usageCountHandler func(usageCount uint16) bool, dataHandler func([]byte) error, verifyHandler func() bool) error {
+func (d *dataNode) SyncRead(sha512Hex string, drop bool, usageCountHandler func(usageCount uint16) bool, dataHandler func([]byte) error, verifyHandler func() bool) error {
 	if err := d.connect(); err != nil {
 		return err
 	}
 	defer d.close()
 
 	if _, err := d.conn.Write([]byte(commandSyncRead)); err != nil {
+		return err
+	}
+
+	if err := binary.Write(d.conn, binary.LittleEndian, drop); err != nil {
 		return err
 	}
 

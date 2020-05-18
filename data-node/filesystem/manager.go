@@ -209,6 +209,7 @@ func (m *manager) Sync(sourceAddr string) error {
 
 			return dn.SyncRead(
 				sha512Hex,
+				false,
 				func(usageCount uint16) bool {
 					usageCountBackup = usageCount
 

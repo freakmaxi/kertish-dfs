@@ -124,6 +124,8 @@ func (c *commander) process(command string, conn net.Conn) error {
 		return c.syrd(conn)
 	case "SYDE":
 		return c.syde(conn)
+	case "SYMV":
+		return c.symv(conn)
 	case "SYLS":
 		return c.syls(conn)
 	case "SYFL":
@@ -405,6 +407,7 @@ func (c *commander) sycr(conn net.Conn) error {
 
 		return dn.SyncRead(
 			sha512Hex,
+			false,
 			func(usageCount uint16) bool {
 				usageCountBackup = usageCount
 
@@ -431,6 +434,11 @@ func (c *commander) sycr(conn net.Conn) error {
 }
 
 func (c *commander) syrd(conn net.Conn) error {
+	var drop bool
+	if err := c.readBinaryWithTimeout(conn, &drop); err != nil {
+		return err
+	}
+
 	sha512Hex, err := c.hashAsHex(conn)
 	if err != nil {
 		return err
@@ -471,6 +479,9 @@ func (c *commander) syrd(conn net.Conn) error {
 				return c.writeWithTimeout(conn, data)
 			},
 			func() error {
+				if drop {
+					return blockFile.Wipe()
+				}
 				return nil
 			})
 	})
@@ -492,6 +503,59 @@ func (c *commander) syde(conn net.Conn) error {
 		}
 
 		return nil
+	})
+}
+
+func (c *commander) symv(conn net.Conn) error {
+	var sourceAddrLength uint8
+	if err := c.readBinaryWithTimeout(conn, &sourceAddrLength); err != nil {
+		return err
+	}
+
+	sourceAddrBuf := make([]byte, sourceAddrLength)
+	if err := c.readWithTimeout(conn, sourceAddrBuf, len(sourceAddrBuf)); err != nil {
+		return err
+	}
+	sourceAddr := string(sourceAddrBuf)
+
+	sha512Hex, err := c.hashAsHex(conn)
+	if err != nil {
+		return err
+	}
+
+	return c.fs.LockFile(sha512Hex, func(blockFile filesystem.BlockFile) error {
+		usageCountBackup := uint16(1)
+
+		dn, err := cluster.NewDataNode(sourceAddr)
+		if err != nil {
+			return err
+		}
+
+		return dn.SyncRead(
+			sha512Hex,
+			true,
+			func(usageCount uint16) bool {
+				usageCountBackup = usageCount
+
+				if blockFile.Temporary() {
+					return true
+				}
+
+				return blockFile.ResetUsage(usageCount) != nil
+			},
+			func(data []byte) error {
+				return blockFile.Write(data)
+			},
+			func() bool {
+				if usageCountBackup == 1 {
+					return blockFile.Verify()
+				}
+
+				if err := blockFile.ResetUsage(usageCountBackup); err != nil {
+					return false
+				}
+				return blockFile.Verify()
+			})
 	})
 }
 
