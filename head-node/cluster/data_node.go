@@ -55,7 +55,7 @@ func (d *dataNode) connect() error {
 }
 
 func (d *dataNode) close() {
-	d.conn.Close()
+	_ = d.conn.Close()
 }
 
 func (d *dataNode) result() bool {

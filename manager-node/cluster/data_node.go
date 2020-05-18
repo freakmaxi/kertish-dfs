@@ -80,10 +80,28 @@ func (d *dataNode) connect() error {
 }
 
 func (d *dataNode) close() {
-	d.conn.Close()
+	_ = d.conn.Close()
 }
 
 func (d *dataNode) result() bool {
+	b := make([]byte, 1)
+	_, err := d.conn.Read(b)
+	if err != nil {
+		return false
+	}
+
+	return strings.Compare("+", string(b)) == 0
+}
+
+func (d *dataNode) resultWithTimeout(timeout time.Duration) bool {
+	if timeout == 0 {
+		timeout = time.Second * 30
+	}
+
+	if err := d.conn.SetDeadline(time.Now().Add(timeout)); err != nil {
+		return false
+	}
+
 	b := make([]byte, 1)
 	_, err := d.conn.Read(b)
 	if err != nil {
@@ -468,7 +486,7 @@ func (d *dataNode) Ping() int64 {
 		return -1
 	}
 
-	if !d.result() {
+	if !d.resultWithTimeout(time.Second * 5) {
 		return -1
 	}
 
