@@ -53,7 +53,6 @@ func (m *managerRouter) handleSync(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.WriteHeader(500)
 	}
-	fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())
 
 	e := common.NewError(100, err.Error())
 	if err := json.NewEncoder(w).Encode(e); err != nil {
@@ -72,7 +71,6 @@ func (m *managerRouter) handleCheckConsistency(w http.ResponseWriter, r *http.Re
 	} else {
 		w.WriteHeader(500)
 	}
-	fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())
 
 	e := common.NewError(105, err.Error())
 	if err := json.NewEncoder(w).Encode(e); err != nil {
@@ -97,7 +95,6 @@ func (m *managerRouter) handleMove(w http.ResponseWriter, r *http.Request) {
 		} else {
 			w.WriteHeader(500)
 		}
-		fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())
 
 		e := common.NewError(130, err.Error())
 		if err := json.NewEncoder(w).Encode(e); err != nil {
@@ -133,7 +130,6 @@ func (m *managerRouter) handleClusters(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.WriteHeader(500)
 	}
-	fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())
 
 	e := common.NewError(110, err.Error())
 	if err := json.NewEncoder(w).Encode(e); err != nil {
@@ -159,7 +155,6 @@ func (m *managerRouter) handleFind(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.WriteHeader(500)
 	}
-	fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())
 
 	e := common.NewError(120, err.Error())
 	if err := json.NewEncoder(w).Encode(e); err != nil {

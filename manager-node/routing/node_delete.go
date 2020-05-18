@@ -1,7 +1,6 @@
 package routing
 
 import (
-	"fmt"
 	"net/http"
 	"os"
 	"strconv"
@@ -40,7 +39,6 @@ func (n *nodeRouter) handleSyncDelete(w http.ResponseWriter, r *http.Request) {
 		} else {
 			w.WriteHeader(500)
 		}
-		fmt.Printf("ERROR: Delete request is failed. %s\n", err.Error())
 	}
 }
 
