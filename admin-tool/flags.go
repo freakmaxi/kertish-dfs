@@ -179,7 +179,7 @@ Ex: clusterId=192.168.0.1:9430,192.168.0.2:9430`)
 	}
 
 	mc := strings.Split(moveCluster, ",")
-	if len(mc) != 2 && len(mc[0]) == 0 && len(mc[1]) == 0 {
+	if len(mc) != 2 || len(mc) == 2 && len(mc[0]) == 0 && len(mc[1]) == 0 {
 		mc = []string{}
 	}
 

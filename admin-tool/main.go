@@ -58,6 +58,8 @@ func main() {
 			anim.Start()
 
 			if err := manager.MoveCluster([]string{fc.managerAddress}, fc.moveCluster); err != nil {
+				anim.Cancel()
+
 				fmt.Printf("ERROR: %s\n", err.Error())
 				os.Exit(25)
 			}
@@ -102,6 +104,7 @@ func main() {
 
 		if err := manager.SyncClusters([]string{fc.managerAddress}); err != nil {
 			anim.Cancel()
+
 			fmt.Printf("%s\n", err.Error())
 			os.Exit(50)
 		}
@@ -112,6 +115,7 @@ func main() {
 
 		if err := manager.CheckConsistency([]string{fc.managerAddress}); err != nil {
 			anim.Cancel()
+
 			fmt.Printf("%s\n", err.Error())
 			os.Exit(55)
 		}
