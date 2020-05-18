@@ -12,7 +12,7 @@ import (
 
 const queueLimit = 500
 const semaphoreLimit = 10
-const syncGapLimit = 100 // millisecond
+const syncGapLimit = 500 // millisecond
 const retryLimit = 10
 
 type Node interface {
