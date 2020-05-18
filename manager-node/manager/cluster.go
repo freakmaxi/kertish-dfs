@@ -516,28 +516,10 @@ func (c *cluster) Find(sha512Hex string, mapType common.MapType) (string, string
 	}
 
 	clusterIds := make([]string, 0)
-	clusterMap := make(map[string]string)
-
+	clustersMap := make(map[string]*common.Cluster)
 	for _, cluster := range clusters {
-		if cluster.Paralyzed {
-			return "", "", errors.ErrNoAvailableClusterNode
-		}
-
-		var node *common.Node
-
-		switch mapType {
-		case common.MT_Read:
-			node = cluster.HighQualityNode()
-		default:
-			node = cluster.Master()
-		}
-
-		if node == nil {
-			return "", "", errors.ErrNoAvailableClusterNode
-		}
-
-		clusterMap[cluster.Id] = node.Address
 		clusterIds = append(clusterIds, cluster.Id)
+		clustersMap[cluster.Id] = cluster
 	}
 
 	clusterId, err := c.index.Find(clusterIds, sha512Hex)
@@ -545,7 +527,25 @@ func (c *cluster) Find(sha512Hex string, mapType common.MapType) (string, string
 		return "", "", err
 	}
 
-	return clusterId, clusterMap[clusterId], nil
+	cluster := clustersMap[clusterId]
+	if cluster.Paralyzed {
+		return "", "", errors.ErrNoAvailableClusterNode
+	}
+
+	var node *common.Node
+
+	switch mapType {
+	case common.MT_Read:
+		node = cluster.HighQualityNode()
+	default:
+		node = cluster.Master()
+	}
+
+	if node == nil {
+		return "", "", errors.ErrNoAvailableClusterNode
+	}
+
+	return clusterId, node.Address, nil
 }
 
 var _ Cluster = &cluster{}
