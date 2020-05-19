@@ -39,7 +39,9 @@ func (m *managerRouter) handleSync(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	if len(clusterId) == 0 {
-		err = m.manager.SyncClusters()
+		if errorList := m.manager.SyncClusters(); len(errorList) > 0 {
+			err = errors.ErrSync
+		}
 	} else {
 		err = m.manager.SyncCluster(clusterId)
 	}

@@ -3,6 +3,7 @@ package manager
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
@@ -23,7 +24,7 @@ type Cluster interface {
 	Reserve(size uint64) (*common.ReservationMap, error)
 	Commit(reservationId string, clusterMap map[string]uint64) error
 	Discard(reservationId string) error
-	SyncClusters() error
+	SyncClusters() []error
 	SyncCluster(clusterId string) error
 	CheckConsistency() error
 	MoveCluster(sourceClusterId string, targetClusterId string) error
@@ -264,27 +265,43 @@ func (c *cluster) Discard(reservationId string) error {
 	})
 }
 
-func (c *cluster) SyncClusters() error {
+func (c *cluster) SyncClusters() []error {
 	clusters, err := c.clusters.GetAll()
 	if err != nil {
-		return err
+		return []error{err}
 	}
 
-	for len(clusters) > 0 {
-		cluster := clusters[0]
+	wg := &sync.WaitGroup{}
 
-		if err := c.syncCluster(cluster, false); err != nil {
-			if err == errors.ErrPing {
-				clusters = append(clusters[1:], cluster)
-				continue
+	errorListMutex := sync.Mutex{}
+	errorList := make([]error, 0)
+	addErrorFunc := func(err error) {
+		errorListMutex.Lock()
+		defer errorListMutex.Unlock()
+
+		errorList = append(errorList, err)
+	}
+
+	for _, cluster := range clusters {
+		wg.Add(1)
+		go func(wg *sync.WaitGroup, sc common.Cluster) {
+			defer wg.Done()
+			for {
+				if err := c.syncCluster(&sc, false); err != nil {
+					if err == errors.ErrPing {
+						time.Sleep(time.Second)
+						continue
+					}
+					addErrorFunc(err)
+					return
+				}
+				return
 			}
-			return err
-		}
-
-		clusters = clusters[1:]
+		}(wg, *cluster)
 	}
+	wg.Wait()
 
-	return nil
+	return errorList
 }
 
 func (c *cluster) SyncCluster(clusterId string) error {

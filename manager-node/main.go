@@ -126,11 +126,14 @@ func main() {
 	// No need to block start up with cluster sync
 	go func() {
 		fmt.Print("INFO: Syncing Clusters...\n")
-		if err := managerCluster.SyncClusters(); err != nil {
-			fmt.Printf("ERROR: Sync is failed! %s\n", err.Error())
-		} else {
-			fmt.Print("INFO: Sync is done!\n")
+		errorList := managerCluster.SyncClusters()
+		if len(errorList) > 0 {
+			for _, err := range errorList {
+				fmt.Printf("ERROR: Sync is failed! %s\n", err.Error())
+			}
+			return
 		}
+		fmt.Print("INFO: Sync is done!\n")
 	}()
 
 	managerRouter := routing.NewManagerRouter(managerCluster)
