@@ -85,11 +85,10 @@ func (n *node) start() {
 				return
 			}
 
-			if c.create && time.Now().UTC().Sub(c.date).Milliseconds() < syncGapLimit {
-				// this is just created, give some time to master to complete the creation
-				n.syncChan <- c
-				continue
-			}
+			//if c.create && time.Now().UTC().Sub(c.date).Milliseconds() < syncGapLimit {
+
+			//	continue
+			//}
 			go n.processSync(c)
 		}
 	}
@@ -227,7 +226,12 @@ func (n *node) Create(nodeId string, sha512Hex string) error {
 		counters[n.Id] = retryLimit
 	}
 
-	n.syncChan <- nodeSync{
+	// Just do not block and done it in go routine
+	go func(ns nodeSync) {
+		// this is just created, give some time to master to complete the creation
+		time.Sleep(time.Millisecond * syncGapLimit)
+		n.syncChan <- ns
+	}(nodeSync{
 		create:     true,
 		date:       time.Now().UTC(),
 		clusterId:  cluster.Id,
@@ -235,7 +239,8 @@ func (n *node) Create(nodeId string, sha512Hex string) error {
 		sha512Hex:  sha512Hex,
 		targets:    others,
 		counters:   counters,
-	}
+	})
+
 	return nil
 }
 
@@ -267,7 +272,10 @@ func (n *node) Delete(nodeId string, sha512Hex string, shadow bool, size uint64)
 			counters[n.Id] = retryLimit
 		}
 
-		n.syncChan <- nodeSync{
+		// Just do not block and done it in go routine
+		go func(ns nodeSync) {
+			n.syncChan <- ns
+		}(nodeSync{
 			create:     false,
 			date:       time.Now().UTC(),
 			clusterId:  cluster.Id,
@@ -275,7 +283,7 @@ func (n *node) Delete(nodeId string, sha512Hex string, shadow bool, size uint64)
 			sha512Hex:  sha512Hex,
 			targets:    others,
 			counters:   counters,
-		}
+		})
 
 		return nil
 	})
