@@ -74,7 +74,7 @@ func (n *node) getDataNode(node *common.Node) (cluster2.DataNode, error) {
 		n.nodeCache[node.Address] = dn
 	}
 
-	return dn.Clone(), nil
+	return dn, nil
 }
 
 func (n *node) start() {

@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"hash"
 	"io"
 	"net"
 	"strings"
@@ -22,15 +21,10 @@ type DataNode interface {
 	CreateShadow(sha512Hex string) error
 	Read(sha512Hex string, readHandler func(data []byte) error) error
 	Delete(sha512Hex string) error
-
-	Clone() DataNode
 }
 
 type dataNode struct {
 	address *net.TCPAddr
-	sha512  hash.Hash
-
-	conn *net.TCPConn
 }
 
 func NewDataNode(address string) (DataNode, error) {
@@ -41,174 +35,156 @@ func NewDataNode(address string) (DataNode, error) {
 
 	return &dataNode{
 		address: addr,
-		sha512:  sha512.New512_256(),
 	}, nil
 }
 
-func (d *dataNode) connect() error {
-	var err error
-	d.conn, err = net.DialTCP("tcp", nil, d.address)
+func (d *dataNode) connect(connectionHandler func(conn *net.TCPConn) error) error {
+	conn, err := net.DialTCP("tcp", nil, d.address)
 	if err != nil {
 		return err
 	}
-	return nil
+	defer conn.Close()
+
+	return connectionHandler(conn)
 }
 
-func (d *dataNode) close() {
-	_ = d.conn.Close()
-}
-
-func (d *dataNode) result() bool {
+func (d *dataNode) result(conn *net.TCPConn) bool {
 	b := make([]byte, 1)
-	_, err := d.conn.Read(b)
+	_, err := conn.Read(b)
 	if err != nil {
 		return false
 	}
 	return strings.Compare("+", string(b)) == 0
 }
 
-func (d *dataNode) Create(data []byte) (bool, string, error) {
-	d.sha512.Reset()
+func (d *dataNode) Create(data []byte) (exists bool, sha512Hex string, err error) {
+	err = d.connect(func(conn *net.TCPConn) error {
+		if _, err := conn.Write([]byte(commandCreate)); err != nil {
+			return err
+		}
 
-	if err := d.connect(); err != nil {
-		return false, "", err
-	}
-	defer d.close()
+		sha512Hash := sha512.New512_256()
+		sha512Hash.Write(data)
 
-	if _, err := d.conn.Write([]byte(commandCreate)); err != nil {
-		return false, "", err
-	}
+		sha512Sum := sha512Hash.Sum(nil)
+		if _, err := conn.Write(sha512Sum); err != nil {
+			return err
+		}
 
-	d.sha512.Write(data)
-	sha512Sum := d.sha512.Sum(nil)
-	if _, err := d.conn.Write(sha512Sum); err != nil {
-		return false, "", err
-	}
+		if !d.result(conn) {
+			exists = true
+			sha512Hex = hex.EncodeToString(sha512Sum)
 
-	if !d.result() {
-		return true, hex.EncodeToString(sha512Sum), nil
-	}
+			return nil
+		}
 
-	blockSize := uint32(len(data))
-	if err := binary.Write(d.conn, binary.LittleEndian, &blockSize); err != nil {
-		return false, "", err
-	}
+		blockSize := uint32(len(data))
+		if err := binary.Write(conn, binary.LittleEndian, &blockSize); err != nil {
+			return err
+		}
 
-	if _, err := d.conn.Write(data); err != nil {
-		return false, "", err
-	}
+		if _, err := conn.Write(data); err != nil {
+			return err
+		}
 
-	if !d.result() {
-		return false, "", fmt.Errorf("create command is failed on data cluster")
-	}
+		if !d.result(conn) {
+			return fmt.Errorf("create command is failed on data cluster")
+		}
 
-	return false, hex.EncodeToString(sha512Sum), nil
+		sha512Hex = hex.EncodeToString(sha512Sum)
+		return nil
+	})
+	return
 }
 
 func (d *dataNode) CreateShadow(sha512Hex string) error {
-	if err := d.connect(); err != nil {
-		return err
-	}
-	defer d.close()
+	return d.connect(func(conn *net.TCPConn) error {
+		if _, err := conn.Write([]byte(commandCreate)); err != nil {
+			return err
+		}
 
-	if _, err := d.conn.Write([]byte(commandCreate)); err != nil {
-		return err
-	}
+		sha512Sum, _ := hex.DecodeString(sha512Hex)
+		if _, err := conn.Write(sha512Sum); err != nil {
+			return err
+		}
 
-	sha512Sum, _ := hex.DecodeString(sha512Hex)
-	if _, err := d.conn.Write(sha512Sum); err != nil {
-		return err
-	}
+		if d.result(conn) {
+			return errors.ErrCreate
+		}
 
-	if d.result() {
-		return errors.ErrCreate
-	}
-
-	return nil
+		return nil
+	})
 }
 
 func (d *dataNode) Read(sha512Hex string, readHandler func([]byte) error) error {
-	d.sha512.Reset()
+	return d.connect(func(conn *net.TCPConn) error {
+		if _, err := conn.Write([]byte(commandRead)); err != nil {
+			return err
+		}
 
-	if err := d.connect(); err != nil {
-		return err
-	}
-	defer d.close()
+		sha512Sum, err := hex.DecodeString(sha512Hex)
+		if err != nil {
+			return err
+		}
+		if _, err := conn.Write(sha512Sum); err != nil {
+			return err
+		}
 
-	if _, err := d.conn.Write([]byte(commandRead)); err != nil {
-		return err
-	}
+		if !d.result(conn) {
+			return fmt.Errorf("data node refused the read request")
+		}
 
-	sha512Sum, err := hex.DecodeString(sha512Hex)
-	if err != nil {
-		return err
-	}
-	if _, err := d.conn.Write(sha512Sum); err != nil {
-		return err
-	}
+		var blockSize uint32
+		if err := binary.Read(conn, binary.LittleEndian, &blockSize); err != nil {
+			return err
+		}
 
-	if !d.result() {
-		return fmt.Errorf("data node refused the read request")
-	}
+		buf := make([]byte, blockSize)
 
-	var blockSize uint32
-	if err := binary.Read(d.conn, binary.LittleEndian, &blockSize); err != nil {
-		return err
-	}
+		if _, err = io.ReadAtLeast(conn, buf, len(buf)); err != nil {
+			return err
+		}
 
-	buf := make([]byte, blockSize)
+		sha512Hash := sha512.New512_256()
+		sha512Hash.Write(buf)
 
-	if _, err = io.ReadAtLeast(d.conn, buf, len(buf)); err != nil {
-		return err
-	}
+		if err := readHandler(buf); err != nil {
+			return err
+		}
 
-	d.sha512.Write(buf)
-	if err := readHandler(buf); err != nil {
-		return err
-	}
+		if !d.result(conn) {
+			return fmt.Errorf("read command is failed on data cluster")
+		}
 
-	if !d.result() {
-		return fmt.Errorf("read command is failed on data cluster")
-	}
+		sha512HexCompare := hex.EncodeToString(sha512Hash.Sum(nil))
+		if strings.Compare(sha512Hex, sha512HexCompare) != 0 {
+			return fmt.Errorf("read result is not verified")
+		}
 
-	sha512HexCompare := hex.EncodeToString(d.sha512.Sum(nil))
-	if strings.Compare(sha512Hex, sha512HexCompare) != 0 {
-		return fmt.Errorf("read result is not verified")
-	}
-
-	return nil
+		return nil
+	})
 }
 
 func (d *dataNode) Delete(sha512Hex string) error {
-	if err := d.connect(); err != nil {
-		return err
-	}
-	defer d.close()
+	return d.connect(func(conn *net.TCPConn) error {
+		if _, err := conn.Write([]byte(commandDelete)); err != nil {
+			return err
+		}
 
-	if _, err := d.conn.Write([]byte(commandDelete)); err != nil {
-		return err
-	}
+		sha512Sum, err := hex.DecodeString(sha512Hex)
+		if err != nil {
+			return err
+		}
+		if _, err := conn.Write(sha512Sum); err != nil {
+			return err
+		}
 
-	sha512Sum, err := hex.DecodeString(sha512Hex)
-	if err != nil {
-		return err
-	}
-	if _, err := d.conn.Write(sha512Sum); err != nil {
-		return err
-	}
+		if !d.result(conn) {
+			return fmt.Errorf("delete command is failed on data cluster")
+		}
 
-	if !d.result() {
-		return fmt.Errorf("delete command is failed on data cluster")
-	}
-
-	return nil
-}
-
-func (d *dataNode) Clone() DataNode {
-	return &dataNode{
-		address: d.address,
-		sha512:  sha512.New512_256(),
-	}
+		return nil
+	})
 }
 
 var _ DataNode = &dataNode{}

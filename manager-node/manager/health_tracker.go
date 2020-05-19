@@ -54,7 +54,7 @@ func (h *healthTracker) getDataNode(node *common.Node) (cluster2.DataNode, error
 		h.nodeCache[node.Address] = dn
 	}
 
-	return dn.Clone(), nil
+	return dn, nil
 }
 
 func (h *healthTracker) Start() {

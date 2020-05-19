@@ -62,7 +62,7 @@ func (c *cluster) getDataNode(address string) (cluster2.DataNode, error) {
 		c.nodeCache[address] = dn
 	}
 
-	return dn.Clone(), nil
+	return dn, nil
 }
 
 func (c *cluster) Create(size uint64, reader io.Reader) (common.DataChunks, error) {
