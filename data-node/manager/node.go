@@ -90,6 +90,7 @@ func (n *node) Handshake(hardwareAddr string, bindAddr string, size uint64) erro
 	if err != nil {
 		return err
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
 		if res.StatusCode == 404 {
@@ -120,6 +121,7 @@ func (n *node) Create(sha512Hex string) error {
 	if err != nil {
 		return err
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode != 202 {
 		if res.StatusCode == 404 {
@@ -147,6 +149,7 @@ func (n *node) Delete(sha512Hex string, shadow bool, size uint32) error {
 	if err != nil {
 		return err
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
 		if res.StatusCode == 404 {

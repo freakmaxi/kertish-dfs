@@ -26,6 +26,7 @@ func CreateCluster(managerAddr []string, addresses []string) error {
 	if err != nil {
 		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
 		var e common.Error
@@ -63,6 +64,7 @@ func DeleteCluster(managerAddr []string, clusterId string) error {
 	if err != nil {
 		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
 		var e common.Error
@@ -89,6 +91,7 @@ func MoveCluster(managerAddr []string, clusterIds []string) error {
 	if err != nil {
 		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
 		var e common.Error
@@ -113,6 +116,7 @@ func AddNode(managerAddr []string, clusterId string, addresses []string) error {
 	if err != nil {
 		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
 		var e common.Error
@@ -150,6 +154,7 @@ func RemoveNode(managerAddr []string, nodeId string) error {
 	if err != nil {
 		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
 		var e common.Error
@@ -176,6 +181,7 @@ func Unfreeze(managerAddr []string, clusterIds []string) error {
 	if err != nil {
 		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
 		var e common.Error
@@ -201,6 +207,7 @@ func SyncClusters(managerAddr []string) error {
 	if err != nil {
 		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
 		var e common.Error
@@ -224,6 +231,7 @@ func CheckConsistency(managerAddr []string) error {
 	if err != nil {
 		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
 		var e common.Error
@@ -248,6 +256,7 @@ func GetClusters(managerAddr []string, clusterId string) error {
 	if err != nil {
 		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
 	}
+	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
 		var e common.Error

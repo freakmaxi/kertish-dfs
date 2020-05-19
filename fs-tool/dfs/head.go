@@ -31,6 +31,7 @@ func List(headAddresses []string, source string, usage bool) (*common.Folder, er
 	if err != nil {
 		return nil, fmt.Errorf("%s: head node is not reachable", headAddresses[0])
 	}
+	defer res.Body.Close()
 
 	switch res.StatusCode {
 	case 404:
@@ -61,6 +62,7 @@ func MakeFolder(headAddresses []string, target string) error {
 	if err != nil {
 		return fmt.Errorf("%s: head node is not reachable", headAddresses[0])
 	}
+	defer res.Body.Close()
 
 	switch res.StatusCode {
 	case 409:
@@ -91,6 +93,7 @@ func Change(headAddresses []string, sources []string, target string, overwrite b
 	if err != nil {
 		return fmt.Errorf("%s: head node is not reachable", headAddresses[0])
 	}
+	defer res.Body.Close()
 
 	switch res.StatusCode {
 	case 404:
@@ -128,6 +131,7 @@ func Delete(headAddresses []string, target string, killZombies bool) error {
 	if err != nil {
 		return fmt.Errorf("%s: head node is not reachable", headAddresses[0])
 	}
+	defer res.Body.Close()
 
 	switch res.StatusCode {
 	case 404:
@@ -210,6 +214,7 @@ func PutFile(headAddresses []string, source string, target string, overwrite boo
 	if err != nil {
 		return fmt.Errorf("%s: head node is not reachable", headAddresses[0])
 	}
+	defer res.Body.Close()
 
 	switch res.StatusCode {
 	case 409:
@@ -267,6 +272,7 @@ func Pull(headAddresses []string, sources []string, target string, readRange *co
 	if err != nil {
 		return fmt.Errorf("%s: head node is not reachable", headAddresses[0])
 	}
+	defer res.Body.Close()
 
 	switch res.StatusCode {
 	case 404:
