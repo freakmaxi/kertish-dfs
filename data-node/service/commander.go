@@ -566,7 +566,7 @@ func (c *commander) symv(conn net.Conn) error {
 }
 
 func (c *commander) syls(conn net.Conn) error {
-	sha512HexList, err := c.fs.List()
+	fileItemList, err := c.fs.List()
 	if err != nil {
 		return err
 	}
@@ -575,18 +575,22 @@ func (c *commander) syls(conn net.Conn) error {
 		return err
 	}
 
-	sha512HexListLength := uint64(len(sha512HexList))
-	if err := c.writeBinaryWithTimeout(conn, sha512HexListLength); err != nil {
+	fileItemListLength := uint64(len(fileItemList))
+	if err := c.writeBinaryWithTimeout(conn, fileItemListLength); err != nil {
 		return err
 	}
 
-	for _, file := range sha512HexList {
-		sha512Sum, err := hex.DecodeString(file)
+	for _, fileItem := range fileItemList {
+		sha512Sum, err := hex.DecodeString(fileItem.Sha512Hex)
 		if err != nil {
 			return err
 		}
 
 		if err := c.writeWithTimeout(conn, sha512Sum); err != nil {
+			return err
+		}
+
+		if err := c.writeBinaryWithTimeout(conn, fileItem.Size); err != nil {
 			return err
 		}
 	}

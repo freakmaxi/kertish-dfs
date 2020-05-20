@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 )
 
+const headerSize int64 = 2
 const chunkSize uint32 = 1024 * 1024 // 1mb
 
 type BlockFile interface {
@@ -126,7 +127,7 @@ func (b *blockFile) Read(readHandler func(data []byte) error, completedHandler f
 		return err
 	}
 
-	if _, err := b.inner.Seek(2, io.SeekStart); err != nil {
+	if _, err := b.inner.Seek(headerSize, io.SeekStart); err != nil {
 		return err
 	}
 
@@ -155,7 +156,7 @@ func (b *blockFile) Usage() (uint16, []byte, error) {
 		return 0, nil, err
 	}
 
-	usageCountBuffer := make([]byte, 2)
+	usageCountBuffer := make([]byte, headerSize)
 	if _, err := io.ReadAtLeast(b.inner, usageCountBuffer, len(usageCountBuffer)); err != nil {
 		return 0, nil, err
 	}
@@ -169,7 +170,7 @@ func (b *blockFile) Size() (uint32, []byte, error) {
 		return 0, nil, err
 	}
 
-	size := uint32(info.Size()) - 2 // two bytes for usageCount
+	size := uint32(info.Size() - headerSize) // two bytes for usageCount
 	sizeBuffer := make([]byte, 4)
 	binary.LittleEndian.PutUint32(sizeBuffer, size)
 

@@ -87,13 +87,13 @@ func (n *node) createChannelHandler() {
 }
 
 func (n *node) createBulk(sha512HexList []string) {
-	for {
-		if err := n.create(sha512HexList); err == nil {
-			fmt.Printf("WARN: Bulk (CREATE) notification is fail: %s", err)
-			<-time.After(time.Second * bulkRequestRetryInterval)
-			continue
+	if err := n.create(sha512HexList); err != nil {
+		fmt.Printf("WARN: Bulk (CREATE) notification is failed: %s\n", err)
+		<-time.After(time.Second * bulkRequestRetryInterval)
+
+		for _, sha512Hex := range sha512HexList {
+			n.createNotificationChan <- sha512Hex
 		}
-		return
 	}
 }
 
@@ -153,13 +153,13 @@ func (n *node) deleteChannelHandler() {
 }
 
 func (n *node) deleteBulk(syncDeleteList common.SyncDeleteList) {
-	for {
-		if err := n.delete(syncDeleteList); err == nil {
-			fmt.Printf("WARN: Bulk (DELETE) notification is fail: %s", err)
-			<-time.After(time.Second * bulkRequestRetryInterval)
-			continue
+	if err := n.delete(syncDeleteList); err != nil {
+		fmt.Printf("WARN: Bulk (DELETE) notification is failed: %s\n", err)
+		<-time.After(time.Second * bulkRequestRetryInterval)
+
+		for _, syncDelete := range syncDeleteList {
+			n.deleteNotificationChan <- syncDelete
 		}
-		return
 	}
 }
 

@@ -264,7 +264,10 @@ func (c *clusters) UpdateNodes(cluster *common.Cluster) error {
 	c.mutex.Lock(clusterLockKey)
 	defer c.mutex.Unlock(clusterLockKey)
 
-	filter := bson.M{"clusterId": cluster.Id}
+	filter := bson.M{
+		"clusterId": cluster.Id,
+		"frozen":    false,
+	}
 	update := bson.M{
 		"$set": bson.M{
 			"nodes":     cluster.Nodes,

@@ -88,4 +88,8 @@ func (r indexCluster) HMSet(key string, values map[string]string) error {
 	return r.cluster.Do(radix.Cmd(nil, "HMSET", args...))
 }
 
+func (r indexCluster) Pipeline(commands []radix.CmdAction) error {
+	return r.cluster.Do(radix.Pipeline(commands...))
+}
+
 var _ IndexClient = &indexCluster{}

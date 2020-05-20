@@ -7,6 +7,8 @@ import (
 	"io"
 	"net"
 	"strings"
+
+	"github.com/freakmaxi/kertish-dfs/basics/common"
 )
 
 const commandSyncRead = "SYRD"
@@ -15,7 +17,7 @@ const chunkSize = 1024 * 1024 // 1mb
 
 type DataNode interface {
 	SyncRead(sha512Hex string, drop bool, usageCountHandler func(usageCount uint16) bool, dataHandler func(data []byte) error, verifyHandler func() bool) error
-	SyncList(readHandler func(sha512Hex string, current uint64, total uint64) error) error
+	SyncList(readHandler func(fileItem common.SyncFileItem, current uint64, total uint64) error) error
 }
 
 type dataNode struct {
@@ -146,7 +148,7 @@ func (d *dataNode) SyncRead(sha512Hex string, drop bool, usageCountHandler func(
 	return nil
 }
 
-func (d *dataNode) SyncList(readHandler func(sha512Hex string, current uint64, total uint64) error) error {
+func (d *dataNode) SyncList(readHandler func(fileItem common.SyncFileItem, current uint64, total uint64) error) error {
 	if err := d.connect(); err != nil {
 		return err
 	}
@@ -160,18 +162,26 @@ func (d *dataNode) SyncList(readHandler func(sha512Hex string, current uint64, t
 		return fmt.Errorf("data node refused the sync list request")
 	}
 
-	var sha512HexListLength uint64
-	if err := binary.Read(d.conn, binary.LittleEndian, &sha512HexListLength); err != nil {
+	var fileItemListLength uint64
+	if err := binary.Read(d.conn, binary.LittleEndian, &fileItemListLength); err != nil {
 		return err
 	}
 
-	for current := uint64(1); current <= sha512HexListLength; current++ {
+	for current := uint64(1); current <= fileItemListLength; current++ {
 		sha512Hex, err := d.hashAsHex()
 		if err != nil {
 			return err
 		}
 
-		if err := readHandler(sha512Hex, current, sha512HexListLength); err != nil {
+		var size int
+		if err := binary.Read(d.conn, binary.LittleEndian, &size); err != nil {
+			return err
+		}
+
+		if err := readHandler(common.SyncFileItem{
+			Sha512Hex: sha512Hex,
+			Size:      size,
+		}, current, fileItemListLength); err != nil {
 			return err
 		}
 	}

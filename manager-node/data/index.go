@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"github.com/mediocregopher/radix/v3"
 )
 
 const multiSetStepLimit = 50000
@@ -16,6 +18,7 @@ type IndexClient interface {
 	HDel(key string, fields ...string) error
 	HGetAll(key string) (map[string]string, error)
 	HMSet(key string, values map[string]string) error
+	Pipeline(commands []radix.CmdAction) error
 }
 
 type Index interface {
@@ -24,8 +27,8 @@ type Index interface {
 	Find(clusterIds []string, sha512Hex string) (string, error)
 	Remove(clusterId string, sha512Hex string) error
 	RemoveBulk(clusterId string, sha512HexList []string) error
-	Replace(clusterId string, sha512HexList []string) error
-	Compare(clusterId string, sha512HexList []string) (uint64, error)
+	Replace(clusterId string, fileItemList common.SyncFileItems) error
+	Compare(clusterId string, fileItemList common.SyncFileItems) (uint64, error)
 }
 
 type index struct {
@@ -59,12 +62,16 @@ func (i *index) AddBulk(clusterId string, sha512HexList []string) error {
 		return nil
 	}
 
-	return i.lock(clusterId, func(index map[string]string) error {
-		for _, sha512Hex := range sha512HexList {
-			index[sha512Hex] = clusterId
-		}
-		return nil
-	})
+	i.mutex.Lock()
+	defer i.mutex.Unlock()
+
+	commands := make([]radix.CmdAction, 0)
+	for _, sha512Hex := range sha512HexList {
+		commands = append(commands,
+			radix.Cmd(nil, "HSET", i.key(clusterId), sha512Hex, clusterId))
+	}
+
+	return i.client.Pipeline(commands)
 }
 
 func (i *index) Find(clusterIds []string, sha512Hex string) (string, error) {
@@ -96,28 +103,36 @@ func (i *index) RemoveBulk(clusterId string, sha512HexList []string) error {
 		return nil
 	}
 
-	return i.lock(clusterId, func(index map[string]string) error {
-		for _, sha512Hex := range sha512HexList {
-			delete(index, sha512Hex)
-		}
-		return nil
-	})
+	i.mutex.Lock()
+	defer i.mutex.Unlock()
+
+	commands := make([]radix.CmdAction, 0)
+	for _, sha512Hex := range sha512HexList {
+		commands = append(commands,
+			radix.Cmd(nil, "HDEL", i.key(clusterId), sha512Hex))
+	}
+
+	return i.client.Pipeline(commands)
 }
 
-func (i *index) Replace(clusterId string, sha512HexList []string) error {
+func (i *index) Replace(clusterId string, fileItemList common.SyncFileItems) error {
+	if fileItemList == nil {
+		fileItemList = make(common.SyncFileItems, 0)
+	}
+
 	return i.lock(clusterId, func(index map[string]string) error {
 		for k := range index {
 			delete(index, k)
 		}
 
-		for _, sha512Hex := range sha512HexList {
-			index[sha512Hex] = clusterId
+		for _, fileItem := range fileItemList {
+			index[fileItem.Sha512Hex] = clusterId
 		}
 		return nil
 	})
 }
 
-func (i *index) Compare(clusterId string, sha512HexList []string) (uint64, error) {
+func (i *index) Compare(clusterId string, fileItemList common.SyncFileItems) (uint64, error) {
 	failed := uint64(0)
 	err := i.lock(clusterId, func(index map[string]string) error {
 		indexShadow := make(map[string]string)
@@ -125,8 +140,8 @@ func (i *index) Compare(clusterId string, sha512HexList []string) (uint64, error
 			indexShadow[k] = v
 		}
 
-		for _, sha512Hex := range sha512HexList {
-			delete(indexShadow, sha512Hex)
+		for _, fileItem := range fileItemList {
+			delete(indexShadow, fileItem.Sha512Hex)
 		}
 		failed = uint64(len(indexShadow))
 

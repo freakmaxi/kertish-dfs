@@ -192,7 +192,7 @@ func (c *cluster) UnFreezeClusters(clusterIds []string) error {
 
 func (c *cluster) UnRegisterCluster(clusterId string) error {
 	return c.clusters.UnRegisterCluster(clusterId, func(cluster *common.Cluster) error {
-		if err := c.index.Replace(clusterId, []string{}); err != nil {
+		if err := c.index.Replace(clusterId, nil); err != nil {
 			return err
 		}
 		for _, node := range cluster.Nodes {
@@ -342,13 +342,13 @@ func (c *cluster) syncCluster(cluster *common.Cluster, keepFrozen bool) error {
 		return nil
 	}
 
-	sha512HexList := mdn.SyncList()
-	if sha512HexList == nil {
+	fileItemList := mdn.SyncList()
+	if fileItemList == nil {
 		fmt.Printf("ERROR: Syncing error: node (%s) didn't response for SyncList\n", masterNode.Id)
 		return errors.ErrPing
 	}
 
-	if err := c.index.Replace(cluster.Id, sha512HexList); err != nil {
+	if err := c.index.Replace(cluster.Id, fileItemList); err != nil {
 		fmt.Printf("ERROR: Index replacement error: %s\n", err.Error())
 		return errors.ErrPing
 	}
@@ -458,20 +458,20 @@ func (c *cluster) MoveCluster(sourceClusterId string, targetClusterId string) (e
 		return err
 	}
 
-	sourceSyncList := smdn.SyncList()
-	if sourceSyncList == nil {
+	sourceFileItemList := smdn.SyncList()
+	if sourceFileItemList == nil {
 		return errors.ErrPing
 	}
 
 	var syncErr error
-	for len(sourceSyncList) > 0 {
-		sourceSyncSha512Hex := sourceSyncList[0]
+	for len(sourceFileItemList) > 0 {
+		sourceFileItem := sourceFileItemList[0]
 
-		if !tmdn.SyncMove(sourceMasterNode.Address, sourceSyncSha512Hex) {
+		if !tmdn.SyncMove(sourceMasterNode.Address, sourceFileItem.Sha512Hex) {
 			syncErr = errors.ErrSync
 		}
 
-		sourceSyncList = sourceSyncList[1:]
+		sourceFileItemList = sourceFileItemList[1:]
 	}
 
 	syncClustersFunc := func(wg *sync.WaitGroup, cluster *common.Cluster, keepFrozen bool) {

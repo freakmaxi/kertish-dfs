@@ -9,6 +9,8 @@ import (
 	"net"
 	"strings"
 	"time"
+
+	"github.com/freakmaxi/kertish-dfs/basics/common"
 )
 
 const commandCreate = "CREA"
@@ -42,7 +44,7 @@ type DataNode interface {
 	SyncCreate(sourceNodeAddr string, sha512Hex string) bool
 	SyncDelete(sha512Hex string) bool
 	SyncMove(sourceNodeAddr string, sha512Hex string) bool
-	SyncList() []string
+	SyncList() common.SyncFileItems
 	SyncFull(sourceNodeAddr string) bool
 
 	Ping() int64
@@ -428,7 +430,7 @@ func (d *dataNode) SyncMove(sourceNodeAddr string, sha512Hex string) bool {
 	}) == nil
 }
 
-func (d *dataNode) SyncList() (sha512HexList []string) {
+func (d *dataNode) SyncList() (fileItemList common.SyncFileItems) {
 	if err := d.connect(func(conn *net.TCPConn) error {
 		if _, err := conn.Write([]byte(commandSyncList)); err != nil {
 			return err
@@ -438,18 +440,27 @@ func (d *dataNode) SyncList() (sha512HexList []string) {
 			return fmt.Errorf("data node refused the sync list request")
 		}
 
-		var sha512HexListLength uint64
-		if err := binary.Read(conn, binary.LittleEndian, &sha512HexListLength); err != nil {
+		var fileItemListLength uint64
+		if err := binary.Read(conn, binary.LittleEndian, &fileItemListLength); err != nil {
 			return err
 		}
 
-		sha512HexList = make([]string, sha512HexListLength)
-		for current := uint64(1); current <= sha512HexListLength; current++ {
+		fileItemList = make(common.SyncFileItems, fileItemListLength)
+		for current := uint64(1); current <= fileItemListLength; current++ {
 			sha512Hex, err := d.hashAsHex(conn)
 			if err != nil {
 				return err
 			}
-			sha512HexList[current-1] = sha512Hex
+
+			var size int
+			if err := binary.Read(conn, binary.LittleEndian, &size); err != nil {
+				return err
+			}
+
+			fileItemList[current-1] = common.SyncFileItem{
+				Sha512Hex: sha512Hex,
+				Size:      size,
+			}
 		}
 
 		if !d.result(conn) {

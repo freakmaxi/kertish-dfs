@@ -85,4 +85,8 @@ func (r indexStandalone) HMSet(key string, values map[string]string) error {
 	return r.client.Do(radix.Cmd(nil, "HMSET", args...))
 }
 
+func (r indexStandalone) Pipeline(commands []radix.CmdAction) error {
+	return r.client.Do(radix.Pipeline(commands...))
+}
+
 var _ IndexClient = &indexStandalone{}

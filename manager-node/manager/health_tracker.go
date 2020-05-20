@@ -135,12 +135,12 @@ func (h *healthTracker) findBestMasterNodeCandidate(cluster *common.Cluster) *co
 			continue
 		}
 
-		serverSha512HexList := dn.SyncList()
-		if serverSha512HexList == nil {
+		serverFileItemList := dn.SyncList()
+		if serverFileItemList == nil {
 			continue
 		}
 
-		failed, err := h.index.Compare(cluster.Id, serverSha512HexList)
+		failed, err := h.index.Compare(cluster.Id, serverFileItemList)
 		if err != nil {
 			continue
 		}
