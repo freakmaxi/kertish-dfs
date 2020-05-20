@@ -22,13 +22,15 @@ type BlockFile interface {
 
 	Write(data []byte) error
 	Verify() bool
+	VerifyForce() bool
 
 	Read(readHandler func(data []byte) error, completedHandler func() error) error
-	Usage() (uint16, []byte, error)
-	Size() (uint32, []byte, error)
+	Usage() (uint16, error)
+	Size() (uint32, error)
 
 	Delete() error
 	Wipe() error
+	Truncate(blockSize uint32) error
 
 	Mark() error
 	ResetUsage(count uint16) error
@@ -122,6 +124,24 @@ func (b *blockFile) Verify() bool {
 	return b.verified
 }
 
+func (b *blockFile) VerifyForce() bool {
+	b.sha512.Reset()
+
+	if err := b.Read(func(data []byte) error {
+		_, err := b.sha512.Write(data)
+		return err
+	}, func() error {
+		result := hex.EncodeToString(b.sha512.Sum(nil))
+		b.verified = strings.Compare(result, b.sha512Hex) == 0
+
+		return nil
+	}); err != nil {
+		return false
+	}
+
+	return b.verified
+}
+
 func (b *blockFile) Read(readHandler func(data []byte) error, completedHandler func() error) error {
 	if err := b.prepare(); err != nil {
 		return err
@@ -147,38 +167,36 @@ func (b *blockFile) Read(readHandler func(data []byte) error, completedHandler f
 	}
 }
 
-func (b *blockFile) Usage() (uint16, []byte, error) {
+func (b *blockFile) Usage() (uint16, error) {
 	if err := b.prepare(); err != nil {
-		return 0, nil, err
+		return 0, err
 	}
 
 	if _, err := b.inner.Seek(0, io.SeekStart); err != nil {
-		return 0, nil, err
+		return 0, err
 	}
 
 	usageCountBuffer := make([]byte, headerSize)
 	if _, err := io.ReadAtLeast(b.inner, usageCountBuffer, len(usageCountBuffer)); err != nil {
-		return 0, nil, err
+		return 0, err
 	}
 
-	return binary.LittleEndian.Uint16(usageCountBuffer), usageCountBuffer, nil
+	return binary.LittleEndian.Uint16(usageCountBuffer), nil
 }
 
-func (b *blockFile) Size() (uint32, []byte, error) {
+func (b *blockFile) Size() (uint32, error) {
 	info, err := b.inner.Stat()
 	if err != nil {
-		return 0, nil, err
+		return 0, err
 	}
 
 	size := uint32(info.Size() - headerSize) // two bytes for usageCount
-	sizeBuffer := make([]byte, 4)
-	binary.LittleEndian.PutUint32(sizeBuffer, size)
 
-	return size, sizeBuffer, nil
+	return size, nil
 }
 
 func (b *blockFile) Delete() error {
-	usageCount, _, err := b.Usage()
+	usageCount, err := b.Usage()
 	if err != nil {
 		return err
 	}
@@ -199,8 +217,13 @@ func (b *blockFile) Wipe() error {
 	return os.Remove(b.targetPath)
 }
 
+func (b *blockFile) Truncate(blockSize uint32) error {
+	b.prepared = false
+	return os.Truncate(b.targetPath, int64(blockSize)+headerSize)
+}
+
 func (b *blockFile) Mark() error {
-	usageCount, _, err := b.Usage()
+	usageCount, err := b.Usage()
 	if err != nil {
 		return err
 	}

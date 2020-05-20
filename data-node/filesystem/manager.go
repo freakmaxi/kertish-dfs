@@ -213,10 +213,23 @@ func (m *manager) Sync(sourceAddr string) error {
 			return dn.SyncRead(
 				sha512Hex,
 				false,
-				func(usageCount uint16) bool {
+				func(blockSize uint32, usageCount uint16) bool {
 					usageCountBackup = usageCount
 
 					if blockFile.Temporary() {
+						return true
+					}
+
+					size, _ := blockFile.Size()
+					if size != blockSize {
+						return true
+					}
+
+					if !blockFile.VerifyForce() {
+						if blockFile.Truncate(blockSize) != nil {
+							fmt.Print(" FAILED!")
+							return false
+						}
 						return true
 					}
 

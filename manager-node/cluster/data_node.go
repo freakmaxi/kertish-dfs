@@ -41,9 +41,9 @@ type DataNode interface {
 	Leave() bool
 	Wipe() bool
 
-	SyncCreate(sourceNodeAddr string, sha512Hex string) bool
+	SyncCreate(sha512Hex string, sourceNodeAddr string) bool
 	SyncDelete(sha512Hex string) bool
-	SyncMove(sourceNodeAddr string, sha512Hex string) bool
+	SyncMove(sha512Hex string, sourceNodeAddr string) bool
 	SyncList() common.SyncFileItems
 	SyncFull(sourceNodeAddr string) bool
 
@@ -343,7 +343,7 @@ func (d *dataNode) Wipe() bool {
 	}) == nil
 }
 
-func (d *dataNode) SyncCreate(sourceNodeAddr string, sha512Hex string) bool {
+func (d *dataNode) SyncCreate(sha512Hex string, sourceNodeAddr string) bool {
 	sha512Sum, err := hex.DecodeString(sha512Hex)
 	if err != nil {
 		return false
@@ -354,16 +354,16 @@ func (d *dataNode) SyncCreate(sourceNodeAddr string, sha512Hex string) bool {
 			return err
 		}
 
+		if _, err := conn.Write(sha512Sum); err != nil {
+			return err
+		}
+
 		sourceBindAddrLength := uint8(len(sourceNodeAddr))
 		if err := binary.Write(conn, binary.LittleEndian, sourceBindAddrLength); err != nil {
 			return err
 		}
 
 		if _, err := conn.Write([]byte(sourceNodeAddr)); err != nil {
-			return err
-		}
-
-		if _, err := conn.Write(sha512Sum); err != nil {
 			return err
 		}
 
@@ -398,7 +398,7 @@ func (d *dataNode) SyncDelete(sha512Hex string) bool {
 	}) == nil
 }
 
-func (d *dataNode) SyncMove(sourceNodeAddr string, sha512Hex string) bool {
+func (d *dataNode) SyncMove(sha512Hex string, sourceNodeAddr string) bool {
 	sha512Sum, err := hex.DecodeString(sha512Hex)
 	if err != nil {
 		return false
@@ -409,16 +409,16 @@ func (d *dataNode) SyncMove(sourceNodeAddr string, sha512Hex string) bool {
 			return err
 		}
 
+		if _, err := conn.Write(sha512Sum); err != nil {
+			return err
+		}
+
 		sourceBindAddrLength := uint8(len(sourceNodeAddr))
 		if err := binary.Write(conn, binary.LittleEndian, sourceBindAddrLength); err != nil {
 			return err
 		}
 
 		if _, err := conn.Write([]byte(sourceNodeAddr)); err != nil {
-			return err
-		}
-
-		if _, err := conn.Write(sha512Sum); err != nil {
 			return err
 		}
 

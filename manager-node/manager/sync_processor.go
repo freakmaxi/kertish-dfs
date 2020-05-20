@@ -83,7 +83,7 @@ func (d *syncProcessor) create(sourceAddress string, sha512Hex string, targets [
 				return
 			}
 
-			if !dn.SyncCreate(sourceAddress, sha512Hex) {
+			if !dn.SyncCreate(sha512Hex, sourceAddress) {
 				target.counter--
 				fmt.Printf("WARN: Sync is unsuccessful: %s <- %s (CREATE)\n", target.node.Id, sha512Hex)
 				return

@@ -467,7 +467,7 @@ func (c *cluster) MoveCluster(sourceClusterId string, targetClusterId string) (e
 	for len(sourceFileItemList) > 0 {
 		sourceFileItem := sourceFileItemList[0]
 
-		if !tmdn.SyncMove(sourceMasterNode.Address, sourceFileItem.Sha512Hex) {
+		if !tmdn.SyncMove(sourceFileItem.Sha512Hex, sourceMasterNode.Address) {
 			syncErr = errors.ErrSync
 		}
 

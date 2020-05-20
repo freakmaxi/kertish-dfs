@@ -242,12 +242,12 @@ func (c *commander) read(conn net.Conn) error {
 			return err
 		}
 
-		_, sizeBuffer, err := blockFile.Size()
+		size, err := blockFile.Size()
 		if err != nil {
 			return err
 		}
 
-		if err := c.writeWithTimeout(conn, sizeBuffer); err != nil {
+		if err := c.writeBinaryWithTimeout(conn, size); err != nil {
 			return err
 		}
 
@@ -282,14 +282,14 @@ func (c *commander) dele(conn net.Conn) error {
 			return errors.ErrQuit
 		}
 
-		usageCount, _, err := blockFile.Usage()
+		usageCount, err := blockFile.Usage()
 		if err != nil {
 			return err
 		}
 
 		size := uint32(0)
 		if usageCount == 1 {
-			size, _, err = blockFile.Size()
+			size, err = blockFile.Size()
 			if err != nil {
 				return err
 			}
@@ -387,6 +387,11 @@ func (c *commander) leav(conn net.Conn) error {
 }
 
 func (c *commander) sycr(conn net.Conn) error {
+	sha512Hex, err := c.hashAsHex(conn)
+	if err != nil {
+		return err
+	}
+
 	var sourceAddrLength uint8
 	if err := c.readBinaryWithTimeout(conn, &sourceAddrLength); err != nil {
 		return err
@@ -397,11 +402,6 @@ func (c *commander) sycr(conn net.Conn) error {
 		return err
 	}
 	sourceAddr := string(sourceAddrBuf)
-
-	sha512Hex, err := c.hashAsHex(conn)
-	if err != nil {
-		return err
-	}
 
 	return c.fs.LockFile(sha512Hex, func(blockFile filesystem.BlockFile) error {
 		usageCountBackup := uint16(1)
@@ -414,11 +414,20 @@ func (c *commander) sycr(conn net.Conn) error {
 		return dn.SyncRead(
 			sha512Hex,
 			false,
-			func(usageCount uint16) bool {
+			func(blockSize uint32, usageCount uint16) bool {
 				usageCountBackup = usageCount
 
 				if blockFile.Temporary() {
 					return true
+				}
+
+				size, _ := blockFile.Size()
+				if size != blockSize {
+					return true
+				}
+
+				if !blockFile.VerifyForce() {
+					return blockFile.Truncate(blockSize) == nil
 				}
 
 				return blockFile.ResetUsage(usageCount) != nil
@@ -440,13 +449,13 @@ func (c *commander) sycr(conn net.Conn) error {
 }
 
 func (c *commander) syrd(conn net.Conn) error {
-	var drop bool
-	if err := c.readBinaryWithTimeout(conn, &drop); err != nil {
+	sha512Hex, err := c.hashAsHex(conn)
+	if err != nil {
 		return err
 	}
 
-	sha512Hex, err := c.hashAsHex(conn)
-	if err != nil {
+	var drop bool
+	if err := c.readBinaryWithTimeout(conn, &drop); err != nil {
 		return err
 	}
 
@@ -458,26 +467,26 @@ func (c *commander) syrd(conn net.Conn) error {
 			return err
 		}
 
-		_, usageCountBuffer, err := blockFile.Usage()
+		size, err := blockFile.Size()
 		if err != nil {
 			return err
 		}
 
-		if err := c.writeWithTimeout(conn, usageCountBuffer); err != nil {
+		if err := c.writeBinaryWithTimeout(conn, size); err != nil {
+			return err
+		}
+
+		usageCount, err := blockFile.Usage()
+		if err != nil {
+			return err
+		}
+
+		if err := c.writeBinaryWithTimeout(conn, usageCount); err != nil {
 			return err
 		}
 
 		if !c.result(conn) {
 			return nil
-		}
-
-		_, sizeBuffer, err := blockFile.Size()
-		if err != nil {
-			return err
-		}
-
-		if err := c.writeWithTimeout(conn, sizeBuffer); err != nil {
-			return err
 		}
 
 		return blockFile.Read(
@@ -513,6 +522,11 @@ func (c *commander) syde(conn net.Conn) error {
 }
 
 func (c *commander) symv(conn net.Conn) error {
+	sha512Hex, err := c.hashAsHex(conn)
+	if err != nil {
+		return err
+	}
+
 	var sourceAddrLength uint8
 	if err := c.readBinaryWithTimeout(conn, &sourceAddrLength); err != nil {
 		return err
@@ -523,11 +537,6 @@ func (c *commander) symv(conn net.Conn) error {
 		return err
 	}
 	sourceAddr := string(sourceAddrBuf)
-
-	sha512Hex, err := c.hashAsHex(conn)
-	if err != nil {
-		return err
-	}
 
 	return c.fs.LockFile(sha512Hex, func(blockFile filesystem.BlockFile) error {
 		usageCountBackup := uint16(1)
@@ -540,11 +549,20 @@ func (c *commander) symv(conn net.Conn) error {
 		return dn.SyncRead(
 			sha512Hex,
 			true,
-			func(usageCount uint16) bool {
+			func(blockSize uint32, usageCount uint16) bool {
 				usageCountBackup = usageCount
 
 				if blockFile.Temporary() {
 					return true
+				}
+
+				size, _ := blockFile.Size()
+				if size != blockSize {
+					return true
+				}
+
+				if !blockFile.VerifyForce() {
+					return blockFile.Truncate(blockSize) == nil
 				}
 
 				return blockFile.ResetUsage(usageCount) != nil
