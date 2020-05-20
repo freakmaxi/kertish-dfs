@@ -173,7 +173,7 @@ func (d *dataNode) SyncList(readHandler func(fileItem common.SyncFileItem, curre
 			return err
 		}
 
-		var size int
+		var size int32
 		if err := binary.Read(d.conn, binary.LittleEndian, &size); err != nil {
 			return err
 		}

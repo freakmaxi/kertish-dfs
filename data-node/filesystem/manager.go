@@ -105,7 +105,7 @@ func (m *manager) list() (common.SyncFileItems, error) {
 		if !info.IsDir() && len(info.Name()) == 64 {
 			sha512HexList = append(sha512HexList, common.SyncFileItem{
 				Sha512Hex: info.Name(),
-				Size:      int(info.Size() - headerSize),
+				Size:      int32(info.Size() - headerSize),
 			})
 		}
 		return nil

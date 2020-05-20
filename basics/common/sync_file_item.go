@@ -4,7 +4,7 @@ import "strings"
 
 type SyncFileItem struct {
 	Sha512Hex string
-	Size      int
+	Size      int32
 }
 
 type SyncFileItems []SyncFileItem
