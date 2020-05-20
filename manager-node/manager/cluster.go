@@ -289,7 +289,7 @@ func (c *cluster) SyncClusters() []error {
 			for {
 				if err := c.syncCluster(&sc, false); err != nil {
 					if err == errors.ErrPing {
-						time.Sleep(time.Second)
+						<-time.After(time.Second)
 						continue
 					}
 					addErrorFunc(err)
