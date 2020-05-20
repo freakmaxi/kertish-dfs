@@ -1,6 +1,8 @@
 package routing
 
 import (
+	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"strconv"
@@ -51,14 +53,13 @@ func (n *nodeRouter) handleHandshake(w http.ResponseWriter, r *http.Request) {
 }
 
 func (n *nodeRouter) handleSyncCreate(w http.ResponseWriter, r *http.Request) {
-	opts := r.Header.Get("X-Options")
-	nodeId, sha512Hex, err := n.describeCreateOptions(opts)
+	nodeId, sha512HexList, err := n.describeCreateOptions(r)
 	if err != nil {
 		w.WriteHeader(422)
 		return
 	}
 
-	if err := n.manager.Create(nodeId, sha512Hex); err != nil {
+	if err := n.manager.Create(nodeId, sha512HexList); err != nil {
 		if err == errors.ErrNotFound {
 			w.WriteHeader(404)
 		} else {
@@ -92,18 +93,27 @@ func (n *nodeRouter) describeHandshakeOptions(options string) (uint64, string, s
 	return size, opts[1], opts[2], nil
 }
 
-func (n *nodeRouter) describeCreateOptions(options string) (string, string, error) {
-	opts := strings.Split(options, ",")
-	if len(opts) != 2 {
-		return "", "", os.ErrInvalid
+func (n *nodeRouter) describeCreateOptions(r *http.Request) (string, []string, error) {
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return "", nil, err
 	}
 
-	nodeId := opts[0]
-	fileId := opts[1]
-
-	if len(nodeId) == 0 || len(fileId) != 64 {
-		return "", "", os.ErrInvalid
+	nodeId := r.Header.Get("X-Options")
+	fileIds := make([]string, 0)
+	if err := json.Unmarshal(body, &fileIds); err != nil {
+		return "", nil, err
 	}
 
-	return nodeId, fileId, nil
+	if len(nodeId) == 0 || len(fileIds) == 0 {
+		return "", nil, os.ErrInvalid
+	}
+
+	for _, fileId := range fileIds {
+		if len(fileId) != 64 {
+			return "", nil, os.ErrInvalid
+		}
+	}
+
+	return nodeId, fileIds, nil
 }

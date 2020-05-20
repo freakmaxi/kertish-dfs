@@ -2,36 +2,32 @@ package manager
 
 import (
 	"fmt"
-	"sync"
+	"strings"
 	"time"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
-	cluster2 "github.com/freakmaxi/kertish-dfs/manager-node/cluster"
 	"github.com/freakmaxi/kertish-dfs/manager-node/data"
 )
 
-const queueLimit = 500
-const semaphoreLimit = 10
-const syncGapLimit = 500 // millisecond
 const retryLimit = 10
 
 type Node interface {
 	Handshake(nodeHardwareAddr string, nodeAddress string, size uint64) (string, string, string, error)
-	Create(nodeId string, sha512Hex string) error
-	Delete(nodeId string, sha512Hex string, shadow bool, size uint64) error
+	Create(nodeId string, sha512HexList []string) error
+	Delete(nodeId string, syncDeleteList common.SyncDeleteList) error
 }
 
 type node struct {
 	index    data.Index
 	clusters data.Clusters
 
-	syncChan chan nodeSync
+	syncManager *syncManager
+}
 
-	semaphoreLock sync.Mutex
-	semaphores    map[string]chan bool
-
-	nodeCacheMutex sync.Mutex
-	nodeCache      map[string]cluster2.DataNode
+type targetContainer struct {
+	node      *common.Node
+	counter   int
+	completed bool
 }
 
 type nodeSync struct {
@@ -41,138 +37,27 @@ type nodeSync struct {
 	clusterId  string
 	sourceAddr string
 	sha512Hex  string
-	targets    common.NodeList
-	counters   map[string]int
+	targets    []*targetContainer
 }
 
-func NewNode(index data.Index, clusters data.Clusters) (Node, error) {
-	n := &node{
-		index:          index,
-		clusters:       clusters,
-		syncChan:       make(chan nodeSync, queueLimit),
-		semaphoreLock:  sync.Mutex{},
-		semaphores:     make(map[string]chan bool),
-		nodeCacheMutex: sync.Mutex{},
-		nodeCache:      make(map[string]cluster2.DataNode),
-	}
-	go n.start()
-
-	return n, nil
-}
-
-func (n *node) getDataNode(node *common.Node) (cluster2.DataNode, error) {
-	n.nodeCacheMutex.Lock()
-	defer n.nodeCacheMutex.Unlock()
-
-	dn, has := n.nodeCache[node.Id]
-	if !has {
-		var err error
-		dn, err = cluster2.NewDataNode(node.Address)
-		if err != nil {
-			return nil, err
-		}
-		n.nodeCache[node.Address] = dn
-	}
-
-	return dn, nil
-}
-
-func (n *node) start() {
-	for {
-		select {
-		case c, m := <-n.syncChan:
-			if !m {
-				return
-			}
-
-			//if c.create && time.Now().UTC().Sub(c.date).Milliseconds() < syncGapLimit {
-
-			//	continue
-			//}
-			go n.processSync(c)
-		}
+func NewNode(index data.Index, clusters data.Clusters) Node {
+	return &node{
+		index:       index,
+		clusters:    clusters,
+		syncManager: newWorkerManager(),
 	}
 }
 
-func (n *node) processSync(ns nodeSync) {
-	if _, has := n.semaphores[ns.clusterId]; !has {
-		n.semaphoreLock.Lock()
-		n.semaphores[ns.clusterId] = make(chan bool, semaphoreLimit)
-		n.semaphoreLock.Unlock()
+func (n *node) makeTargetContainerList(nodes common.NodeList) []*targetContainer {
+	targetContainers := make([]*targetContainer, 0)
+	for _, node := range nodes {
+		targetContainers = append(targetContainers, &targetContainer{
+			node:      node,
+			counter:   retryLimit,
+			completed: false,
+		})
 	}
-
-	n.semaphores[ns.clusterId] <- true
-	defer func() {
-		<-n.semaphores[ns.clusterId]
-	}()
-
-	failed := make(common.NodeList, 0)
-	failedLock := sync.Mutex{}
-	addFailedFunc := func(failedNode *common.Node) {
-		failedLock.Lock()
-		defer failedLock.Unlock()
-
-		failed = append(failed, failedNode)
-	}
-
-	wg := &sync.WaitGroup{}
-	for _, node := range ns.targets {
-		if ns.counters[node.Id] <= 0 {
-			if ns.create {
-				fmt.Printf("ERROR: Sync is failed: %s <- %s (CREATE)\n", node.Id, ns.sha512Hex)
-			} else {
-				fmt.Printf("ERROR: Sync is failed: %s <- %s (DELETE)\n", node.Id, ns.sha512Hex)
-			}
-			continue
-		}
-
-		wg.Add(1)
-		go func(wg *sync.WaitGroup, wn common.Node) {
-			defer wg.Done()
-
-			dn, err := n.getDataNode(&wn)
-			if err != nil {
-				fmt.Printf("WARN: Data Node Connection Creation is failed. nodeId: %s, address: %s - %s\n", wn.Id, wn.Address, err.Error())
-				addFailedFunc(&wn)
-				return
-			}
-
-			if ns.create {
-				if !dn.SyncCreate(ns.sourceAddr, ns.sha512Hex) {
-					ns.counters[wn.Id]--
-					fmt.Printf("WARN: Sync is failed, will try again: %s <- %s (CREATE)\n", wn.Id, ns.sha512Hex)
-					addFailedFunc(&wn)
-					return
-				}
-				delete(ns.counters, wn.Id)
-				return
-			}
-
-			if !dn.SyncDelete(ns.sha512Hex) {
-				ns.counters[wn.Id]--
-				fmt.Printf("WARN: Sync is failed, will try again: %s <- %s (DELETE)\n", wn.Id, ns.sha512Hex)
-				addFailedFunc(&wn)
-				return
-			}
-			delete(ns.counters, wn.Id)
-		}(wg, *node)
-	}
-	wg.Wait()
-
-	if len(failed) > 0 {
-		go func(cns nodeSync, fnl common.NodeList) {
-			<-time.After(time.Second * 10)
-			n.syncChan <- nodeSync{
-				create:     cns.create,
-				date:       cns.date,
-				clusterId:  cns.clusterId,
-				sourceAddr: cns.sourceAddr,
-				sha512Hex:  cns.sha512Hex,
-				targets:    fnl,
-				counters:   cns.counters,
-			}
-		}(ns, failed)
-	}
+	return targetContainers
 }
 
 func (n *node) Handshake(nodeHardwareAddr string, nodeAddress string, size uint64) (string, string, string, error) {
@@ -183,7 +68,7 @@ func (n *node) Handshake(nodeHardwareAddr string, nodeAddress string, size uint6
 		return "", "", "", err
 	}
 
-	cluster, err := n.clusters.Get(*clusterId)
+	cluster, err := n.clusters.Get(clusterId)
 	if err != nil {
 		return "", "", "", err
 	}
@@ -197,93 +82,78 @@ func (n *node) Handshake(nodeHardwareAddr string, nodeAddress string, size uint6
 	return cluster.Id, node.Id, syncSourceAddrBind, nil
 }
 
-func (n *node) Create(nodeId string, sha512Hex string) error {
+func (n *node) Create(nodeId string, sha512HexList []string) error {
 	clusterId, err := n.clusters.ClusterIdOf(nodeId)
 	if err != nil {
 		return err
 	}
 
-	if err := n.index.Add(*clusterId, sha512Hex); err != nil {
-		return fmt.Errorf("adding to index failed: \n    clusterId: %s\n    sha512Hex: %s\n        error: %s\n", *clusterId, sha512Hex, err.Error())
+	if err := n.index.AddBulk(clusterId, sha512HexList); err != nil {
+		return fmt.Errorf("adding to index failed: \n    clusterId: %s\n    sha512HexList: %s\n        error: %s\n", clusterId, strings.Join(sha512HexList, ","), err.Error())
 	}
 
-	cluster, err := n.clusters.Get(*clusterId)
+	cluster, err := n.clusters.Get(clusterId)
 	if err != nil {
-		return fmt.Errorf("getting cluster is failed: \n    clusterId: %s\n    sha512Hex: %s\n        error: %s\n", *clusterId, sha512Hex, err.Error())
+		return fmt.Errorf("getting cluster is failed: \n    clusterId: %s\n    sha512HexList: %s\n        error: %s\n", clusterId, strings.Join(sha512HexList, ","), err.Error())
 	}
 
-	node := cluster.Node(nodeId)
-	others := cluster.Others(nodeId)
-	if others == nil {
+	sourceNode := cluster.Node(nodeId)
+	targetNodes := cluster.Others(nodeId)
+	if targetNodes == nil {
 		return fmt.Errorf("node id didn't match to get others: %s\n", nodeId)
 	}
-	if len(others) == 0 {
+	if len(targetNodes) == 0 {
 		return nil // nothing to sync
 	}
 
-	counters := make(map[string]int)
-	for _, n := range others {
-		counters[n.Id] = retryLimit
+	for _, sha512Hex := range sha512HexList {
+		n.syncManager.Queue(
+			&nodeSync{
+				create:     true,
+				date:       time.Now().UTC(),
+				clusterId:  cluster.Id,
+				sourceAddr: sourceNode.Address,
+				sha512Hex:  sha512Hex,
+				targets:    n.makeTargetContainerList(targetNodes),
+			})
 	}
-
-	// Just do not block and done it in go routine
-	go func(ns nodeSync) {
-		// this is just created, give some time to master to complete the creation
-		time.Sleep(time.Millisecond * syncGapLimit)
-		n.syncChan <- ns
-	}(nodeSync{
-		create:     true,
-		date:       time.Now().UTC(),
-		clusterId:  cluster.Id,
-		sourceAddr: node.Address,
-		sha512Hex:  sha512Hex,
-		targets:    others,
-		counters:   counters,
-	})
 
 	return nil
 }
 
-func (n *node) Delete(nodeId string, sha512Hex string, shadow bool, size uint64) error {
+func (n *node) Delete(nodeId string, syncDeleteList common.SyncDeleteList) error {
 	clusterId, err := n.clusters.ClusterIdOf(nodeId)
 	if err != nil {
 		return err
 	}
 
-	return n.clusters.Save(*clusterId, func(cluster *common.Cluster) error {
-		if !shadow {
-			if err := n.index.Remove(cluster.Id, sha512Hex); err != nil {
-				return fmt.Errorf("removing from index failed: \n    clusterId: %s\n    sha512Hex: %s\n        error: %s\n", *clusterId, sha512Hex, err.Error())
-			}
+	return n.clusters.Save(clusterId, func(cluster *common.Cluster) error {
+		wiped := syncDeleteList.Wiped()
+		if err := n.index.RemoveBulk(cluster.Id, wiped); err != nil {
+			return fmt.Errorf("removing from index failed: \n    clusterId: %s\n    sha512Hex: %s\n        error: %s\n", clusterId, strings.Join(wiped, ","), err.Error())
 		}
-		cluster.Used -= size
+		cluster.Used -= syncDeleteList.Size()
 
-		node := cluster.Node(nodeId)
-		others := cluster.Others(nodeId)
-		if others == nil {
+		sourceNode := cluster.Node(nodeId)
+		targetNodes := cluster.Others(nodeId)
+		if targetNodes == nil {
 			return fmt.Errorf("node id didn't match to get others: %s\n", nodeId)
 		}
-		if len(others) == 0 {
+		if len(targetNodes) == 0 {
 			return nil // nothing to sync
 		}
 
-		counters := make(map[string]int)
-		for _, n := range others {
-			counters[n.Id] = retryLimit
+		for _, syncDelete := range syncDeleteList {
+			n.syncManager.Queue(
+				&nodeSync{
+					create:     false,
+					date:       time.Now().UTC(),
+					clusterId:  cluster.Id,
+					sourceAddr: sourceNode.Address,
+					sha512Hex:  syncDelete.Sha512Hex,
+					targets:    n.makeTargetContainerList(targetNodes),
+				})
 		}
-
-		// Just do not block and done it in go routine
-		go func(ns nodeSync) {
-			n.syncChan <- ns
-		}(nodeSync{
-			create:     false,
-			date:       time.Now().UTC(),
-			clusterId:  cluster.Id,
-			sourceAddr: node.Address,
-			sha512Hex:  sha512Hex,
-			targets:    others,
-			counters:   counters,
-		})
 
 		return nil
 	})

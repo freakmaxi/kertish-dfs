@@ -20,8 +20,10 @@ type IndexClient interface {
 
 type Index interface {
 	Add(clusterId string, sha512Hex string) error
+	AddBulk(clusterId string, sha512HexList []string) error
 	Find(clusterIds []string, sha512Hex string) (string, error)
 	Remove(clusterId string, sha512Hex string) error
+	RemoveBulk(clusterId string, sha512HexList []string) error
 	Replace(clusterId string, sha512HexList []string) error
 	Compare(clusterId string, sha512HexList []string) (uint64, error)
 }
@@ -52,6 +54,19 @@ func (i *index) Add(clusterId string, sha512Hex string) error {
 	return i.client.HSet(i.key(clusterId), sha512Hex, clusterId)
 }
 
+func (i *index) AddBulk(clusterId string, sha512HexList []string) error {
+	if len(sha512HexList) == 0 {
+		return nil
+	}
+
+	return i.lock(clusterId, func(index map[string]string) error {
+		for _, sha512Hex := range sha512HexList {
+			index[sha512Hex] = clusterId
+		}
+		return nil
+	})
+}
+
 func (i *index) Find(clusterIds []string, sha512Hex string) (string, error) {
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
@@ -74,6 +89,19 @@ func (i *index) Remove(clusterId string, sha512Hex string) error {
 	defer i.mutex.Unlock()
 
 	return i.client.HDel(i.key(clusterId), sha512Hex)
+}
+
+func (i *index) RemoveBulk(clusterId string, sha512HexList []string) error {
+	if len(sha512HexList) == 0 {
+		return nil
+	}
+
+	return i.lock(clusterId, func(index map[string]string) error {
+		for _, sha512Hex := range sha512HexList {
+			delete(index, sha512Hex)
+		}
+		return nil
+	})
 }
 
 func (i *index) Replace(clusterId string, sha512HexList []string) error {

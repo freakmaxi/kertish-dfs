@@ -1,11 +1,12 @@
 package routing
 
 import (
+	"encoding/json"
+	"io/ioutil"
 	"net/http"
 	"os"
-	"strconv"
-	"strings"
 
+	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
 )
 
@@ -26,14 +27,13 @@ func (n *nodeRouter) handleDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (n *nodeRouter) handleSyncDelete(w http.ResponseWriter, r *http.Request) {
-	opts := r.Header.Get("X-Options")
-	nodeId, sha512Hex, shadow, size, err := n.describeDeleteOptions(opts)
+	nodeId, syncDeleteList, err := n.describeDeleteOptions(r)
 	if err != nil {
 		w.WriteHeader(422)
 		return
 	}
 
-	if err := n.manager.Delete(nodeId, sha512Hex, shadow, size); err != nil {
+	if err := n.manager.Delete(nodeId, syncDeleteList); err != nil {
 		if err == errors.ErrNotFound {
 			w.WriteHeader(404)
 		} else {
@@ -50,27 +50,29 @@ func (n *nodeRouter) validateDeleteAction(action string) bool {
 	return false
 }
 
-func (n *nodeRouter) describeDeleteOptions(options string) (string, string, bool, uint64, error) {
-	opts := strings.Split(options, ",")
-	if len(opts) != 4 {
-		return "", "", false, 0, os.ErrInvalid
-	}
-
-	nodeId := opts[0]
-	fileId := opts[1]
-	shadowString := opts[2]
-	sizeString := opts[3]
-
-	if len(nodeId) == 0 || len(fileId) == 0 || len(shadowString) == 0 || len(sizeString) == 0 {
-		return "", "", false, 0, os.ErrInvalid
-	}
-
-	size, err := strconv.ParseUint(sizeString, 10, 64)
+func (n *nodeRouter) describeDeleteOptions(r *http.Request) (string, common.SyncDeleteList, error) {
+	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		return "", "", false, 0, os.ErrInvalid
+		return "", nil, err
 	}
 
-	return nodeId, fileId, strings.Compare(shadowString, "1") == 0, size, nil
+	nodeId := r.Header.Get("X-Options")
+	syncDeleteList := make(common.SyncDeleteList, 0)
+	if err := json.Unmarshal(body, &syncDeleteList); err != nil {
+		return "", nil, err
+	}
+
+	if len(nodeId) == 0 || len(syncDeleteList) == 0 {
+		return "", nil, os.ErrInvalid
+	}
+
+	for _, syncDelete := range syncDeleteList {
+		if len(syncDelete.Sha512Hex) != 64 {
+			return "", nil, os.ErrInvalid
+		}
+	}
+
+	return nodeId, syncDeleteList, nil
 }
 
 var _ Router = &nodeRouter{}

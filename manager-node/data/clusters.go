@@ -31,7 +31,7 @@ type Clusters interface {
 	ResetStats(cluster *common.Cluster) error
 	SetFreeze(clusterId string, frozen bool) error
 
-	ClusterIdOf(nodeId string) (*string, error)
+	ClusterIdOf(nodeId string) (string, error)
 }
 
 const clusterCollection = "cluster"
@@ -308,12 +308,12 @@ func (c *clusters) SetFreeze(clusterId string, frozen bool) error {
 	return err
 }
 
-func (c *clusters) ClusterIdOf(nodeId string) (*string, error) {
+func (c *clusters) ClusterIdOf(nodeId string) (string, error) {
 	cluster, err := c.getClusterByNodeId(nodeId)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return &cluster.Id, nil
+	return cluster.Id, nil
 }
 
 func (c *clusters) getClusterByNodeId(nodeId string) (*common.Cluster, error) {

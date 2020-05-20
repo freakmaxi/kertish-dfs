@@ -139,11 +139,7 @@ func main() {
 	managerRouter := routing.NewManagerRouter(managerCluster)
 	routerManager.Add(managerRouter)
 
-	managerNode, err := manager.NewNode(index, dataClusters)
-	if err != nil {
-		fmt.Printf("ERROR: Node Manager is failed. %s\n", err.Error())
-		os.Exit(26)
-	}
+	managerNode := manager.NewNode(index, dataClusters)
 	nodeRouter := routing.NewNodeRouter(managerNode)
 	routerManager.Add(nodeRouter)
 

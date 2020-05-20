@@ -167,16 +167,11 @@ func (c *commander) crea(conn net.Conn) error {
 		return err
 	}
 
-	return c.fs.LockFile(sha512Hex, func(blockFile filesystem.BlockFile) error {
+	if err := c.fs.LockFile(sha512Hex, func(blockFile filesystem.BlockFile) error {
 		if !blockFile.Temporary() {
 			if err := blockFile.Mark(); err != nil {
 				return err
 			}
-
-			if err := c.node.Create(sha512Hex); err != nil {
-				return err
-			}
-
 			return errors.ErrQuit
 		}
 		if err := c.writeWithTimeout(conn, []byte{'+'}); err != nil {
@@ -201,16 +196,16 @@ func (c *commander) crea(conn net.Conn) error {
 			return fmt.Errorf("file is not verified")
 		}
 
-		if err := c.node.Create(sha512Hex); err != nil {
-			blockFile.Cancel()
-			return err
-		}
-
-		// Add to the cache
-		c.cache.Upsert(sha512Hex, chunkBuffer)
+		// Add to the cache in go routine
+		go c.cache.Upsert(sha512Hex, chunkBuffer)
 
 		return nil
-	})
+	}); err != nil && err != errors.ErrQuit {
+		return err
+	}
+
+	c.node.Create(sha512Hex)
+	return nil
 }
 
 func (c *commander) read(conn net.Conn) error {
@@ -279,9 +274,12 @@ func (c *commander) dele(conn net.Conn) error {
 		return err
 	}
 
-	return c.fs.LockFile(sha512Hex, func(blockFile filesystem.BlockFile) error {
+	deleteShadow := false
+	deleteSize := uint32(0)
+
+	if err := c.fs.LockFile(sha512Hex, func(blockFile filesystem.BlockFile) error {
 		if blockFile.Temporary() {
-			return nil
+			return errors.ErrQuit
 		}
 
 		usageCount, _, err := blockFile.Usage()
@@ -301,14 +299,22 @@ func (c *commander) dele(conn net.Conn) error {
 			return err
 		}
 
-		// No need to track errors on this call
-		_ = c.node.Delete(sha512Hex, usageCount > 1, size)
-
 		// Remove from cache
 		c.cache.Remove(sha512Hex)
 
+		deleteShadow = usageCount > 1
+		deleteSize = size
+
 		return nil
-	})
+	}); err != nil {
+		if err == errors.ErrQuit {
+			return nil
+		}
+		return err
+	}
+
+	c.node.Delete(sha512Hex, deleteShadow, deleteSize)
+	return nil
 }
 
 func (c *commander) hwid(conn net.Conn) error {

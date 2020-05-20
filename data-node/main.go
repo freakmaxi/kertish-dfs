@@ -71,11 +71,7 @@ func main() {
 	fmt.Printf("INFO: ROOT_PATH: %s\n", rootPath)
 
 	fs := filesystem.NewManager(rootPath, size)
-	n, err := manager.NewNode(strings.Split(managerAddress, ","))
-	if err != nil {
-		fmt.Printf("ERROR: Node Manager creation is failed: %s\n", err.Error())
-		os.Exit(100)
-	}
+	n := manager.NewNode(strings.Split(managerAddress, ","))
 
 	cacheLifetime := 360
 	cacheLimitString := os.Getenv("CACHE_LIMIT")
@@ -141,6 +137,7 @@ func main() {
 		}
 		fmt.Printf("INFO: Data Node (%s) in Cluster (%s) is starting on %s as %s\n", n.NodeId(), n.ClusterId(), bindAddr, mode)
 	}
+
 	if err := s.Listen(); err != nil {
 		fmt.Printf("ERROR: Server listening is failed: %s\n", err.Error())
 		os.Exit(400)
