@@ -576,7 +576,7 @@ func (c *cluster) Find(sha512Hex string, mapType common.MapType) (string, string
 		clustersMap[cluster.Id] = cluster
 	}
 
-	clusterId, err := c.index.Find(clusterIds, sha512Hex)
+	clusterId, _, err := c.index.Find(clusterIds, sha512Hex)
 	if err != nil {
 		return "", "", err
 	}
