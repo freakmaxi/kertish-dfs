@@ -2,6 +2,7 @@ package manager
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 )
 
 const blockSize uint32 = 1024 * 1024 * 32 // 32Mb
+const balanceThreshold = 0.05
 
 type Cluster interface {
 	Register(nodeAddresses []string) (*common.Cluster, error)
@@ -28,6 +30,7 @@ type Cluster interface {
 	SyncCluster(clusterId string) error
 	CheckConsistency() error
 	MoveCluster(sourceClusterId string, targetClusterId string) error
+	BalanceClusters(clusterIds []string) error
 
 	GetClusters() (common.Clusters, error)
 	GetCluster(clusterId string) (*common.Cluster, error)
@@ -452,6 +455,21 @@ func (c *cluster) CheckConsistency() error {
 	return nil
 }
 
+func (c *cluster) checkStructure() error {
+	return c.metadata.LockTree(func(folders []*common.Folder) ([]*common.Folder, error) {
+		if len(folders) == 0 {
+			return nil, nil
+		}
+
+		tree := common.NewTree()
+		if err := tree.Fill(folders); err != nil {
+			return nil, err
+		}
+
+		return tree.Normalize(), nil
+	})
+}
+
 func (c *cluster) MoveCluster(sourceClusterId string, targetClusterId string) (e error) {
 	sourceCluster, err := c.clusters.Get(sourceClusterId)
 	if err != nil {
@@ -525,19 +543,109 @@ func (c *cluster) MoveCluster(sourceClusterId string, targetClusterId string) (e
 	return syncErr
 }
 
-func (c *cluster) checkStructure() error {
-	return c.metadata.LockTree(func(folders []*common.Folder) ([]*common.Folder, error) {
-		if len(folders) == 0 {
-			return nil, nil
+func (c *cluster) BalanceClusters(clusterIds []string) error {
+	clusters, err := c.clusters.GetAll()
+	if err != nil {
+		return err
+	}
+
+	clusterMap := make(map[string]*common.Cluster)
+	for _, cluster := range clusters {
+		clusterMap[cluster.Id] = cluster
+	}
+
+	balancingClusters := make(common.Clusters, 0)
+	for len(clusterIds) > 0 {
+		clusterId := clusterIds[0]
+
+		cluster, has := clusterMap[clusterId]
+		if !has {
+			return errors.ErrNotFound
 		}
 
-		tree := common.NewTree()
-		if err := tree.Fill(folders); err != nil {
-			return nil, err
+		balancingClusters = append(balancingClusters, cluster)
+		clusterIds = clusterIds[1:]
+	}
+
+	if len(balancingClusters) == 0 {
+		balancingClusters = clusters
+	}
+
+	sortFunc := func(fileItemList common.SyncFileItems) common.SyncFileItems {
+		sort.Slice(fileItemList, func(i, j int) bool {
+			return fileItemList[i].Size < fileItemList[j].Size
+		})
+		return fileItemList
+	}
+
+	indexingMap := make(map[string]common.SyncFileItems)
+	for _, cluster := range balancingClusters {
+		if cluster.Used > 0 && cluster.Frozen {
+			return errors.ErrNotAvailableForClusterAction
 		}
 
-		return tree.Normalize(), nil
-	})
+		if err := c.clusters.SetFreeze(cluster.Id, true); err != nil {
+			return err
+		}
+		defer func(clusterId string) {
+			if err := c.clusters.SetFreeze(clusterId, false); err != nil {
+				fmt.Printf("ERROR: Balancing error: unfreezing is failed for %s\n", clusterId)
+			}
+		}(cluster.Id)
+
+		fileItemList, err := c.index.List(cluster.Id)
+		if err != nil {
+			return err
+		}
+		indexingMap[cluster.Id] = sortFunc(fileItemList)
+	}
+
+	for {
+		sort.Sort(balancingClusters)
+		emptiestCluster := balancingClusters[0]
+		fullestCluster := balancingClusters[len(balancingClusters)-1]
+
+		if fullestCluster.Weight()-emptiestCluster.Weight() < balanceThreshold {
+			break
+		}
+
+		sourceFileItemIndex := len(indexingMap[fullestCluster.Id]) / 2
+		sourceFileItem := indexingMap[fullestCluster.Id][sourceFileItemIndex]
+
+		tmdn, err := cluster2.NewDataNode(emptiestCluster.Master().Address)
+		if err != nil {
+			continue
+		}
+
+		if !tmdn.SyncMove(sourceFileItem.Sha512Hex, fullestCluster.Master().Address) {
+			continue
+		}
+
+		emptiestCluster.Used += uint64(sourceFileItem.Size)
+		fullestCluster.Used -= uint64(sourceFileItem.Size)
+
+		indexingMap[fullestCluster.Id] =
+			append(
+				indexingMap[fullestCluster.Id][:sourceFileItemIndex],
+				indexingMap[fullestCluster.Id][sourceFileItemIndex+1:]...,
+			)
+
+		indexingMap[emptiestCluster.Id] = append(indexingMap[emptiestCluster.Id], sourceFileItem)
+		indexingMap[emptiestCluster.Id] = sortFunc(indexingMap[emptiestCluster.Id])
+	}
+
+	syncClustersFunc := func(wg *sync.WaitGroup, cluster *common.Cluster, keepFrozen bool) {
+		defer wg.Done()
+		_ = c.syncCluster(cluster, keepFrozen)
+	}
+	wg := &sync.WaitGroup{}
+	for _, cluster := range balancingClusters {
+		wg.Add(1)
+		go syncClustersFunc(wg, cluster, true)
+	}
+	wg.Wait()
+
+	return nil
 }
 
 func (c *cluster) GetClusters() (common.Clusters, error) {

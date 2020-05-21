@@ -25,6 +25,8 @@ func (m *managerRouter) handleGet(w http.ResponseWriter, r *http.Request) {
 		m.handleCheckConsistency(w, r)
 	case "move":
 		m.handleMove(w, r)
+	case "balance":
+		m.handleBalance(w, r)
 	case "clusters":
 		m.handleClusters(w, r)
 	case "find":
@@ -105,6 +107,29 @@ func (m *managerRouter) handleMove(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (m *managerRouter) handleBalance(w http.ResponseWriter, r *http.Request) {
+	clusterIds, valid := m.describeBalanceOptions(r.Header.Get("X-Options"))
+	if !valid {
+		w.WriteHeader(422)
+		return
+	}
+
+	if err := m.manager.BalanceClusters(clusterIds); err != nil {
+		if err == errors.ErrNotFound {
+			w.WriteHeader(404)
+		} else if err == errors.ErrNotAvailableForClusterAction {
+			w.WriteHeader(503)
+		} else {
+			w.WriteHeader(500)
+		}
+
+		e := common.NewError(135, err.Error())
+		if err := json.NewEncoder(w).Encode(e); err != nil {
+			fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())
+		}
+	}
+}
+
 func (m *managerRouter) handleClusters(w http.ResponseWriter, r *http.Request) {
 	clusterId := r.Header.Get("X-Options")
 
@@ -166,7 +191,7 @@ func (m *managerRouter) handleFind(w http.ResponseWriter, r *http.Request) {
 
 func (m *managerRouter) validateGetAction(action string) bool {
 	switch action {
-	case "sync", "check", "move", "clusters", "find":
+	case "sync", "check", "move", "balance", "clusters", "find":
 		return true
 	}
 	return false
@@ -176,11 +201,36 @@ func (m *managerRouter) describeMoveOptions(options string) (string, string, boo
 	sourceClusterId := ""
 	targetClusterId := ""
 
-	eqIdx := strings.Index(options, ",")
-	if eqIdx > -1 {
-		sourceClusterId = options[:eqIdx]
-		targetClusterId = options[eqIdx+1:]
+	commaIdx := strings.Index(options, ",")
+	if commaIdx > -1 {
+		sourceClusterId = options[:commaIdx]
+		targetClusterId = options[commaIdx+1:]
 	}
 
 	return sourceClusterId, targetClusterId, len(sourceClusterId) > 0 && len(targetClusterId) > 0
+}
+
+func (m *managerRouter) describeBalanceOptions(options string) ([]string, bool) {
+	clusterIds := make([]string, 0)
+
+	for len(options) > 0 {
+		commaIdx := strings.Index(options, ",")
+		if commaIdx == -1 {
+			if len(options) > 0 {
+				clusterIds = append(clusterIds, options)
+			}
+			break
+		}
+
+		clusterId := options[:commaIdx]
+		if len(clusterId) > 0 {
+			clusterIds = append(clusterIds, clusterId)
+		}
+		options = options[commaIdx+1:]
+	}
+
+	if len(clusterIds) == 1 {
+		return nil, false
+	}
+	return clusterIds, true
 }

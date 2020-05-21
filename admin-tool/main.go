@@ -99,37 +99,91 @@ func main() {
 		}
 		fmt.Println("ok.")
 	case "syncClusters":
-		anim := common.NewAnimation(terminal.NewStdOut(), "clusters are in sync process...")
-		anim.Start()
-
-		if err := manager.SyncClusters([]string{fc.managerAddress}); err != nil {
-			anim.Cancel()
-
-			fmt.Printf("%s\n", err.Error())
-			os.Exit(50)
+		fmt.Println("CAUTION: The sync of clusters will be started simultaneously on each cluster and it will " +
+			"prevent the access to the syncing cluster for read, write and delete operations!")
+		fmt.Print("Do you want to continue? (y/N) ")
+		reader := bufio.NewReader(os.Stdin)
+		char, _, err := reader.ReadRune()
+		if err != nil {
+			fmt.Println(err)
 		}
-		anim.Stop()
+
+		switch char {
+		case 'Y', 'y':
+			anim := common.NewAnimation(terminal.NewStdOut(), "clusters are in sync process...")
+			anim.Start()
+
+			if err := manager.SyncClusters([]string{fc.managerAddress}); err != nil {
+				anim.Cancel()
+
+				fmt.Printf("%s\n", err.Error())
+				os.Exit(50)
+			}
+			anim.Stop()
+		default:
+			fmt.Println("cluster sync is canceled")
+		}
 	case "checkConsistency":
-		anim := common.NewAnimation(terminal.NewStdOut(), "metadata file chunk consistency check is in process...")
-		anim.Start()
-
-		if err := manager.CheckConsistency([]string{fc.managerAddress}); err != nil {
-			anim.Cancel()
-
-			fmt.Printf("%s\n", err.Error())
-			os.Exit(55)
+		fmt.Println("CAUTION: Check consistency will prevent access to all clusters for any kind of actions. It is " +
+			"a long running process and it may take hours/days to complete depending on your DFS setup.")
+		fmt.Print("Do you want to continue? (y/N) ")
+		reader := bufio.NewReader(os.Stdin)
+		char, _, err := reader.ReadRune()
+		if err != nil {
+			fmt.Println(err)
 		}
-		anim.Stop()
+
+		switch char {
+		case 'Y', 'y':
+			anim := common.NewAnimation(terminal.NewStdOut(), "metadata file chunk consistency check is in process...")
+			anim.Start()
+
+			if err := manager.CheckConsistency([]string{fc.managerAddress}); err != nil {
+				anim.Cancel()
+
+				fmt.Printf("%s\n", err.Error())
+				os.Exit(55)
+			}
+			anim.Stop()
+		default:
+			fmt.Println("cluster chunk consistency check is canceled")
+		}
+	case "balanceClusters":
+		fmt.Println("CAUTION: Balancing process will prevent access to the balancing clusters for any kind of actions. " +
+			"It is a long running process and it may take hours/days to complete depending on the internet speed between balancing clusters " +
+			"and the size of them. Clusters may need to be manually unfrozen!")
+		fmt.Print("Do you want to continue? (y/N) ")
+		reader := bufio.NewReader(os.Stdin)
+		char, _, err := reader.ReadRune()
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		switch char {
+		case 'Y', 'y':
+			anim := common.NewAnimation(terminal.NewStdOut(), "cluster balancing is in process...")
+			anim.Start()
+
+			if err := manager.BalanceClusters([]string{fc.managerAddress}, fc.balanceClusters); err != nil {
+				anim.Cancel()
+
+				fmt.Printf("%s\n", err.Error())
+				os.Exit(60)
+			}
+			anim.Stop()
+		default:
+			fmt.Println("cluster balancing is canceled")
+		}
 	case "getCluster":
 		if err := manager.GetClusters([]string{fc.managerAddress}, fc.getCluster); err != nil {
 			fmt.Printf("%s\n", err.Error())
-			os.Exit(60)
+			os.Exit(65)
 		}
 		fmt.Println("ok.")
 	case "getClusters":
 		if err := manager.GetClusters([]string{fc.managerAddress}, ""); err != nil {
 			fmt.Printf("%s\n", err.Error())
-			os.Exit(60)
+			os.Exit(70)
 		}
 		fmt.Println("ok.")
 	}

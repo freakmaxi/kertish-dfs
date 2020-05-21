@@ -123,8 +123,7 @@ func (m *metadata) Tree(folderPath string, includeItself bool, reverseSort bool)
 func (m *metadata) Save(folderPaths []string, saveHandler func(folders map[string]*common.Folder) error) error {
 	folderPaths = m.cleanDuplicates(folderPaths)
 
-	m.mutex.Lock(metadataLockKey)
-	defer m.mutex.Unlock(metadataLockKey)
+	m.mutex.Wait(metadataLockKey)
 
 	for i := range folderPaths {
 		m.mutex.Lock(folderPaths[i])

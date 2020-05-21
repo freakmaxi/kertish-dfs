@@ -1,6 +1,7 @@
 package common
 
 import (
+	"math"
 	"sort"
 	"strings"
 
@@ -20,7 +21,7 @@ type Cluster struct {
 type Clusters []*Cluster
 
 func (c Clusters) Len() int           { return len(c) }
-func (c Clusters) Less(i, j int) bool { return c[i].Used < c[j].Used }
+func (c Clusters) Less(i, j int) bool { return c[i].Weight() < c[j].Weight() }
 func (c Clusters) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
 
 func NewCluster(id string) *Cluster {
@@ -65,6 +66,11 @@ func (c *Cluster) Discard(id string) {
 
 func (c *Cluster) Available() uint64 {
 	return c.Size - c.Used
+}
+
+func (c *Cluster) Weight() float64 {
+	weight := float64(c.Used) / float64(c.Size) * 1000
+	return math.Round(weight) / 1000
 }
 
 func (c *Cluster) Node(nodeId string) *Node {

@@ -94,6 +94,39 @@ func MoveCluster(managerAddr []string, clusterIds []string) error {
 	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
+		if res.StatusCode == 422 {
+			return fmt.Errorf("")
+		}
+
+		var e common.Error
+		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
+			return err
+		}
+		return fmt.Errorf(e.Message)
+	}
+
+	return nil
+}
+
+func BalanceClusters(managerAddr []string, clusterIds []string) error {
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Action", "balance")
+	req.Header.Set("X-Options", strings.Join(clusterIds, ","))
+
+	res, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != 200 {
+		if res.StatusCode == 422 {
+			return fmt.Errorf("")
+		}
+
 		var e common.Error
 		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
 			return err
@@ -292,6 +325,7 @@ func GetClusters(managerAddr []string, clusterId string) error {
 		}
 		fmt.Printf("      Size:      %d (%d Gb)\n", cluster.Size, cluster.Size/(1024*1024*1024))
 		fmt.Printf("      Available: %d (%d Gb)\n", cluster.Available(), cluster.Available()/(1024*1024*1024))
+		fmt.Printf("      Weight:    %.2f\n", cluster.Weight())
 		state := "Online"
 		if cluster.Paralyzed {
 			state = "Paralyzed"

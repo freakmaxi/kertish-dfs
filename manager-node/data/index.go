@@ -2,6 +2,7 @@ package data
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,6 +28,7 @@ type Index interface {
 	Add(clusterId string, fileItem common.SyncFileItem) error
 	AddBulk(clusterId string, fileItemList common.SyncFileItems) error
 	Find(clusterIds []string, sha512Hex string) (string, *common.SyncFileItem, error)
+	List(clusterId string) (common.SyncFileItems, error)
 	Remove(clusterId string, sha512Hex string) error
 	RemoveBulk(clusterId string, sha512HexList []string) error
 	Replace(clusterId string, fileItemList common.SyncFileItems) error
@@ -104,6 +106,35 @@ func (i *index) Find(clusterIds []string, sha512Hex string) (string, *common.Syn
 		return parts[0], &common.SyncFileItem{Sha512Hex: sha512Hex, Size: int32(size)}, nil
 	}
 	return "", nil, errors.ErrNotFound
+}
+
+func (i *index) List(clusterId string) (common.SyncFileItems, error) {
+	fileItemList := make(common.SyncFileItems, 0)
+
+	if err := i.lock(clusterId, func(index map[string]string) error {
+		for k, v := range index {
+			parts := strings.Split(v, "|")
+			if len(parts) != 2 {
+				continue
+			}
+
+			size, err := strconv.ParseUint(parts[1], 10, 64)
+			if err != nil {
+				continue
+			}
+
+			fileItemList = append(fileItemList, common.SyncFileItem{
+				Sha512Hex: k,
+				Size:      int32(size),
+			})
+		}
+
+		return os.ErrInvalid
+	}); err != nil && err != os.ErrInvalid {
+		return nil, err
+	}
+
+	return fileItemList, nil
 }
 
 func (i *index) Remove(clusterId string, sha512Hex string) error {
