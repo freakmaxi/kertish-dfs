@@ -13,7 +13,7 @@ const retryLimit = 10
 
 type Node interface {
 	Handshake(nodeHardwareAddr string, nodeAddress string, size uint64) (string, string, string, error)
-	Create(nodeId string, sha512HexList []string) error
+	Create(nodeId string, fileItemList common.SyncFileItems) error
 	Delete(nodeId string, syncDeleteList common.SyncDeleteList) error
 }
 
@@ -82,19 +82,19 @@ func (n *node) Handshake(nodeHardwareAddr string, nodeAddress string, size uint6
 	return cluster.Id, node.Id, syncSourceAddrBind, nil
 }
 
-func (n *node) Create(nodeId string, sha512HexList []string) error {
+func (n *node) Create(nodeId string, fileItemList common.SyncFileItems) error {
 	clusterId, err := n.clusters.ClusterIdOf(nodeId)
 	if err != nil {
 		return err
 	}
 
-	if err := n.index.AddBulk(clusterId, sha512HexList); err != nil {
-		return fmt.Errorf("adding to index failed: \n    clusterId: %s\n    sha512HexList: %s\n        error: %s\n", clusterId, strings.Join(sha512HexList, ","), err.Error())
+	if err := n.index.AddBulk(clusterId, fileItemList); err != nil {
+		return fmt.Errorf("adding to index failed: \n        error: %s\n    clusterId: %s\n%s\n", clusterId, fileItemList, err.Error())
 	}
 
 	cluster, err := n.clusters.Get(clusterId)
 	if err != nil {
-		return fmt.Errorf("getting cluster is failed: \n    clusterId: %s\n    sha512HexList: %s\n        error: %s\n", clusterId, strings.Join(sha512HexList, ","), err.Error())
+		return fmt.Errorf("getting cluster is failed: \n        error: %s\n    clusterId: %s\n%s\n", clusterId, fileItemList, err.Error())
 	}
 
 	sourceNode := cluster.Node(nodeId)
@@ -106,14 +106,14 @@ func (n *node) Create(nodeId string, sha512HexList []string) error {
 		return nil // nothing to sync
 	}
 
-	for _, sha512Hex := range sha512HexList {
+	for _, fileItem := range fileItemList {
 		n.syncManager.Queue(
 			&nodeSync{
 				create:     true,
 				date:       time.Now().UTC(),
 				clusterId:  cluster.Id,
 				sourceAddr: sourceNode.Address,
-				sha512Hex:  sha512Hex,
+				sha512Hex:  fileItem.Sha512Hex,
 				targets:    n.makeTargetContainerList(targetNodes),
 			})
 	}

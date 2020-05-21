@@ -167,6 +167,7 @@ func (c *commander) crea(conn net.Conn) error {
 		return err
 	}
 
+	var blockSize uint32
 	err = c.fs.LockFile(sha512Hex, func(blockFile filesystem.BlockFile) error {
 		if !blockFile.Temporary() {
 			if err := blockFile.Mark(); err != nil {
@@ -178,7 +179,6 @@ func (c *commander) crea(conn net.Conn) error {
 			return err
 		}
 
-		var blockSize uint32
 		if err := c.readBinaryWithTimeout(conn, &blockSize); err != nil {
 			return err
 		}
@@ -205,7 +205,7 @@ func (c *commander) crea(conn net.Conn) error {
 		return err
 	}
 
-	c.node.Create(sha512Hex)
+	c.node.Create(sha512Hex, blockSize)
 	return err
 }
 

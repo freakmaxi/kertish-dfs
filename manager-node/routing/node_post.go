@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
 )
 
@@ -53,13 +54,13 @@ func (n *nodeRouter) handleHandshake(w http.ResponseWriter, r *http.Request) {
 }
 
 func (n *nodeRouter) handleSyncCreate(w http.ResponseWriter, r *http.Request) {
-	nodeId, sha512HexList, err := n.describeCreateOptions(r)
+	nodeId, fileItemList, err := n.describeCreateOptions(r)
 	if err != nil {
 		w.WriteHeader(422)
 		return
 	}
 
-	if err := n.manager.Create(nodeId, sha512HexList); err != nil {
+	if err := n.manager.Create(nodeId, fileItemList); err != nil {
 		if err == errors.ErrNotFound {
 			w.WriteHeader(404)
 		} else {
@@ -93,27 +94,27 @@ func (n *nodeRouter) describeHandshakeOptions(options string) (uint64, string, s
 	return size, opts[1], opts[2], nil
 }
 
-func (n *nodeRouter) describeCreateOptions(r *http.Request) (string, []string, error) {
+func (n *nodeRouter) describeCreateOptions(r *http.Request) (string, common.SyncFileItems, error) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		return "", nil, err
 	}
 
 	nodeId := r.Header.Get("X-Options")
-	fileIds := make([]string, 0)
-	if err := json.Unmarshal(body, &fileIds); err != nil {
+	fileItemList := make(common.SyncFileItems, 0)
+	if err := json.Unmarshal(body, &fileItemList); err != nil {
 		return "", nil, err
 	}
 
-	if len(nodeId) == 0 || len(fileIds) == 0 {
+	if len(nodeId) == 0 || len(fileItemList) == 0 {
 		return "", nil, os.ErrInvalid
 	}
 
-	for _, fileId := range fileIds {
-		if len(fileId) != 64 {
+	for _, fileItem := range fileItemList {
+		if len(fileItem.Sha512Hex) != 64 {
 			return "", nil, os.ErrInvalid
 		}
 	}
 
-	return nodeId, fileIds, nil
+	return nodeId, fileItemList, nil
 }

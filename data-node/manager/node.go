@@ -23,7 +23,7 @@ type Node interface {
 	Leave()
 	Handshake(hardwareAddr string, bindAddr string, size uint64) error
 
-	Create(sha512Hex string)
+	Create(sha512Hex string, size uint32)
 	Delete(sha512Hex string, shadow bool, size uint32)
 
 	ClusterId() string
@@ -39,7 +39,7 @@ type node struct {
 	nodeId        string
 	masterAddress string
 
-	createNotificationChan chan string
+	createNotificationChan chan common.SyncFileItem
 	deleteNotificationChan chan common.SyncDelete
 }
 
@@ -47,7 +47,7 @@ func NewNode(managerAddresses []string) Node {
 	node := &node{
 		client:                 http.Client{},
 		managerAddr:            managerAddresses,
-		createNotificationChan: make(chan string, notificationChannelLimit),
+		createNotificationChan: make(chan common.SyncFileItem, notificationChannelLimit),
 		deleteNotificationChan: make(chan common.SyncDelete, notificationChannelLimit),
 	}
 	node.start()
@@ -61,23 +61,23 @@ func (n *node) start() {
 }
 
 func (n *node) createChannelHandler() {
-	sha512HexList := make([]string, 0)
+	fileItemList := make(common.SyncFileItems, 0)
 	for {
 		select {
-		case sha512Hex, more := <-n.createNotificationChan:
+		case fileItem, more := <-n.createNotificationChan:
 			if !more {
 				return
 			}
 
-			sha512HexList = append(sha512HexList, sha512Hex)
-			if len(sha512HexList) >= notificationBulkLimit {
-				go n.createBulk(sha512HexList)
-				sha512HexList = make([]string, 0)
+			fileItemList = append(fileItemList, fileItem)
+			if len(fileItemList) >= notificationBulkLimit {
+				go n.createBulk(fileItemList)
+				fileItemList = make(common.SyncFileItems, 0)
 			}
 		default:
-			if len(sha512HexList) > 0 {
-				go n.createBulk(sha512HexList)
-				sha512HexList = make([]string, 0)
+			if len(fileItemList) > 0 {
+				go n.createBulk(fileItemList)
+				fileItemList = make(common.SyncFileItems, 0)
 
 				continue
 			}
@@ -86,19 +86,19 @@ func (n *node) createChannelHandler() {
 	}
 }
 
-func (n *node) createBulk(sha512HexList []string) {
-	if err := n.create(sha512HexList); err != nil {
+func (n *node) createBulk(fileItemList common.SyncFileItems) {
+	if err := n.create(fileItemList); err != nil {
 		fmt.Printf("WARN: Bulk (CREATE) notification is failed: %s\n", err)
 		<-time.After(time.Second * bulkRequestRetryInterval)
 
-		for _, sha512Hex := range sha512HexList {
-			n.createNotificationChan <- sha512Hex
+		for _, fileItem := range fileItemList {
+			n.createNotificationChan <- fileItem
 		}
 	}
 }
 
-func (n *node) create(sha512HexList []string) error {
-	body, err := json.Marshal(sha512HexList)
+func (n *node) create(fileItemList common.SyncFileItems) error {
+	body, err := json.Marshal(fileItemList)
 	if err != nil {
 		return err
 	}
@@ -261,8 +261,11 @@ func (n *node) Handshake(hardwareAddr string, bindAddr string, size uint64) erro
 	return nil
 }
 
-func (n *node) Create(sha512Hex string) {
-	n.createNotificationChan <- sha512Hex
+func (n *node) Create(sha512Hex string, size uint32) {
+	n.createNotificationChan <- common.SyncFileItem{
+		Sha512Hex: sha512Hex,
+		Size:      int32(size),
+	}
 }
 
 func (n *node) Delete(sha512Hex string, shadow bool, size uint32) {
