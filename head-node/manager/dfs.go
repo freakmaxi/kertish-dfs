@@ -156,20 +156,20 @@ func (d *dfs) Read(paths []string, join bool,
 
 func (d *dfs) Size(folderPath string) (uint64, error) {
 	folderPath = common.CorrectPath(folderPath)
-	size := uint64(0)
 
-	if err := d.metadata.LockTree(folderPath, true, false, func(folders []*common.Folder) error {
-		for _, folder := range folders {
-			for _, file := range folder.Files {
-				if file.Locked() {
-					continue
-				}
-				size += file.Size
-			}
-		}
-		return nil
-	}); err != nil {
+	folders, err := d.metadata.Tree(folderPath, true, false)
+	if err != nil {
 		return 0, err
+	}
+
+	size := uint64(0)
+	for _, folder := range folders {
+		for _, file := range folder.Files {
+			if file.Locked() {
+				continue
+			}
+			size += file.Size
+		}
 	}
 	return size, nil
 }
@@ -177,9 +177,11 @@ func (d *dfs) Size(folderPath string) (uint64, error) {
 func (d *dfs) folder(folderPath string, folderHandler func(folder *common.Folder) error) error {
 	folderPath = common.CorrectPath(folderPath)
 
-	return d.metadata.Lock([]string{folderPath}, func(folders []*common.Folder) error {
-		return folderHandler(folders[0])
-	})
+	folders, err := d.metadata.Get([]string{folderPath})
+	if err != nil {
+		return err
+	}
+	return folderHandler(folders[0])
 }
 
 func (d *dfs) file(paths []string, fileHandler func(file *common.File, streamHandler func(writer io.Writer, begins int64, ends int64) error) error) error {
@@ -190,16 +192,16 @@ func (d *dfs) file(paths []string, fileHandler func(file *common.File, streamHan
 			return os.ErrInvalid
 		}
 
-		if err := d.metadata.Lock([]string{folderPath}, func(folders []*common.Folder) error {
-			file := folders[0].File(filename)
-			if file == nil {
-				return os.ErrNotExist
-			}
-			files = append(files, file)
-			return nil
-		}); err != nil {
+		folders, err := d.metadata.Get([]string{folderPath})
+		if err != nil {
 			return err
 		}
+
+		file := folders[0].File(filename)
+		if file == nil {
+			return os.ErrNotExist
+		}
+		files = append(files, file)
 	}
 
 	if len(files) == 1 {
@@ -280,17 +282,21 @@ func (d *dfs) moveFolder(sources []string, target string, overwrite bool) error 
 			if err := folders[sourceParent].DeleteFolder(sourceChild, func(fullPath string) error {
 				folders[fullPath] = nil
 
-				return d.metadata.LockTree(fullPath, false, false, func(sourceChildren []*common.Folder) error {
-					for _, sourceChild := range sourceChildren {
-						if sourceChild.Locked() {
-							return errors.ErrLock
-						}
-						currentFull := sourceChild.Full
-						sourceChild.Full = strings.Replace(sourceChild.Full, fullPath, targetFolder.Full, 1)
-						folders[currentFull] = sourceChild
+				sourceChildren, err := d.metadata.Tree(fullPath, false, false)
+				if err != nil {
+					return err
+				}
+
+				for _, sourceChild := range sourceChildren {
+					if sourceChild.Locked() {
+						return errors.ErrLock
 					}
-					return nil
-				})
+					currentFull := sourceChild.Full
+					sourceChild.Full = strings.Replace(sourceChild.Full, fullPath, targetFolder.Full, 1)
+					folders[currentFull] = sourceChild
+				}
+
+				return nil
 			}); err != nil {
 				return err
 			}
@@ -451,22 +457,22 @@ func (d *dfs) copyFolder(sources []string, target string, overwrite bool) error 
 		}
 
 		for _, sourceFolder := range sourceFolders {
-			if err := d.metadata.LockTree(sourceFolder.Full, false, false, func(sourceChildren []*common.Folder) error {
-				for _, sourceChild := range sourceChildren {
-					sourceChild.Full = strings.Replace(sourceChild.Full, sourceFolder.Full, targetFolder.Full, 1)
-					for _, file := range sourceChild.Files {
-						if file.Locked() {
-							continue
-						}
-						if err := d.cluster.CreateShadow(file.Chunks); err != nil {
-							return err
-						}
-					}
-					folders[sourceChild.Full] = sourceChild
-				}
-				return nil
-			}); err != nil {
+			sourceChildren, err := d.metadata.Tree(sourceFolder.Full, false, false)
+			if err != nil {
 				return err
+			}
+
+			for _, sourceChild := range sourceChildren {
+				sourceChild.Full = strings.Replace(sourceChild.Full, sourceFolder.Full, targetFolder.Full, 1)
+				for _, file := range sourceChild.Files {
+					if file.Locked() {
+						continue
+					}
+					if err := d.cluster.CreateShadow(file.Chunks); err != nil {
+						return err
+					}
+				}
+				folders[sourceChild.Full] = sourceChild
 			}
 		}
 
@@ -629,56 +635,60 @@ func (d *dfs) deleteFolder(folderPath string, killZombies bool) error {
 		}
 
 		return folder.DeleteFolder(childPath, func(fullPath string) error {
-			return d.metadata.LockTree(fullPath, true, true, func(deletingFolders []*common.Folder) error {
-				searchForFolderFunc := func(fullPath string) *common.Folder {
-					for _, folder := range deletingFolders {
-						if strings.Compare(folder.Full, fullPath) == 0 {
-							return folder
-						}
-					}
-					return nil
-				}
+			deletingFolders, err := d.metadata.Tree(fullPath, true, true)
+			if err != nil {
+				return err
+			}
 
+			searchForFolderFunc := func(fullPath string) *common.Folder {
 				for _, folder := range deletingFolders {
-					if folder.Locked() {
-						return errors.ErrLock
+					if strings.Compare(folder.Full, fullPath) == 0 {
+						return folder
 					}
-
-					for len(folder.Files) > 0 {
-						file := folder.Files[0]
-
-						if err := folder.DeleteFile(file.Name, func(file *common.File) error {
-							deletedChunkHashes, missingChunkHashes, err := d.cluster.Delete(file.Chunks)
-							file.Ingest(deletedChunkHashes, missingChunkHashes)
-
-							if file.Zombie {
-								if killZombies {
-									if file.CanDie() {
-										return nil
-									}
-									return errors.ErrZombieAlive
-								}
-								return errors.ErrZombie
-							}
-							return err
-						}); err != nil {
-							return err
-						}
-					}
-
-					p, _ := common.Split(folder.Full)
-					changedFolder := searchForFolderFunc(p)
-					if changedFolder != nil {
-						_ = changedFolder.DeleteFolder(folder.Name, func(fullPath string) error {
-							return nil
-						})
-						folders[changedFolder.Full] = changedFolder
-					}
-
-					folders[folder.Full] = nil
 				}
 				return nil
-			})
+			}
+
+			for _, folder := range deletingFolders {
+				if folder.Locked() {
+					return errors.ErrLock
+				}
+
+				for len(folder.Files) > 0 {
+					file := folder.Files[0]
+
+					if err := folder.DeleteFile(file.Name, func(file *common.File) error {
+						deletedChunkHashes, missingChunkHashes, err := d.cluster.Delete(file.Chunks)
+						file.Ingest(deletedChunkHashes, missingChunkHashes)
+
+						if file.Zombie {
+							if killZombies {
+								if file.CanDie() {
+									return nil
+								}
+								return errors.ErrZombieAlive
+							}
+							return errors.ErrZombie
+						}
+						return err
+					}); err != nil {
+						return err
+					}
+				}
+
+				p, _ := common.Split(folder.Full)
+				changedFolder := searchForFolderFunc(p)
+				if changedFolder != nil {
+					_ = changedFolder.DeleteFolder(folder.Name, func(fullPath string) error {
+						return nil
+					})
+					folders[changedFolder.Full] = changedFolder
+				}
+
+				folders[folder.Full] = nil
+			}
+
+			return nil
 		})
 	})
 }

@@ -19,6 +19,7 @@ type Metadata interface {
 }
 
 const metadataCollection = "metadata"
+const metadataLockKey = "metadata"
 
 type metadata struct {
 	mutex mutex.LockingCenter
@@ -42,6 +43,9 @@ func (m *metadata) context() context.Context {
 }
 
 func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error)) error {
+	m.mutex.Lock(metadataLockKey)
+	defer m.mutex.Unlock(metadataLockKey)
+
 	opts := options.Find()
 	opts.SetSort(bson.M{"full": -1})
 
@@ -55,9 +59,6 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 	defer cursor.Close(m.context())
 
 	handlerFunc := func(f *common.Folder) error {
-		m.mutex.Lock(f.Full)
-		defer m.mutex.Unlock(f.Full)
-
 		changed, err := folderHandler(f)
 		if err != nil {
 			return err
@@ -87,6 +88,9 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 }
 
 func (m *metadata) LockTree(folderHandler func(folders []*common.Folder) ([]*common.Folder, error)) error {
+	m.mutex.Lock(metadataLockKey)
+	defer m.mutex.Unlock(metadataLockKey)
+
 	opts := options.Find()
 	opts.SetSort(bson.M{"full": 1})
 
@@ -102,17 +106,11 @@ func (m *metadata) LockTree(folderHandler func(folders []*common.Folder) ([]*com
 	defer cursor.Close(m.context())
 
 	folders := make([]*common.Folder, 0)
-	defer func() {
-		for _, folder := range folders {
-			m.mutex.Unlock(folder.Full)
-		}
-	}()
 	for cursor.Next(m.context()) {
 		var folder *common.Folder
 		if err := cursor.Decode(&folder); err != nil {
 			return err
 		}
-		m.mutex.Lock(folder.Full)
 		folders = append(folders, folder)
 	}
 

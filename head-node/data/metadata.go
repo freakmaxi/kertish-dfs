@@ -17,14 +17,15 @@ import (
 )
 
 type Metadata interface {
-	Lock(folderPaths []string, folderHandler func(folders []*common.Folder) error) error
-	LockTree(folderPath string, includeItself bool, reverseSort bool, folderHandler func(folders []*common.Folder) error) error
+	Get(folderPaths []string) ([]*common.Folder, error)
+	Tree(folderPath string, includeItself bool, reverseSort bool) ([]*common.Folder, error)
 	Save(folderPaths []string, saveHandler func(folders map[string]*common.Folder) error) error
 
 	MatchTree(folderPaths []string) ([]string, error)
 }
 
 const metadataCollection = "metadata"
+const metadataLockKey = "metadata"
 
 type metadata struct {
 	mutex mutex.LockingCenter
@@ -59,30 +60,30 @@ func (m *metadata) setupIndices() error {
 	return err
 }
 
-func (m *metadata) Lock(folderPaths []string, folderHandler func(folders []*common.Folder) error) error {
+func (m *metadata) Get(folderPaths []string) ([]*common.Folder, error) {
 	folderPaths = m.cleanDuplicates(folderPaths)
 
-	for i := range folderPaths {
-		m.mutex.Wait(folderPaths[i])
-	}
+	m.mutex.Wait(metadataLockKey)
 
 	folders := make([]*common.Folder, 0)
 	for _, folderPath := range folderPaths {
 		var folder *common.Folder
 		if err := m.col.FindOne(m.context(), bson.M{"full": folderPath}).Decode(&folder); err != nil {
 			if err == mongo.ErrNoDocuments {
-				return os.ErrNotExist
+				return nil, os.ErrNotExist
 			}
-			return err
+			return nil, err
 		}
 
 		folders = append(folders, folder)
 	}
 
-	return folderHandler(folders)
+	return folders, nil
 }
 
-func (m *metadata) LockTree(folderPath string, includeItself bool, reverseSort bool, folderHandler func(folders []*common.Folder) error) error {
+func (m *metadata) Tree(folderPath string, includeItself bool, reverseSort bool) ([]*common.Folder, error) {
+	m.mutex.Wait(metadataLockKey)
+
 	filterContent := []interface{}{
 		bson.M{"full": bson.M{"$regex": primitive.Regex{Pattern: fmt.Sprintf("^%s/.+", folderPath)}}},
 	}
@@ -101,9 +102,9 @@ func (m *metadata) LockTree(folderPath string, includeItself bool, reverseSort b
 	cursor, err := m.col.Find(m.context(), filter, opts)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return os.ErrNotExist
+			return nil, os.ErrNotExist
 		}
-		return err
+		return nil, err
 	}
 	defer cursor.Close(m.context())
 
@@ -111,17 +112,19 @@ func (m *metadata) LockTree(folderPath string, includeItself bool, reverseSort b
 	for cursor.Next(m.context()) {
 		var folder *common.Folder
 		if err := cursor.Decode(&folder); err != nil {
-			return err
+			return nil, err
 		}
 		folders = append(folders, folder)
-		m.mutex.Wait(folder.Full)
 	}
 
-	return folderHandler(folders)
+	return folders, nil
 }
 
 func (m *metadata) Save(folderPaths []string, saveHandler func(folders map[string]*common.Folder) error) error {
 	folderPaths = m.cleanDuplicates(folderPaths)
+
+	m.mutex.Lock(metadataLockKey)
+	defer m.mutex.Unlock(metadataLockKey)
 
 	for i := range folderPaths {
 		m.mutex.Lock(folderPaths[i])
@@ -157,10 +160,10 @@ func (m *metadata) Save(folderPaths []string, saveHandler func(folders map[strin
 func (m *metadata) MatchTree(folderPaths []string) ([]string, error) {
 	folderPaths = m.cleanDuplicates(folderPaths)
 
+	m.mutex.Wait(metadataLockKey)
+
 	matches := make([]string, 0)
 	for _, folderPath := range folderPaths {
-		m.mutex.Wait(folderPath)
-
 		if err := m.col.FindOne(m.context(), bson.M{"full": folderPath}).Err(); err != nil {
 			if err == mongo.ErrNoDocuments {
 				break
