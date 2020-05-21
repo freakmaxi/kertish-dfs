@@ -167,7 +167,7 @@ func (c *commander) crea(conn net.Conn) error {
 		return err
 	}
 
-	if err := c.fs.LockFile(sha512Hex, func(blockFile filesystem.BlockFile) error {
+	err = c.fs.LockFile(sha512Hex, func(blockFile filesystem.BlockFile) error {
 		if !blockFile.Temporary() {
 			if err := blockFile.Mark(); err != nil {
 				return err
@@ -200,12 +200,13 @@ func (c *commander) crea(conn net.Conn) error {
 		go c.cache.Upsert(sha512Hex, chunkBuffer)
 
 		return nil
-	}); err != nil && err != errors.ErrQuit {
+	})
+	if err != nil && err != errors.ErrQuit {
 		return err
 	}
 
 	c.node.Create(sha512Hex)
-	return nil
+	return err
 }
 
 func (c *commander) read(conn net.Conn) error {
