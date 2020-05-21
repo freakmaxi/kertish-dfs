@@ -385,24 +385,37 @@ func (c *cluster) CheckConsistency() error {
 		return err
 	}
 
+	matchedFileItemListMap := make(map[string]common.SyncFileItems)
 	clusterIds := make([]string, len(clusters))
+	clusterMap := make(map[string]*common.Cluster)
 	for i, cluster := range clusters {
 		clusterIds[i] = cluster.Id
+		clusterMap[cluster.Id] = cluster
+		matchedFileItemListMap[cluster.Id] = make(common.SyncFileItems, 0)
 	}
 
-	return c.metadata.Cursor(func(folder *common.Folder) (bool, error) {
+	if err := c.metadata.Cursor(func(folder *common.Folder) (bool, error) {
 		changed := false
 		for _, file := range folder.Files {
 			file.Resurrect()
 
 			missingChunkHashes := make([]string, 0)
 			for _, chunk := range file.Chunks {
-				if _, err := c.index.Find(clusterIds, chunk.Hash); err != nil {
+				clusterId, fileItem, err := c.index.Find(clusterIds, chunk.Hash)
+				if err != nil {
 					if err != errors.ErrNotFound {
 						return false, err
 					}
 					missingChunkHashes = append(missingChunkHashes, chunk.Hash)
+					continue
 				}
+
+				if uint32(fileItem.Size) != chunk.Size {
+					missingChunkHashes = append(missingChunkHashes, chunk.Hash)
+					continue
+				}
+
+				matchedFileItemListMap[clusterId] = append(matchedFileItemListMap[clusterId], *fileItem)
 			}
 			if len(missingChunkHashes) == 0 {
 				continue
@@ -412,7 +425,31 @@ func (c *cluster) CheckConsistency() error {
 			changed = true
 		}
 		return changed, nil
-	})
+	}); err != nil {
+		return err
+	}
+
+	// Make Zombie File Chunk Cleanup
+	for clusterId, matchedFileItemList := range matchedFileItemListMap {
+		zombieFileItemList, err := c.index.Extract(clusterId, matchedFileItemList)
+		if err != nil {
+			return err
+		}
+
+		masterNode := clusterMap[clusterId].Master()
+		mdn, err := cluster2.NewDataNode(masterNode.Address)
+		if err != nil {
+			return err
+		}
+
+		for _, zombieFileItem := range zombieFileItemList {
+			if err := mdn.Delete(zombieFileItem.Sha512Hex); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func (c *cluster) MoveCluster(sourceClusterId string, targetClusterId string) (e error) {

@@ -49,6 +49,11 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 	opts := options.Find()
 	opts.SetSort(bson.M{"full": -1})
 
+	total, err := m.col.CountDocuments(m.context(), bson.M{})
+	if err != nil {
+		return err
+	}
+
 	cursor, err := m.col.Find(m.context(), bson.M{}, opts)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -73,15 +78,19 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 		return nil
 	}
 
+	handled := int64(0)
 	for cursor.Next(m.context()) {
 		var folder *common.Folder
 		if err := cursor.Decode(&folder); err != nil {
 			return err
 		}
-
 		if err := handlerFunc(folder); err != nil {
 			return err
 		}
+		handled++
+	}
+	if handled != total {
+		return os.ErrInvalid
 	}
 
 	return nil
