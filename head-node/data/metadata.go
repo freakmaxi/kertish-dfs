@@ -63,8 +63,6 @@ func (m *metadata) setupIndices() error {
 func (m *metadata) Get(folderPaths []string) ([]*common.Folder, error) {
 	folderPaths = m.cleanDuplicates(folderPaths)
 
-	m.mutex.Wait(metadataLockKey)
-
 	folders := make([]*common.Folder, 0)
 	for _, folderPath := range folderPaths {
 		var folder *common.Folder
@@ -82,8 +80,6 @@ func (m *metadata) Get(folderPaths []string) ([]*common.Folder, error) {
 }
 
 func (m *metadata) Tree(folderPath string, includeItself bool, reverseSort bool) ([]*common.Folder, error) {
-	m.mutex.Wait(metadataLockKey)
-
 	filterContent := []interface{}{
 		bson.M{"full": bson.M{"$regex": primitive.Regex{Pattern: fmt.Sprintf("^%s/.+", folderPath)}}},
 	}
@@ -160,6 +156,15 @@ func (m *metadata) MatchTree(folderPaths []string) ([]string, error) {
 	folderPaths = m.cleanDuplicates(folderPaths)
 
 	m.mutex.Wait(metadataLockKey)
+
+	for i := range folderPaths {
+		m.mutex.Lock(folderPaths[i])
+	}
+	defer func() {
+		for _, folderPath := range folderPaths {
+			m.mutex.Unlock(folderPath)
+		}
+	}()
 
 	matches := make([]string, 0)
 	for _, folderPath := range folderPaths {
