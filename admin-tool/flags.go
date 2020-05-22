@@ -46,6 +46,7 @@ type flagContainer struct {
 	addNode            addNode
 	removeNode         string
 	unfreeze           []string
+	unfreezeAll        bool
 	syncClusters       bool
 	checkConsistency   bool
 	getCluster         string
@@ -110,7 +111,7 @@ func (f *flagContainer) Define(v string) int {
 		f.active = "removeNode"
 	}
 
-	if len(f.unfreeze) != 0 {
+	if len(f.unfreeze) != 0 || f.unfreezeAll {
 		activeCount++
 		f.active = "unFreeze"
 	}
@@ -185,7 +186,7 @@ Ex: clusterId=192.168.0.1:9430,192.168.0.2:9430`)
 	set.StringVar(&removeNode, `remove-node`, "", `Removes the node from its cluster.`)
 
 	var unFreeze string
-	set.StringVar(&unFreeze, `unfreeze`, "", `Unfreeze the frozen clusters to accept data. Ex: clusterId,clusterId,... or *`)
+	set.StringVar(&unFreeze, `unfreeze`, "", `Unfreeze the frozen clusters to accept data. Provide cluster ids to unfreeze or leave empty to apply all clusters in the setup. Ex: clusterId,clusterId`)
 
 	set.Bool(`sync-clusters`, false, `Synchronise all clusters and their nodes for data consistency`)
 	set.Bool(`check-consistency`, false, `Check file chunk node distribution consistency in metadata and mark as zombie for the broken ones`)
@@ -201,7 +202,19 @@ Ex: clusterId=192.168.0.1:9430,192.168.0.2:9430`)
 		if len(args) > i+1 && !strings.HasPrefix(args[i+1], "-") {
 			break
 		}
-		args = append(append(args[:i+1], "ALL"), args[i+1:]...)
+		args = append(append(args[:i+1], "*"), args[i+1:]...)
+		break
+	}
+
+	for i, arg := range args {
+		idx := strings.Index(arg, "-unfreeze")
+		if idx == -1 {
+			continue
+		}
+		if len(args) > i+1 && !strings.HasPrefix(args[i+1], "-") {
+			break
+		}
+		args = append(append(args[:i+1], "*"), args[i+1:]...)
 		break
 	}
 	set.Parse(args)
@@ -218,13 +231,15 @@ Ex: clusterId=192.168.0.1:9430,192.168.0.2:9430`)
 
 	bac := false
 	bc := strings.Split(balanceClusters, ",")
-	if len(bc) > 0 && len(bc[0]) == 0 || strings.Compare(bc[0], "ALL") == 0 {
-		bac = strings.Compare(bc[0], "ALL") == 0
+	if len(bc) > 0 && len(bc[0]) == 0 || strings.Compare(bc[0], "*") == 0 {
+		bac = strings.Compare(bc[0], "*") == 0
 		bc = []string{}
 	}
 
+	ufa := false
 	uf := strings.Split(unFreeze, ",")
-	if strings.Compare(unFreeze, "*") == 0 || len(uf) > 0 && len(uf[0]) == 0 {
+	if len(uf) > 0 && len(uf[0]) == 0 || strings.Compare(unFreeze, "*") == 0 {
+		ufa = strings.Compare(uf[0], "*") == 0
 		uf = []string{}
 	}
 
@@ -238,6 +253,7 @@ Ex: clusterId=192.168.0.1:9430,192.168.0.2:9430`)
 		addNode:            addNode,
 		removeNode:         removeNode,
 		unfreeze:           uf,
+		unfreezeAll:        ufa,
 		syncClusters:       strings.Index(strings.Join(os.Args, " "), "sync-clusters") > -1,
 		checkConsistency:   strings.Index(strings.Join(os.Args, " "), "check-consistency") > -1,
 		getCluster:         getCluster,

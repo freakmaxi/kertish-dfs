@@ -299,7 +299,10 @@ func (c *clusters) SetFreeze(clusterId string, frozen bool) error {
 	c.mutex.Lock(clusterLockKey)
 	defer c.mutex.Unlock(clusterLockKey)
 
-	filter := bson.M{"clusterId": clusterId}
+	filter := bson.M{
+		"clusterId": clusterId,
+		"frozen":    !frozen,
+	}
 	update := bson.M{
 		"$set": bson.M{
 			"paralyzed": true,

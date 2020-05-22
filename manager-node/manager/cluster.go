@@ -636,15 +636,10 @@ func (c *cluster) UnFreezeClusters(clusterIds []string) error {
 		if err != nil {
 			return err
 		}
+
 		for _, cluster := range clusters {
-			if !cluster.Frozen {
-				continue
-			}
-			if err := c.clusters.SetFreeze(cluster.Id, false); err != nil {
-				return err
-			}
+			clusterIds = append(clusterIds, cluster.Id)
 		}
-		return nil
 	}
 
 	for _, clusterId := range clusterIds {

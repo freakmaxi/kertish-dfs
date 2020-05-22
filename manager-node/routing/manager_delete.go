@@ -78,7 +78,7 @@ func (m *managerRouter) handleUnRegister(w http.ResponseWriter, r *http.Request)
 }
 
 func (m *managerRouter) handleUnFreeze(w http.ResponseWriter, r *http.Request) {
-	clusterIds := strings.Split(r.Header.Get("X-Options"), ",")
+	clusterIds := m.describeUnfreezeOptions(r.Header.Get("X-Options"))
 
 	if err := m.manager.UnFreezeClusters(clusterIds); err != nil {
 		w.WriteHeader(500)
@@ -187,4 +187,26 @@ func (m *managerRouter) describeReservationCommitOptions(options string) (map[st
 	}
 
 	return commitMap, nil
+}
+
+func (m *managerRouter) describeUnfreezeOptions(options string) []string {
+	clusterIds := make([]string, 0)
+
+	for len(options) > 0 {
+		commaIdx := strings.Index(options, ",")
+		if commaIdx == -1 {
+			if len(options) > 0 {
+				clusterIds = append(clusterIds, options)
+			}
+			break
+		}
+
+		clusterId := options[:commaIdx]
+		if len(clusterId) > 0 {
+			clusterIds = append(clusterIds, clusterId)
+		}
+		options = options[commaIdx+1:]
+	}
+
+	return clusterIds
 }
