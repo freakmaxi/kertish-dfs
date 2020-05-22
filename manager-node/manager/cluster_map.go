@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const blockSize uint32 = 1024 * 1024 * 32 // 32Mb
+
 func (c *cluster) createReservationMap(size uint64, clusters common.Clusters) (*common.ReservationMap, error) {
 	chunks := c.calculateChunks(size)
 	reservationId := uuid.New().String()

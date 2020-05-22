@@ -12,28 +12,28 @@ import (
 	"github.com/freakmaxi/kertish-dfs/manager-node/data"
 )
 
-const blockSize uint32 = 1024 * 1024 * 32 // 32Mb
 const balanceThreshold = 0.05
 
 type Cluster interface {
 	Register(nodeAddresses []string) (*common.Cluster, error)
 	RegisterNodesTo(clusterId string, nodeAddresses []string) error
 
-	UnFreezeClusters(clusterIds []string) error
 	UnRegisterCluster(clusterId string) error
 	UnRegisterNode(nodeId string) error
+
+	GetClusters() (common.Clusters, error)
+	GetCluster(clusterId string) (*common.Cluster, error)
 
 	Reserve(size uint64) (*common.ReservationMap, error)
 	Commit(reservationId string, clusterMap map[string]uint64) error
 	Discard(reservationId string) error
+
 	SyncClusters() []error
 	SyncCluster(clusterId string) error
 	CheckConsistency() error
 	MoveCluster(sourceClusterId string, targetClusterId string) error
 	BalanceClusters(clusterIds []string) error
-
-	GetClusters() (common.Clusters, error)
-	GetCluster(clusterId string) (*common.Cluster, error)
+	UnFreezeClusters(clusterIds []string) error
 
 	Map(sha512HexList []string, mapType common.MapType) (map[string]string, error)
 	Find(sha512Hex string, mapType common.MapType) (string, string, error)
@@ -167,32 +167,6 @@ func (c *cluster) prepareNodes(nodeAddresses []string, clusterSize uint64) (comm
 	return r, clusterSize, nil
 }
 
-func (c *cluster) UnFreezeClusters(clusterIds []string) error {
-	if len(clusterIds) == 0 {
-		clusters, err := c.clusters.GetAll()
-		if err != nil {
-			return err
-		}
-		for _, cluster := range clusters {
-			if !cluster.Frozen {
-				continue
-			}
-			if err := c.clusters.SetFreeze(cluster.Id, false); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-
-	for _, clusterId := range clusterIds {
-		if err := c.clusters.SetFreeze(clusterId, false); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 func (c *cluster) UnRegisterCluster(clusterId string) error {
 	return c.clusters.UnRegisterCluster(clusterId, func(cluster *common.Cluster) error {
 		if err := c.index.Replace(clusterId, nil); err != nil {
@@ -229,6 +203,14 @@ func (c *cluster) UnRegisterNode(nodeId string) error {
 			}
 			return nil
 		})
+}
+
+func (c *cluster) GetClusters() (common.Clusters, error) {
+	return c.clusters.GetAll()
+}
+
+func (c *cluster) GetCluster(clusterId string) (*common.Cluster, error) {
+	return c.clusters.Get(clusterId)
 }
 
 func (c *cluster) Reserve(size uint64) (*common.ReservationMap, error) {
@@ -648,12 +630,30 @@ func (c *cluster) BalanceClusters(clusterIds []string) error {
 	return nil
 }
 
-func (c *cluster) GetClusters() (common.Clusters, error) {
-	return c.clusters.GetAll()
-}
+func (c *cluster) UnFreezeClusters(clusterIds []string) error {
+	if len(clusterIds) == 0 {
+		clusters, err := c.clusters.GetAll()
+		if err != nil {
+			return err
+		}
+		for _, cluster := range clusters {
+			if !cluster.Frozen {
+				continue
+			}
+			if err := c.clusters.SetFreeze(cluster.Id, false); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 
-func (c *cluster) GetCluster(clusterId string) (*common.Cluster, error) {
-	return c.clusters.Get(clusterId)
+	for _, clusterId := range clusterIds {
+		if err := c.clusters.SetFreeze(clusterId, false); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (c *cluster) Map(sha512HexList []string, mapType common.MapType) (map[string]string, error) {
