@@ -21,8 +21,8 @@ func (m *managerRouter) handleGet(w http.ResponseWriter, r *http.Request) {
 	switch action {
 	case "sync":
 		m.handleSync(w, r)
-	case "check":
-		m.handleCheckConsistency(w, r)
+	case "repair":
+		m.handleRepairConsistency(w, r)
 	case "move":
 		m.handleMove(w, r)
 	case "balance":
@@ -41,11 +41,11 @@ func (m *managerRouter) handleSync(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	if len(clusterId) == 0 {
-		if errorList := m.manager.SyncClusters(); len(errorList) > 0 {
+		if errorList := m.health.SyncClusters(); len(errorList) > 0 {
 			err = errors.ErrSync
 		}
 	} else {
-		err = m.manager.SyncCluster(clusterId)
+		err = m.health.SyncClusterById(clusterId)
 	}
 
 	if err == nil {
@@ -64,8 +64,8 @@ func (m *managerRouter) handleSync(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (m *managerRouter) handleCheckConsistency(w http.ResponseWriter, r *http.Request) {
-	err := m.manager.CheckConsistency()
+func (m *managerRouter) handleRepairConsistency(w http.ResponseWriter, r *http.Request) {
+	err := m.health.RepairConsistency()
 	if err == nil {
 		return
 	}
@@ -191,7 +191,7 @@ func (m *managerRouter) handleFind(w http.ResponseWriter, r *http.Request) {
 
 func (m *managerRouter) validateGetAction(action string) bool {
 	switch action {
-	case "sync", "check", "move", "balance", "clusters", "find":
+	case "sync", "repair", "move", "balance", "clusters", "find":
 		return true
 	}
 	return false

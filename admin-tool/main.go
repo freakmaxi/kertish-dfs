@@ -123,8 +123,8 @@ func main() {
 		default:
 			fmt.Println("cluster sync is canceled")
 		}
-	case "checkConsistency":
-		fmt.Println("CAUTION: Check consistency will prevent access to all clusters for any kind of actions. It is " +
+	case "repairConsistency":
+		fmt.Println("CAUTION: Repair consistency will prevent access to all clusters for any kind of actions. It is " +
 			"a long running process and it may take hours/days to complete depending on your DFS setup.")
 		fmt.Print("Do you want to continue? (y/N) ")
 		reader := bufio.NewReader(os.Stdin)
@@ -135,10 +135,10 @@ func main() {
 
 		switch char {
 		case 'Y', 'y':
-			anim := common.NewAnimation(terminal.NewStdOut(), "metadata file chunk consistency check is in process...")
+			anim := common.NewAnimation(terminal.NewStdOut(), "metadata file chunk consistency repair is in process...")
 			anim.Start()
 
-			if err := manager.CheckConsistency([]string{fc.managerAddress}); err != nil {
+			if err := manager.RepairConsistency([]string{fc.managerAddress}); err != nil {
 				anim.Cancel()
 
 				fmt.Printf("%s\n", err.Error())
@@ -146,7 +146,7 @@ func main() {
 			}
 			anim.Stop()
 		default:
-			fmt.Println("cluster chunk consistency check is canceled")
+			fmt.Println("cluster chunk consistency repair is canceled")
 		}
 	case "balanceClusters":
 		fmt.Println("CAUTION: Balancing process will prevent access to the balancing clusters for any kind of actions. " +

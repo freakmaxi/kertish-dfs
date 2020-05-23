@@ -9,13 +9,15 @@ import (
 
 type managerRouter struct {
 	manager manager.Cluster
+	health  manager.Health
 
 	definitions []*Definition
 }
 
-func NewManagerRouter(clusterManager manager.Cluster) Router {
+func NewManagerRouter(clusterManager manager.Cluster, health manager.Health) Router {
 	pR := &managerRouter{
 		manager:     clusterManager,
+		health:      health,
 		definitions: make([]*Definition, 0),
 	}
 	pR.setup()

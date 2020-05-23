@@ -18,7 +18,7 @@ type Clusters interface {
 	UnRegisterCluster(clusterId string, clusterHandler func(cluster *common.Cluster) error) error
 
 	RegisterNodeTo(clusterId string, node *common.Node) error
-	UnRegisterNode(nodeId string, syncHandler func(clusterId string) error, unregisteredNodeHandler func(deletingNode *common.Node) error, masterChangedHandler func(newMaster *common.Node) error) error
+	UnRegisterNode(nodeId string, syncHandler func(cluster *common.Cluster) error, unregisteredNodeHandler func(deletingNode *common.Node) error, masterChangedHandler func(newMaster *common.Node) error) error
 
 	Get(clusterId string) (*common.Cluster, error)
 	GetAll() (common.Clusters, error)
@@ -129,7 +129,7 @@ func (c *clusters) RegisterNodeTo(clusterId string, node *common.Node) error {
 	})
 }
 
-func (c *clusters) UnRegisterNode(nodeId string, syncHandler func(clusterId string) error, unregisteredNodeHandler func(deletingNode *common.Node) error, masterChangedHandler func(newMaster *common.Node) error) error {
+func (c *clusters) UnRegisterNode(nodeId string, syncHandler func(cluster *common.Cluster) error, unregisteredNodeHandler func(deletingNode *common.Node) error, masterChangedHandler func(newMaster *common.Node) error) error {
 	nodeCluster, err := c.getClusterByNodeId(nodeId)
 	if err != nil {
 		return err
@@ -137,7 +137,7 @@ func (c *clusters) UnRegisterNode(nodeId string, syncHandler func(clusterId stri
 	deletingNode := nodeCluster.Node(nodeId)
 
 	if deletingNode.Master {
-		if err := syncHandler(nodeCluster.Id); err != nil {
+		if err := syncHandler(nodeCluster); err != nil {
 			return err
 		}
 	}

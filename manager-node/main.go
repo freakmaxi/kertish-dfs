@@ -115,18 +115,20 @@ func main() {
 		os.Exit(24)
 	}
 
-	routerManager := routing.NewManager()
+	health := manager.NewHealthTracker(dataClusters, index, metadata, time.Second*time.Duration(healthTrackerInterval))
+	health.Start()
 
-	managerCluster, err := manager.NewCluster(dataClusters, index, metadata)
+	managerCluster, err := manager.NewCluster(dataClusters, index, health)
 	if err != nil {
 		fmt.Printf("ERROR: Cluster Manager is failed. %s\n", err.Error())
 		os.Exit(25)
 	}
+	managerRouter := routing.NewManagerRouter(managerCluster, health)
 
 	// No need to block start up with cluster sync
 	go func() {
 		fmt.Print("INFO: Syncing Clusters...\n")
-		errorList := managerCluster.SyncClusters()
+		errorList := health.SyncClusters()
 		if len(errorList) > 0 {
 			for _, err := range errorList {
 				fmt.Printf("ERROR: Sync is failed! %s\n", err.Error())
@@ -136,15 +138,12 @@ func main() {
 		fmt.Print("INFO: Sync is done!\n")
 	}()
 
-	managerRouter := routing.NewManagerRouter(managerCluster)
+	routerManager := routing.NewManager()
 	routerManager.Add(managerRouter)
 
 	managerNode := manager.NewNode(index, dataClusters)
 	nodeRouter := routing.NewNodeRouter(managerNode)
 	routerManager.Add(nodeRouter)
-
-	healthTracker := manager.NewHealthTracker(dataClusters, index, time.Second*time.Duration(healthTrackerInterval))
-	healthTracker.Start()
 
 	proxy := services.NewProxy(bindAddr, routerManager)
 	proxy.Start()

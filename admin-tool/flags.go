@@ -48,7 +48,7 @@ type flagContainer struct {
 	unfreeze           []string
 	unfreezeAll        bool
 	syncClusters       bool
-	checkConsistency   bool
+	repairConsistency  bool
 	getCluster         string
 	getClusters        bool
 	help               bool
@@ -121,9 +121,9 @@ func (f *flagContainer) Define(v string) int {
 		f.active = "syncClusters"
 	}
 
-	if f.checkConsistency {
+	if f.repairConsistency {
 		activeCount++
-		f.active = "checkConsistency"
+		f.active = "repairConsistency"
 	}
 
 	if len(f.getCluster) > 0 {
@@ -189,7 +189,7 @@ Ex: clusterId=192.168.0.1:9430,192.168.0.2:9430`)
 	set.StringVar(&unFreeze, `unfreeze`, "", `Unfreeze the frozen clusters to accept data. Provide cluster ids to unfreeze or leave empty to apply all clusters in the setup. Ex: clusterId,clusterId`)
 
 	set.Bool(`sync-clusters`, false, `Synchronise all clusters and their nodes for data consistency`)
-	set.Bool(`check-consistency`, false, `Check file chunk node distribution consistency in metadata and mark as zombie for the broken ones`)
+	set.Bool(`repair-consistency`, false, `Repair file chunk node distribution consistency in metadata and mark as zombie for the broken ones`)
 	set.Bool(`help`, false, `Print this usage documentation`)
 	set.Bool(`version`, false, `Print release version`)
 
@@ -255,7 +255,7 @@ Ex: clusterId=192.168.0.1:9430,192.168.0.2:9430`)
 		unfreeze:           uf,
 		unfreezeAll:        ufa,
 		syncClusters:       strings.Index(strings.Join(os.Args, " "), "sync-clusters") > -1,
-		checkConsistency:   strings.Index(strings.Join(os.Args, " "), "check-consistency") > -1,
+		repairConsistency:  strings.Index(strings.Join(os.Args, " "), "repair-consistency") > -1,
 		getCluster:         getCluster,
 		getClusters:        strings.Index(strings.Join(os.Args, " "), "get-clusters") > -1,
 		help:               strings.Index(strings.Join(os.Args, " "), "-help") > -1,

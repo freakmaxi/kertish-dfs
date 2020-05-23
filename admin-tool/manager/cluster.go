@@ -253,12 +253,12 @@ func SyncClusters(managerAddr []string) error {
 	return nil
 }
 
-func CheckConsistency(managerAddr []string) error {
+func RepairConsistency(managerAddr []string) error {
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("X-Action", "check")
+	req.Header.Set("X-Action", "repair")
 
 	res, err := client.Do(req)
 	if err != nil {

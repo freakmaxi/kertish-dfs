@@ -35,7 +35,7 @@ Will be used to synchronize accesses between services
 - `GET` is used to sync cluster/clusters, list cluster/clusters and nodes and find the cluster information for file.
 
 ##### Required Headers:
-- `X-Action` defines the behaviour of get request. Values: `sync` or `check` or `move` or `clusters` or `find`
+- `X-Action` defines the behaviour of get request. Values: `sync` or `repair` or `move` or `clusters` or `find`
 
 ##### Possible Status Codes
 - `422`: Required Request Headers are not valid or absent
@@ -59,8 +59,8 @@ All failed responses comes with error json. Ex:
 }
 ```
 
-##### Check Action
-Check action is to trigger the consistency and integrity check operation on cluster/clusters.
+##### Repair Action
+Repair action is to trigger the consistency and integrity repair operation on cluster/clusters.
 
 ##### Possible Status Codes
 - `404`: Not found
@@ -72,7 +72,7 @@ All failed responses comes with error json. Ex:
 ```json
 {
   "code": 105,
-  "message": "clusters are not available for check"
+  "message": "clusters are not available for repair"
 }
 ```
 

@@ -40,7 +40,9 @@ type node struct {
 	masterAddress string
 
 	createNotificationChan chan common.SyncFileItem
+	createFailureChan      chan common.SyncFileItems
 	deleteNotificationChan chan common.SyncDelete
+	deleteFailureChan      chan common.SyncDeleteList
 }
 
 func NewNode(managerAddresses []string) Node {
@@ -48,7 +50,9 @@ func NewNode(managerAddresses []string) Node {
 		client:                 http.Client{},
 		managerAddr:            managerAddresses,
 		createNotificationChan: make(chan common.SyncFileItem, notificationChannelLimit),
+		createFailureChan:      make(chan common.SyncFileItems, notificationChannelLimit),
 		deleteNotificationChan: make(chan common.SyncDelete, notificationChannelLimit),
+		deleteFailureChan:      make(chan common.SyncDeleteList, notificationChannelLimit),
 	}
 	node.start()
 
@@ -71,29 +75,34 @@ func (n *node) createChannelHandler() {
 
 			fileItemList = append(fileItemList, fileItem)
 			if len(fileItemList) >= notificationBulkLimit {
-				go n.createBulk(fileItemList)
+				go n.createBulk(fileItemList, 0)
 				fileItemList = make(common.SyncFileItems, 0)
 			}
+		case failedFileItemList, more := <-n.createFailureChan:
+			if !more {
+				return
+			}
+			go n.createBulk(failedFileItemList, time.Second*bulkRequestRetryInterval)
 		default:
-			if len(fileItemList) > 0 {
-				go n.createBulk(fileItemList)
-				fileItemList = make(common.SyncFileItems, 0)
-
+			if len(fileItemList) == 0 {
+				<-time.After(time.Millisecond * bulkRequestInterval)
 				continue
 			}
-			<-time.After(time.Millisecond * bulkRequestInterval)
+
+			go n.createBulk(fileItemList, 0)
+			fileItemList = make(common.SyncFileItems, 0)
 		}
 	}
 }
 
-func (n *node) createBulk(fileItemList common.SyncFileItems) {
+func (n *node) createBulk(fileItemList common.SyncFileItems, delay time.Duration) {
+	if delay > 0 {
+		<-time.After(delay)
+	}
+
 	if err := n.create(fileItemList); err != nil {
 		fmt.Printf("WARN: Bulk (CREATE) notification is failed: %s\n", err)
-		<-time.After(time.Second * bulkRequestRetryInterval)
-
-		for _, fileItem := range fileItemList {
-			n.createNotificationChan <- fileItem
-		}
+		n.createFailureChan <- fileItemList
 	}
 }
 
@@ -137,29 +146,34 @@ func (n *node) deleteChannelHandler() {
 
 			syncDeleteList = append(syncDeleteList, syncDelete)
 			if len(syncDeleteList) >= notificationBulkLimit {
-				go n.deleteBulk(syncDeleteList)
+				go n.deleteBulk(syncDeleteList, 0)
 				syncDeleteList = make(common.SyncDeleteList, 0)
 			}
+		case failedSyncDeleteList, more := <-n.deleteFailureChan:
+			if !more {
+				return
+			}
+			go n.deleteBulk(failedSyncDeleteList, time.Second*bulkRequestRetryInterval)
 		default:
 			if len(syncDeleteList) > 0 {
-				go n.deleteBulk(syncDeleteList)
-				syncDeleteList = make(common.SyncDeleteList, 0)
-
+				<-time.After(time.Millisecond * bulkRequestInterval)
 				continue
 			}
-			<-time.After(time.Millisecond * bulkRequestInterval)
+
+			go n.deleteBulk(syncDeleteList, 0)
+			syncDeleteList = make(common.SyncDeleteList, 0)
 		}
 	}
 }
 
-func (n *node) deleteBulk(syncDeleteList common.SyncDeleteList) {
+func (n *node) deleteBulk(syncDeleteList common.SyncDeleteList, delay time.Duration) {
+	if delay > 0 {
+		<-time.After(delay)
+	}
+
 	if err := n.delete(syncDeleteList); err != nil {
 		fmt.Printf("WARN: Bulk (DELETE) notification is failed: %s\n", err)
-		<-time.After(time.Second * bulkRequestRetryInterval)
-
-		for _, syncDelete := range syncDeleteList {
-			n.deleteNotificationChan <- syncDelete
-		}
+		n.deleteFailureChan <- syncDeleteList
 	}
 }
 

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sort"
 	"sync"
-	"time"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
@@ -28,9 +27,6 @@ type Cluster interface {
 	Commit(reservationId string, clusterMap map[string]uint64) error
 	Discard(reservationId string) error
 
-	SyncClusters() []error
-	SyncCluster(clusterId string) error
-	CheckConsistency() error
 	MoveCluster(sourceClusterId string, targetClusterId string) error
 	BalanceClusters(clusterIds []string) error
 	UnFreezeClusters(clusterIds []string) error
@@ -42,14 +38,14 @@ type Cluster interface {
 type cluster struct {
 	clusters data.Clusters
 	index    data.Index
-	metadata data.Metadata
+	health   Health
 }
 
-func NewCluster(clusters data.Clusters, index data.Index, metadata data.Metadata) (Cluster, error) {
+func NewCluster(clusters data.Clusters, index data.Index, health Health) (Cluster, error) {
 	return &cluster{
 		clusters: clusters,
 		index:    index,
-		metadata: metadata,
+		health:   health,
 	}, nil
 }
 
@@ -186,8 +182,8 @@ func (c *cluster) UnRegisterCluster(clusterId string) error {
 func (c *cluster) UnRegisterNode(nodeId string) error {
 	return c.clusters.UnRegisterNode(
 		nodeId,
-		func(clusterId string) error {
-			return c.SyncCluster(clusterId)
+		func(cluster *common.Cluster) error {
+			return c.health.SyncCluster(cluster, false)
 		},
 		func(deletingNode *common.Node) error {
 			dn, err := cluster2.NewDataNode(deletingNode.Address)
@@ -247,208 +243,6 @@ func (c *cluster) Discard(reservationId string) error {
 			cluster.Discard(reservationId)
 		}
 		return nil
-	})
-}
-
-func (c *cluster) SyncClusters() []error {
-	clusters, err := c.clusters.GetAll()
-	if err != nil {
-		return []error{err}
-	}
-
-	wg := &sync.WaitGroup{}
-
-	errorListMutex := sync.Mutex{}
-	errorList := make([]error, 0)
-	addErrorFunc := func(err error) {
-		errorListMutex.Lock()
-		defer errorListMutex.Unlock()
-
-		errorList = append(errorList, err)
-	}
-
-	for _, cluster := range clusters {
-		wg.Add(1)
-		go func(wg *sync.WaitGroup, sc common.Cluster) {
-			defer wg.Done()
-			for {
-				if err := c.syncCluster(&sc, false); err != nil {
-					if err == errors.ErrPing {
-						<-time.After(time.Second)
-						continue
-					}
-					addErrorFunc(err)
-					return
-				}
-				return
-			}
-		}(wg, *cluster)
-	}
-	wg.Wait()
-
-	return errorList
-}
-
-func (c *cluster) SyncCluster(clusterId string) error {
-	cluster, err := c.clusters.Get(clusterId)
-	if err != nil {
-		return err
-	}
-	return c.syncCluster(cluster, false)
-}
-
-func (c *cluster) syncCluster(cluster *common.Cluster, keepFrozen bool) error {
-	if err := c.clusters.SetFreeze(cluster.Id, true); err != nil {
-		return err
-	}
-	defer func() {
-		_ = c.clusters.ResetStats(cluster)
-		if keepFrozen {
-			return
-		}
-
-		if err := c.clusters.SetFreeze(cluster.Id, false); err != nil {
-			fmt.Printf("ERROR: Syncing error: unfreezing is failed for %s\n", cluster.Id)
-		}
-	}()
-
-	masterNode := cluster.Master()
-	slaveNodes := cluster.Slaves()
-
-	mdn, err := cluster2.NewDataNode(masterNode.Address)
-	if err != nil || !mdn.Join(cluster.Id, masterNode.Id, "") {
-		return errors.ErrJoin
-	}
-
-	cluster.Reservations = make(map[string]uint64)
-	cluster.Used, _ = mdn.Used()
-
-	if len(slaveNodes) == 0 {
-		return nil
-	}
-
-	fileItemList := mdn.SyncList()
-	if fileItemList == nil {
-		fmt.Printf("ERROR: Syncing error: node (%s) didn't response for SyncList\n", masterNode.Id)
-		return errors.ErrPing
-	}
-
-	if err := c.index.Replace(cluster.Id, fileItemList); err != nil {
-		fmt.Printf("ERROR: Index replacement error: %s\n", err.Error())
-		return errors.ErrPing
-	}
-
-	wg := &sync.WaitGroup{}
-	for _, slaveNode := range slaveNodes {
-		wg.Add(1)
-		go func(wg *sync.WaitGroup, mN *common.Node, sN *common.Node) {
-			defer wg.Done()
-
-			sdn, err := cluster2.NewDataNode(sN.Address)
-			if err != nil || !sdn.Join(cluster.Id, sN.Id, masterNode.Address) {
-				fmt.Printf("ERROR: Syncing error: %s\n", errors.ErrJoin.Error())
-				return
-			}
-
-			if !sdn.SyncFull(mN.Address) {
-				fmt.Printf("ERROR: Syncing node (%s) is failed. Source: %s\n", sN.Id, mN.Address)
-			}
-		}(wg, masterNode, slaveNode)
-	}
-	wg.Wait()
-
-	return nil
-}
-
-func (c *cluster) CheckConsistency() error {
-	if err := c.checkStructure(); err != nil {
-		return err
-	}
-
-	clusters, err := c.GetClusters()
-	if err != nil {
-		return err
-	}
-
-	matchedFileItemListMap := make(map[string]common.SyncFileItems)
-	clusterIds := make([]string, len(clusters))
-	clusterMap := make(map[string]*common.Cluster)
-	for i, cluster := range clusters {
-		clusterIds[i] = cluster.Id
-		clusterMap[cluster.Id] = cluster
-		matchedFileItemListMap[cluster.Id] = make(common.SyncFileItems, 0)
-	}
-
-	if err := c.metadata.Cursor(func(folder *common.Folder) (bool, error) {
-		changed := false
-		for _, file := range folder.Files {
-			file.Resurrect()
-
-			missingChunkHashes := make([]string, 0)
-			for _, chunk := range file.Chunks {
-				clusterId, fileItem, err := c.index.Find(clusterIds, chunk.Hash)
-				if err != nil {
-					if err != errors.ErrNotFound {
-						return false, err
-					}
-					missingChunkHashes = append(missingChunkHashes, chunk.Hash)
-					continue
-				}
-
-				if uint32(fileItem.Size) != chunk.Size {
-					missingChunkHashes = append(missingChunkHashes, chunk.Hash)
-					continue
-				}
-
-				matchedFileItemListMap[clusterId] = append(matchedFileItemListMap[clusterId], *fileItem)
-			}
-			if len(missingChunkHashes) == 0 {
-				continue
-			}
-
-			file.Ingest([]string{}, missingChunkHashes)
-			changed = true
-		}
-		return changed, nil
-	}); err != nil {
-		return err
-	}
-
-	// Make Zombie File Chunk Cleanup
-	for clusterId, matchedFileItemList := range matchedFileItemListMap {
-		zombieFileItemList, err := c.index.Extract(clusterId, matchedFileItemList)
-		if err != nil {
-			return err
-		}
-
-		masterNode := clusterMap[clusterId].Master()
-		mdn, err := cluster2.NewDataNode(masterNode.Address)
-		if err != nil {
-			return err
-		}
-
-		for _, zombieFileItem := range zombieFileItemList {
-			if err := mdn.Delete(zombieFileItem.Sha512Hex); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-func (c *cluster) checkStructure() error {
-	return c.metadata.LockTree(func(folders []*common.Folder) ([]*common.Folder, error) {
-		if len(folders) == 0 {
-			return nil, nil
-		}
-
-		tree := common.NewTree()
-		if err := tree.Fill(folders); err != nil {
-			return nil, err
-		}
-
-		return tree.Normalize(), nil
 	})
 }
 
@@ -513,7 +307,7 @@ func (c *cluster) MoveCluster(sourceClusterId string, targetClusterId string) (e
 
 	syncClustersFunc := func(wg *sync.WaitGroup, cluster *common.Cluster, keepFrozen bool) {
 		defer wg.Done()
-		_ = c.syncCluster(cluster, keepFrozen)
+		_ = c.health.SyncCluster(cluster, keepFrozen)
 	}
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
@@ -618,7 +412,7 @@ func (c *cluster) BalanceClusters(clusterIds []string) error {
 
 	syncClustersFunc := func(wg *sync.WaitGroup, cluster *common.Cluster, keepFrozen bool) {
 		defer wg.Done()
-		_ = c.syncCluster(cluster, keepFrozen)
+		_ = c.health.SyncCluster(cluster, keepFrozen)
 	}
 	wg := &sync.WaitGroup{}
 	for _, cluster := range balancingClusters {
