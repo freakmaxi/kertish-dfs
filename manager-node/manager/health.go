@@ -75,6 +75,7 @@ func (h *health) maintain() {
 	for {
 		select {
 		case <-time.After(maintainDuration):
+			fmt.Print("INFO: Maintaining Clusters...\n")
 			// Fire Forget
 			go func() {
 				clusters, err := h.clusters.GetAll()
@@ -84,6 +85,7 @@ func (h *health) maintain() {
 
 				for _, cluster := range clusters {
 					if cluster.Frozen {
+						fmt.Printf("WARN: Frozen cluster is skipped to maintain. clusterId: %s\n", cluster.Id)
 						continue
 					}
 
@@ -92,6 +94,7 @@ func (h *health) maintain() {
 						fmt.Printf("ERROR: Syncing cluster in Maintain is failed. clusterId: %s - %s\n", cluster.Id, err.Error())
 					}
 				}
+				fmt.Print("INFO: Maintain is completed!\n")
 			}()
 		}
 	}
