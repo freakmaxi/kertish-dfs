@@ -155,7 +155,7 @@ func (n *node) deleteChannelHandler() {
 			}
 			go n.deleteBulk(failedSyncDeleteList, time.Second*bulkRequestRetryInterval)
 		default:
-			if len(syncDeleteList) > 0 {
+			if len(syncDeleteList) == 0 {
 				<-time.After(time.Millisecond * bulkRequestInterval)
 				continue
 			}
