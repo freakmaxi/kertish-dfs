@@ -2,13 +2,13 @@ package common
 
 import (
 	"os"
-	"sort"
 	"strings"
 )
 
 type Tree struct {
-	Folder *Folder
-	Subs   []*Tree
+	folder *Folder
+	subs   []*Tree
+	subMap map[string]*Tree
 }
 
 func NewTree() *Tree {
@@ -17,8 +17,9 @@ func NewTree() *Tree {
 
 func newTree(folder *Folder) *Tree {
 	return &Tree{
-		Folder: folder,
-		Subs:   make([]*Tree, 0),
+		folder: folder,
+		subs:   make([]*Tree, 0),
+		subMap: make(map[string]*Tree),
 	}
 }
 
@@ -30,13 +31,13 @@ func (t *Tree) Normalize() []*Folder {
 }
 
 func (t *Tree) normalize(tree *Tree, folders *[]*Folder) {
-	*folders = append(*folders, tree.Folder)
+	*folders = append(*folders, tree.folder)
 
-	if len(tree.Subs) == 0 {
+	if len(tree.subs) == 0 {
 		return
 	}
 
-	for _, subTree := range tree.Subs {
+	for _, subTree := range tree.subs {
 		t.normalize(subTree, folders)
 	}
 }
@@ -46,7 +47,7 @@ func (t *Tree) Fill(folders []*Folder) error {
 		return nil
 	}
 
-	t.Folder = folders[0]
+	t.folder = folders[0]
 	currentTree := t
 
 	for i := 1; i < len(folders); i++ {
@@ -55,38 +56,41 @@ func (t *Tree) Fill(folders []*Folder) error {
 		folderFull := folder.Full
 		parentPath, name := Split(folderFull)
 
-		if strings.Compare(currentTree.Folder.Full, parentPath) == 0 {
-			if !t.hasShadow(currentTree.Folder, folderFull) {
-				_ = currentTree.Folder.NewFolder(name, func(shadow *FolderShadow) error {
+		if strings.Compare(currentTree.folder.Full, parentPath) == 0 {
+			if currentTree.folder.Folder(name) == nil {
+				_ = currentTree.folder.NewFolder(name, func(shadow *FolderShadow) error {
 					return nil
 				})
-				sort.Sort(currentTree.Folder.Folders)
 			}
-			currentTree.Subs = append(currentTree.Subs, newTree(folder))
+
+			nt := newTree(folder)
+			currentTree.subs = append(currentTree.subs, nt)
+			currentTree.subMap[folder.Full] = nt
+
 			continue
 		}
 
-		if _, err := t.locateTree(folder); err != nil { // ErrNotExists all the time
+		if _, err := t.locate(folder); err != nil { // ErrNotExists all the time
 			// Something broken in the tree structure, fill missing parts
-			if err := t.fixTree(currentTree, folder); err != nil {
+			if err := t.fix(currentTree, folder); err != nil {
 				return err
 			}
 		}
-		currentTree, _ = t.locateTree(folder)
+		currentTree, _ = t.locate(folder)
 	}
 	t.ensureStructure(t)
 
 	return nil
 }
 
-func (t *Tree) locateTree(folder *Folder) (*Tree, error) {
+func (t *Tree) locate(folder *Folder) (*Tree, error) {
 	parts := PathTree(folder.Full)
 
 	currentTree := t
 	for i := 0; i < len(parts); i++ {
 		part := parts[i]
 
-		if strings.Compare(currentTree.Folder.Full, part) == 0 {
+		if strings.Compare(currentTree.folder.Full, part) == 0 {
 			continue
 		}
 
@@ -98,31 +102,21 @@ func (t *Tree) locateTree(folder *Folder) (*Tree, error) {
 	return currentTree, nil
 }
 
-func (t *Tree) hasShadow(searchingFolder *Folder, full string) bool {
-	for _, folderShadow := range searchingFolder.Folders {
-		if strings.Compare(folderShadow.Full, full) == 0 {
-			return true
-		}
-	}
-	return false
-}
-
 func (t *Tree) get(searchingTree *Tree, full string) *Tree {
-	for _, tree := range searchingTree.Subs {
-		if strings.Compare(tree.Folder.Full, full) == 0 {
-			return tree
-		}
+	tree, has := searchingTree.subMap[full]
+	if !has {
+		return nil
 	}
-	return nil
+	return tree
 }
 
-func (t *Tree) fixTree(parent *Tree, folder *Folder) error {
+func (t *Tree) fix(parent *Tree, folder *Folder) error {
 	pathTree := PathTree(folder.Full)
 
 	for len(pathTree) > 0 {
 		p := pathTree[0]
 
-		if strings.Compare(parent.Folder.Full, p) != 0 {
+		if strings.Compare(parent.folder.Full, p) != 0 {
 			pathTree = pathTree[1:]
 			continue
 		}
@@ -131,7 +125,7 @@ func (t *Tree) fixTree(parent *Tree, folder *Folder) error {
 	}
 
 	if len(pathTree) == 0 {
-		return t.fixTree(t, folder)
+		return t.fix(t, folder)
 	}
 
 	tree := parent
@@ -146,19 +140,21 @@ func (t *Tree) fixTree(parent *Tree, folder *Folder) error {
 
 		_, name := Split(p)
 
-		if err := tree.Folder.NewFolder(name, func(shadow *FolderShadow) error {
+		if err := tree.folder.NewFolder(name, func(shadow *FolderShadow) error {
 			return nil
 		}); err != nil && err != os.ErrExist {
 			return err
 		}
-		sort.Sort(tree.Folder.Folders)
 
 		if strings.Compare(folder.Full, p) == 0 {
 			childTree = newTree(folder)
 		} else {
 			childTree = newTree(NewFolder(p))
 		}
-		tree.Subs = append(tree.Subs, childTree)
+
+		tree.subs = append(tree.subs, childTree)
+		tree.subMap[childTree.folder.Full] = childTree
+
 		tree = childTree
 	}
 
@@ -166,21 +162,15 @@ func (t *Tree) fixTree(parent *Tree, folder *Folder) error {
 }
 
 func (t *Tree) ensureStructure(tree *Tree) {
-	for _, folderShadow := range tree.Folder.Folders {
-		exists := false
-		for _, treeItem := range tree.Subs {
-			if strings.Compare(treeItem.Folder.Full, folderShadow.Full) == 0 {
-				exists = true
-				break
-			}
-		}
-		if !exists {
-			folder := NewFolder(folderShadow.Full)
-			tree.Subs = append(tree.Subs, newTree(folder))
+	for _, folderShadow := range tree.folder.Folders {
+		if _, has := tree.subMap[folderShadow.Full]; !has {
+			nt := newTree(NewFolder(folderShadow.Full))
+			tree.subs = append(tree.subs, nt)
+			tree.subMap[folderShadow.Full] = nt
 		}
 	}
 
-	for _, treeItem := range tree.Subs {
+	for _, treeItem := range tree.subs {
 		t.ensureStructure(treeItem)
 	}
 }
