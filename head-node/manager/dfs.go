@@ -634,7 +634,7 @@ func (d *dfs) deleteFolder(folderPath string, killZombies bool) error {
 			return os.ErrNotExist
 		}
 
-		return folder.DeleteFolder(childPath, func(fullPath string) error {
+		if err := folder.DeleteFolder(childPath, func(fullPath string) error {
 			deletingFolders, err := d.metadata.Tree(fullPath, true, true)
 			if err != nil {
 				return err
@@ -689,7 +689,13 @@ func (d *dfs) deleteFolder(folderPath string, killZombies bool) error {
 			}
 
 			return nil
-		})
+		}); err != nil {
+			if err == os.ErrNotExist {
+				return errors.ErrRepair
+			}
+			return err
+		}
+		return nil
 	})
 }
 

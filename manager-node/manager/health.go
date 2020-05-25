@@ -12,17 +12,25 @@ import (
 	"github.com/freakmaxi/kertish-dfs/manager-node/data"
 )
 
+const defaultIntervalDuration = time.Second * 10
+const maintainDuration = time.Hour * 24
+
+type RepairType int
+
+var (
+	RT_Full      RepairType = 1
+	RT_Structure RepairType = 2
+	RT_Integrity RepairType = 3
+)
+
 type Health interface {
 	Start()
 
 	SyncClusters() []error
 	SyncClusterById(clusterId string) error
 	SyncCluster(cluster *common.Cluster, keepFrozen bool) error
-	RepairConsistency() error
+	RepairConsistency(repairType RepairType) error
 }
-
-const defaultIntervalDuration = time.Second * 10
-const maintainDuration = time.Hour * 24
 
 type health struct {
 	clusters         data.Clusters
@@ -336,11 +344,22 @@ func (h *health) SyncCluster(cluster *common.Cluster, keepFrozen bool) error {
 	return nil
 }
 
-func (h *health) RepairConsistency() error {
-	if err := h.repairStructure(); err != nil {
-		return err
+func (h *health) RepairConsistency(repairType RepairType) error {
+	repairStructure := repairType == RT_Full || repairType == RT_Structure
+	repairIntegrity := repairType == RT_Full || repairType == RT_Integrity
+
+	if repairStructure {
+		// Repair Structure
+		if err := h.repairStructure(); err != nil {
+			return err
+		}
 	}
 
+	if !repairIntegrity {
+		return nil
+	}
+
+	// Repair Integrity
 	clusters, err := h.clusters.GetAll()
 	if err != nil {
 		return err

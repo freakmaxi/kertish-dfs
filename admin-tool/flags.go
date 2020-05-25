@@ -43,12 +43,12 @@ type flagContainer struct {
 	moveCluster        []string
 	balanceClusters    []string
 	balanceAllClusters bool
+	repairConsistency  string
 	addNode            addNode
 	removeNode         string
 	unfreeze           []string
 	unfreezeAll        bool
 	syncClusters       bool
-	repairConsistency  bool
 	getCluster         string
 	getClusters        bool
 	help               bool
@@ -101,6 +101,11 @@ func (f *flagContainer) Define(v string) int {
 		f.active = "balanceClusters"
 	}
 
+	if len(f.repairConsistency) != 0 {
+		activeCount++
+		f.active = "repairConsistency"
+	}
+
 	if len(f.addNode.clusterId) > 0 && len(f.addNode.addresses) > 0 {
 		activeCount++
 		f.active = "addNode"
@@ -119,11 +124,6 @@ func (f *flagContainer) Define(v string) int {
 	if f.syncClusters {
 		activeCount++
 		f.active = "syncClusters"
-	}
-
-	if f.repairConsistency {
-		activeCount++
-		f.active = "repairConsistency"
 	}
 
 	if len(f.getCluster) > 0 {
@@ -188,8 +188,10 @@ Ex: clusterId=192.168.0.1:9430,192.168.0.2:9430`)
 	var unFreeze string
 	set.StringVar(&unFreeze, `unfreeze`, "", `Unfreeze the frozen clusters to accept data. Provide cluster ids to unfreeze or leave empty to apply all clusters in the setup. Ex: clusterId,clusterId`)
 
+	var repairConsistency string
+	set.StringVar(&repairConsistency, `repair-consistency`, "", `Repair file chunk node distribution consistency in metadata and data nodes and mark as zombie for the broken ones. Provide repair model for consistency repairing operation or leave empty to run full repair. Possible repair models (full, structure, integrity)`)
+
 	set.Bool(`sync-clusters`, false, `Synchronise all clusters and their nodes for data consistency`)
-	set.Bool(`repair-consistency`, false, `Repair file chunk node distribution consistency in metadata and mark as zombie for the broken ones`)
 	set.Bool(`help`, false, `Print this usage documentation`)
 	set.Bool(`version`, false, `Print release version`)
 
@@ -215,6 +217,18 @@ Ex: clusterId=192.168.0.1:9430,192.168.0.2:9430`)
 			break
 		}
 		args = append(append(args[:i+1], "*"), args[i+1:]...)
+		break
+	}
+
+	for i, arg := range args {
+		idx := strings.Index(arg, "-repair-consistency")
+		if idx == -1 {
+			continue
+		}
+		if len(args) > i+1 && !strings.HasPrefix(args[i+1], "-") {
+			break
+		}
+		args = append(append(args[:i+1], "full"), args[i+1:]...)
 		break
 	}
 	set.Parse(args)
@@ -250,12 +264,12 @@ Ex: clusterId=192.168.0.1:9430,192.168.0.2:9430`)
 		moveCluster:        mc,
 		balanceClusters:    bc,
 		balanceAllClusters: bac,
+		repairConsistency:  repairConsistency,
 		addNode:            addNode,
 		removeNode:         removeNode,
 		unfreeze:           uf,
 		unfreezeAll:        ufa,
 		syncClusters:       strings.Index(strings.Join(os.Args, " "), "sync-clusters") > -1,
-		repairConsistency:  strings.Index(strings.Join(os.Args, " "), "repair-consistency") > -1,
 		getCluster:         getCluster,
 		getClusters:        strings.Index(strings.Join(os.Args, " "), "get-clusters") > -1,
 		help:               strings.Index(strings.Join(os.Args, " "), "-help") > -1,

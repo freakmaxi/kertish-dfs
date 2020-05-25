@@ -8,6 +8,7 @@ import (
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"github.com/freakmaxi/kertish-dfs/manager-node/manager"
 )
 
 func (m *managerRouter) handleGet(w http.ResponseWriter, r *http.Request) {
@@ -65,7 +66,20 @@ func (m *managerRouter) handleSync(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *managerRouter) handleRepairConsistency(w http.ResponseWriter, r *http.Request) {
-	err := m.health.RepairConsistency()
+	repairOption := r.Header.Get("X-Options")
+	repairOption = strings.ToLower(repairOption)
+
+	var repairType manager.RepairType
+	switch repairOption {
+	case "structure":
+		repairType = manager.RT_Structure
+	case "integrity":
+		repairType = manager.RT_Integrity
+	default:
+		repairType = manager.RT_Full
+	}
+
+	err := m.health.RepairConsistency(repairType)
 	if err == nil {
 		return
 	}

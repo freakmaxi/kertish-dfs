@@ -146,6 +146,8 @@ func Delete(headAddresses []string, target string, killZombies bool) error {
 		return fmt.Errorf("%s is zombie or has zombie", target)
 	case 525:
 		return fmt.Errorf("%s is/has still alive zombie, try again to kill", target)
+	case 526:
+		return fmt.Errorf("inconsistency detected, repair is required to fix the problem")
 	}
 
 	return nil

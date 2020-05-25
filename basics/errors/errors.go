@@ -9,6 +9,7 @@ var (
 	ErrNoAvailableActionNode = errors.New("no available node for clusters")
 	ErrCreate                = errors.New("not possible to create shadow on data node")
 	ErrLock                  = errors.New("path/file is locked")
+	ErrRepair                = errors.New("inconsistency detected, require repairing")
 	ErrZombie                = errors.New("path/file is zombie")
 	ErrZombieAlive           = errors.New("zombie file is still alive, try again to kill")
 	ErrJoinConflict          = errors.New("joining source folders will have conflict in target")
