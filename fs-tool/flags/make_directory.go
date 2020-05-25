@@ -29,6 +29,8 @@ func NewMakeDirectory(headAddresses []string, output terminal.Output, basePath s
 }
 
 func (m *makeDirectoryCommand) Parse() error {
+	cleanEmptyArguments(m.args)
+
 	if len(m.args) != 1 {
 		return fmt.Errorf("mkdir command needs only target parameter")
 	}

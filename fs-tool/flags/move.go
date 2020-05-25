@@ -57,6 +57,7 @@ func (m *moveCommand) Parse() error {
 		}
 		break
 	}
+	cleanEmptyArguments(m.args)
 
 	if len(m.args) < 2 {
 		return fmt.Errorf("mv command needs source and target parameters")

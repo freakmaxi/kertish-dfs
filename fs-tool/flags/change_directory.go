@@ -28,6 +28,8 @@ func NewChangeDirectory(headAddresses []string, output terminal.Output, args []s
 }
 
 func (c *changeDirectoryCommand) Parse() error {
+	cleanEmptyArguments(c.args)
+
 	if len(c.args) != 1 {
 		return fmt.Errorf("cd command needs only target parameter")
 	}

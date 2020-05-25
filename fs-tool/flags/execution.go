@@ -35,6 +35,18 @@ func newExecution(headAddresses []string, output terminal.Output, command string
 	return nil, fmt.Errorf("unsupported command")
 }
 
+func cleanEmptyArguments(args []string) {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if len(arg) > 0 {
+			continue
+		}
+
+		args = append(args[:i], args[i+1:]...)
+		i--
+	}
+}
+
 func createTemporary(sources []string, target string) error {
 	targetFile, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0777)
 	if err != nil {

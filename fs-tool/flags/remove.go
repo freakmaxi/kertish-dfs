@@ -55,6 +55,7 @@ func (r *removeCommand) Parse() error {
 		}
 		break
 	}
+	cleanEmptyArguments(r.args)
 
 	if len(r.args) == 0 {
 		return fmt.Errorf("rm command needs target parameters")

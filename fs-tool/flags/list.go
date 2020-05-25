@@ -54,6 +54,7 @@ func (l *listCommand) Parse() error {
 		}
 		break
 	}
+	cleanEmptyArguments(l.args)
 
 	if len(l.args) > 1 {
 		return fmt.Errorf("ls command needs optionally source parameter")

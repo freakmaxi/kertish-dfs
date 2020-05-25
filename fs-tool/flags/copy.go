@@ -70,6 +70,7 @@ func (c *copyCommand) Parse() error {
 		}
 		break
 	}
+	cleanEmptyArguments(c.args)
 
 	if len(c.args) < 2 {
 		return fmt.Errorf("cp command needs source and target parameters")
