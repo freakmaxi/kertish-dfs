@@ -57,6 +57,9 @@ func (t *Tree) Fill(folders []*Folder) error {
 	}
 
 	t.folder = folders[0]
+	for _, folderShadow := range t.folder.Folders {
+		t.folderCache[folderShadow.Full] = folderShadow
+	}
 	currentTree := t
 
 	for i := 1; i < len(folders); i++ {
