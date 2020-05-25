@@ -6,9 +6,10 @@ import (
 )
 
 type Tree struct {
-	folder *Folder
-	subs   []*Tree
-	subMap map[string]*Tree
+	folder      *Folder
+	folderCache map[string]*FolderShadow
+	subs        []*Tree
+	subMap      map[string]*Tree
 }
 
 func NewTree() *Tree {
@@ -16,10 +17,18 @@ func NewTree() *Tree {
 }
 
 func newTree(folder *Folder) *Tree {
+	folderCache := make(map[string]*FolderShadow)
+	if folder != nil {
+		for _, folderShadow := range folder.Folders {
+			folderCache[folderShadow.Full] = folderShadow
+		}
+	}
+
 	return &Tree{
-		folder: folder,
-		subs:   make([]*Tree, 0),
-		subMap: make(map[string]*Tree),
+		folder:      folder,
+		folderCache: folderCache,
+		subs:        make([]*Tree, 0),
+		subMap:      make(map[string]*Tree),
 	}
 }
 
@@ -57,8 +66,9 @@ func (t *Tree) Fill(folders []*Folder) error {
 		parentPath, name := Split(folderFull)
 
 		if strings.Compare(currentTree.folder.Full, parentPath) == 0 {
-			if currentTree.folder.Folder(name) == nil {
+			if _, has := currentTree.folderCache[folderFull]; !has {
 				_ = currentTree.folder.NewFolder(name, func(shadow *FolderShadow) error {
+					currentTree.folderCache[shadow.Full] = shadow
 					return nil
 				})
 			}
@@ -141,6 +151,7 @@ func (t *Tree) fix(parent *Tree, folder *Folder) error {
 		_, name := Split(p)
 
 		if err := tree.folder.NewFolder(name, func(shadow *FolderShadow) error {
+			tree.folderCache[shadow.Full] = shadow
 			return nil
 		}); err != nil && err != os.ErrExist {
 			return err
