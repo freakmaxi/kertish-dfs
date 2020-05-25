@@ -2,6 +2,7 @@ package common
 
 import (
 	"os"
+	"sort"
 	"strings"
 )
 
@@ -55,6 +56,9 @@ func (t *Tree) Fill(folders []*Folder) error {
 	if len(folders) == 0 {
 		return nil
 	}
+	sort.Slice(folders, func(i, j int) bool {
+		return strings.Compare(folders[i].Full, folders[j].Full) < 0
+	})
 
 	t.folder = folders[0]
 	for _, folderShadow := range t.folder.Folders {
