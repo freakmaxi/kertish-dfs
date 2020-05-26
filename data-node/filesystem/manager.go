@@ -183,7 +183,7 @@ func (m *manager) Sync(sourceAddr string) error {
 			}
 		}
 		if wipe {
-			currentFileItemList = currentFileItemList[1:]
+			sourceFileItemList = sourceFileItemList[1:]
 			continue
 		}
 
