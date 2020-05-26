@@ -149,9 +149,8 @@ func main() {
 			fmt.Println("cluster chunk consistency repair is canceled")
 		}
 	case "balanceClusters":
-		fmt.Println("CAUTION: Balancing process will prevent access to the balancing clusters for any kind of actions. " +
-			"It is a long running process and it may take hours/days to complete depending on the internet speed between balancing clusters " +
-			"and the size of them. Clusters may need to be manually unfrozen!")
+		fmt.Println("CAUTION: Balancing is a long running process and it may take hours/days to complete depending " +
+			"on the internet speed between balancing clusters and the size of them.")
 		fmt.Print("Do you want to continue? (y/N) ")
 		reader := bufio.NewReader(os.Stdin)
 		char, _, err := reader.ReadRune()
