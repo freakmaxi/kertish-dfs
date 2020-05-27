@@ -26,14 +26,14 @@ type IndexClient interface {
 
 type Index interface {
 	Add(clusterId string, fileItem common.SyncFileItem) error
-	AddBulk(clusterId string, fileItemList common.SyncFileItems) error
+	AddBulk(clusterId string, fileItemList common.SyncFileItemList) error
 	Find(clusterIds []string, sha512Hex string) (string, *common.SyncFileItem, error)
-	List(clusterId string) (common.SyncFileItems, error)
+	List(clusterId string) (common.SyncFileItemList, error)
 	Remove(clusterId string, sha512Hex string) error
 	RemoveBulk(clusterId string, sha512HexList []string) error
-	Replace(clusterId string, fileItemList common.SyncFileItems) error
-	Compare(clusterId string, fileItemList common.SyncFileItems) (uint64, error)
-	Extract(clusterId string, fileItemList common.SyncFileItems) (common.SyncFileItems, error)
+	Replace(clusterId string, fileItemList common.SyncFileItemList) error
+	Compare(clusterId string, fileItemList common.SyncFileItemList) (uint64, error)
+	Extract(clusterId string, fileItemList common.SyncFileItemList) (common.SyncFileItemList, error)
 }
 
 type index struct {
@@ -62,7 +62,7 @@ func (i *index) Add(clusterId string, fileItem common.SyncFileItem) error {
 	return i.client.HSet(i.key(clusterId), fileItem.Sha512Hex, fmt.Sprintf("%s|%d", clusterId, fileItem.Size))
 }
 
-func (i *index) AddBulk(clusterId string, fileItemList common.SyncFileItems) error {
+func (i *index) AddBulk(clusterId string, fileItemList common.SyncFileItemList) error {
 	if len(fileItemList) == 0 {
 		return nil
 	}
@@ -108,8 +108,8 @@ func (i *index) Find(clusterIds []string, sha512Hex string) (string, *common.Syn
 	return "", nil, errors.ErrNotFound
 }
 
-func (i *index) List(clusterId string) (common.SyncFileItems, error) {
-	fileItemList := make(common.SyncFileItems, 0)
+func (i *index) List(clusterId string) (common.SyncFileItemList, error) {
+	fileItemList := make(common.SyncFileItemList, 0)
 
 	if err := i.lock(clusterId, func(index map[string]string) error {
 		for k, v := range index {
@@ -161,9 +161,9 @@ func (i *index) RemoveBulk(clusterId string, sha512HexList []string) error {
 	return i.client.Pipeline(commands)
 }
 
-func (i *index) Replace(clusterId string, fileItemList common.SyncFileItems) error {
+func (i *index) Replace(clusterId string, fileItemList common.SyncFileItemList) error {
 	if fileItemList == nil {
-		fileItemList = make(common.SyncFileItems, 0)
+		fileItemList = make(common.SyncFileItemList, 0)
 	}
 
 	return i.lock(clusterId, func(index map[string]string) error {
@@ -178,7 +178,7 @@ func (i *index) Replace(clusterId string, fileItemList common.SyncFileItems) err
 	})
 }
 
-func (i *index) Compare(clusterId string, fileItemList common.SyncFileItems) (uint64, error) {
+func (i *index) Compare(clusterId string, fileItemList common.SyncFileItemList) (uint64, error) {
 	failed := uint64(0)
 	err := i.lock(clusterId, func(index map[string]string) error {
 		indexShadow := make(map[string]string)
@@ -197,8 +197,8 @@ func (i *index) Compare(clusterId string, fileItemList common.SyncFileItems) (ui
 	return failed, err
 }
 
-func (i *index) Extract(clusterId string, fileItemList common.SyncFileItems) (common.SyncFileItems, error) {
-	var extractedList common.SyncFileItems
+func (i *index) Extract(clusterId string, fileItemList common.SyncFileItemList) (common.SyncFileItemList, error) {
+	var extractedList common.SyncFileItemList
 	err := i.lock(clusterId, func(index map[string]string) error {
 		indexShadow := make(map[string]string)
 		for k, v := range index {
@@ -209,7 +209,7 @@ func (i *index) Extract(clusterId string, fileItemList common.SyncFileItems) (co
 			delete(indexShadow, fileItem.Sha512Hex)
 		}
 
-		extractedList = make(common.SyncFileItems, 0)
+		extractedList = make(common.SyncFileItemList, 0)
 		for k, v := range indexShadow {
 			parts := strings.Split(v, "|")
 			if len(parts) != 2 {

@@ -94,14 +94,14 @@ func (n *nodeRouter) describeHandshakeOptions(options string) (uint64, string, s
 	return size, opts[1], opts[2], nil
 }
 
-func (n *nodeRouter) describeCreateOptions(r *http.Request) (string, common.SyncFileItems, error) {
+func (n *nodeRouter) describeCreateOptions(r *http.Request) (string, common.SyncFileItemList, error) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		return "", nil, err
 	}
 
 	nodeId := r.Header.Get("X-Options")
-	fileItemList := make(common.SyncFileItems, 0)
+	fileItemList := make(common.SyncFileItemList, 0)
 	if err := json.Unmarshal(body, &fileItemList); err != nil {
 		return "", nil, err
 	}

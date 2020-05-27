@@ -21,7 +21,7 @@ type balance struct {
 	health   Health
 
 	mapMutex    sync.Mutex
-	indexingMap map[string]common.SyncFileItems
+	indexingMap map[string]common.SyncFileItemList
 
 	semaphoreMutex sync.Mutex
 	semaphoreChan  map[string]chan bool
@@ -33,7 +33,7 @@ func newBalance(clusters data.Clusters, index data.Index, health Health) *balanc
 		index:          index,
 		health:         health,
 		mapMutex:       sync.Mutex{},
-		indexingMap:    make(map[string]common.SyncFileItems),
+		indexingMap:    make(map[string]common.SyncFileItemList),
 		semaphoreMutex: sync.Mutex{},
 		semaphoreChan:  make(map[string]chan bool),
 	}

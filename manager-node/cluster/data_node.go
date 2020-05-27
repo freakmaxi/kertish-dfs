@@ -44,7 +44,7 @@ type DataNode interface {
 	SyncCreate(sha512Hex string, sourceNodeAddr string) bool
 	SyncDelete(sha512Hex string) bool
 	SyncMove(sha512Hex string, sourceNodeAddr string) bool
-	SyncList() common.SyncFileItems
+	SyncList() common.SyncFileItemList
 	SyncFull(sourceNodeAddr string) bool
 
 	Ping() int64
@@ -430,7 +430,7 @@ func (d *dataNode) SyncMove(sha512Hex string, sourceNodeAddr string) bool {
 	}) == nil
 }
 
-func (d *dataNode) SyncList() (fileItemList common.SyncFileItems) {
+func (d *dataNode) SyncList() (fileItemList common.SyncFileItemList) {
 	if err := d.connect(func(conn *net.TCPConn) error {
 		if _, err := conn.Write([]byte(commandSyncList)); err != nil {
 			return err
@@ -445,7 +445,7 @@ func (d *dataNode) SyncList() (fileItemList common.SyncFileItems) {
 			return err
 		}
 
-		fileItemList = make(common.SyncFileItems, fileItemListLength)
+		fileItemList = make(common.SyncFileItemList, fileItemListLength)
 		for current := uint64(1); current <= fileItemListLength; current++ {
 			sha512Hex, err := d.hashAsHex(conn)
 			if err != nil {

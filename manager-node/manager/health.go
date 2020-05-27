@@ -365,13 +365,13 @@ func (h *health) RepairConsistency(repairType RepairType) error {
 		return err
 	}
 
-	matchedFileItemListMap := make(map[string]common.SyncFileItems)
+	matchedFileItemListMap := make(map[string]common.SyncFileItemList)
 	clusterIds := make([]string, len(clusters))
 	clusterMap := make(map[string]*common.Cluster)
 	for i, cluster := range clusters {
 		clusterIds[i] = cluster.Id
 		clusterMap[cluster.Id] = cluster
-		matchedFileItemListMap[cluster.Id] = make(common.SyncFileItems, 0)
+		matchedFileItemListMap[cluster.Id] = make(common.SyncFileItemList, 0)
 	}
 
 	if err := h.metadata.Cursor(func(folder *common.Folder) (bool, error) {

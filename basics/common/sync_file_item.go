@@ -10,15 +10,10 @@ type SyncFileItem struct {
 	Size      int32
 }
 
-type SyncFileItems []SyncFileItem
+type SyncFileItemMap map[string]SyncFileItem
+type SyncFileItemList []SyncFileItem
 
-func (f SyncFileItems) Len() int { return len(f) }
-func (f SyncFileItems) Less(i, j int) bool {
-	return strings.Compare(f[i].Sha512Hex, f[j].Sha512Hex) < 0
-}
-func (f SyncFileItems) Swap(i, j int) { f[i], f[j] = f[j], f[i] }
-
-func (f SyncFileItems) String() string {
+func (f SyncFileItemMap) String() string {
 	lines := make([]string, 0)
 	for _, fileItem := range f {
 		lines = append(lines, fmt.Sprintf("sha512Hex: %s, size: %d", fileItem.Sha512Hex, fileItem.Size))

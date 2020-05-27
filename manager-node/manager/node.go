@@ -13,7 +13,7 @@ const retryLimit = 10
 
 type Node interface {
 	Handshake(nodeHardwareAddr string, nodeAddress string, size uint64) (string, string, string, error)
-	Create(nodeId string, fileItemList common.SyncFileItems) error
+	Create(nodeId string, fileItemList common.SyncFileItemList) error
 	Delete(nodeId string, syncDeleteList common.SyncDeleteList) error
 }
 
@@ -82,7 +82,7 @@ func (n *node) Handshake(nodeHardwareAddr string, nodeAddress string, size uint6
 	return cluster.Id, node.Id, syncSourceAddrBind, nil
 }
 
-func (n *node) Create(nodeId string, fileItemList common.SyncFileItems) error {
+func (n *node) Create(nodeId string, fileItemList common.SyncFileItemList) error {
 	clusterId, err := n.clusters.ClusterIdOf(nodeId)
 	if err != nil {
 		return err

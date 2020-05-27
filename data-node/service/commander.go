@@ -585,7 +585,7 @@ func (c *commander) symv(conn net.Conn) error {
 }
 
 func (c *commander) syls(conn net.Conn) error {
-	fileItemList, err := c.fs.List()
+	fileItemMap, err := c.fs.List()
 	if err != nil {
 		return err
 	}
@@ -594,12 +594,12 @@ func (c *commander) syls(conn net.Conn) error {
 		return err
 	}
 
-	fileItemListLength := uint64(len(fileItemList))
-	if err := c.writeBinaryWithTimeout(conn, fileItemListLength); err != nil {
+	fileItemMapLength := uint64(len(fileItemMap))
+	if err := c.writeBinaryWithTimeout(conn, fileItemMapLength); err != nil {
 		return err
 	}
 
-	for _, fileItem := range fileItemList {
+	for _, fileItem := range fileItemMap {
 		sha512Sum, err := hex.DecodeString(fileItem.Sha512Hex)
 		if err != nil {
 			return err

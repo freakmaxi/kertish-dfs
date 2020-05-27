@@ -40,7 +40,7 @@ type node struct {
 	masterAddress string
 
 	createNotificationChan chan common.SyncFileItem
-	createFailureChan      chan common.SyncFileItems
+	createFailureChan      chan common.SyncFileItemList
 	deleteNotificationChan chan common.SyncDelete
 	deleteFailureChan      chan common.SyncDeleteList
 }
@@ -50,7 +50,7 @@ func NewNode(managerAddresses []string) Node {
 		client:                 http.Client{},
 		managerAddr:            managerAddresses,
 		createNotificationChan: make(chan common.SyncFileItem, notificationChannelLimit),
-		createFailureChan:      make(chan common.SyncFileItems, notificationChannelLimit),
+		createFailureChan:      make(chan common.SyncFileItemList, notificationChannelLimit),
 		deleteNotificationChan: make(chan common.SyncDelete, notificationChannelLimit),
 		deleteFailureChan:      make(chan common.SyncDeleteList, notificationChannelLimit),
 	}
@@ -65,7 +65,7 @@ func (n *node) start() {
 }
 
 func (n *node) createChannelHandler() {
-	fileItemList := make(common.SyncFileItems, 0)
+	fileItemList := make(common.SyncFileItemList, 0)
 	for {
 		select {
 		case fileItem, more := <-n.createNotificationChan:
@@ -76,7 +76,7 @@ func (n *node) createChannelHandler() {
 			fileItemList = append(fileItemList, fileItem)
 			if len(fileItemList) >= notificationBulkLimit {
 				go n.createBulk(fileItemList, 0)
-				fileItemList = make(common.SyncFileItems, 0)
+				fileItemList = make(common.SyncFileItemList, 0)
 			}
 		case failedFileItemList, more := <-n.createFailureChan:
 			if !more {
@@ -90,12 +90,12 @@ func (n *node) createChannelHandler() {
 			}
 
 			go n.createBulk(fileItemList, 0)
-			fileItemList = make(common.SyncFileItems, 0)
+			fileItemList = make(common.SyncFileItemList, 0)
 		}
 	}
 }
 
-func (n *node) createBulk(fileItemList common.SyncFileItems, delay time.Duration) {
+func (n *node) createBulk(fileItemList common.SyncFileItemList, delay time.Duration) {
 	if delay > 0 {
 		<-time.After(delay)
 	}
@@ -106,7 +106,7 @@ func (n *node) createBulk(fileItemList common.SyncFileItems, delay time.Duration
 	}
 }
 
-func (n *node) create(fileItemList common.SyncFileItems) error {
+func (n *node) create(fileItemList common.SyncFileItemList) error {
 	body, err := json.Marshal(fileItemList)
 	if err != nil {
 		return err

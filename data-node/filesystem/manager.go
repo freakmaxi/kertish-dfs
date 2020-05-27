@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"sync"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
@@ -16,7 +15,7 @@ type Manager interface {
 	LockFile(sha512Hex string, fileHandler func(blockFile BlockFile) error) error
 	File(sha512Hex string, fileHandler func(blockFile BlockFile) error) error
 
-	List() (common.SyncFileItems, error)
+	List() (common.SyncFileItemList, error)
 	Sync(sourceAddr string) error
 	Wipe() error
 	NodeSize() uint64
@@ -85,19 +84,19 @@ func (m *manager) File(sha512Hex string, fileHandler func(blockFile BlockFile) e
 	return fileHandler(blockFile)
 }
 
-func (m *manager) List() (common.SyncFileItems, error) {
+func (m *manager) List() (common.SyncFileItemList, error) {
 	m.syncLock.Lock()
 	defer m.syncLock.Unlock()
 
-	return m.list()
+	return m.createSha512HexList()
 }
 
-func (m *manager) list() (common.SyncFileItems, error) {
+func (m *manager) createSha512HexList() (common.SyncFileItemList, error) {
 	if err := m.prepareRoot(); err != nil {
 		return nil, err
 	}
 
-	sha512HexList := make(common.SyncFileItems, 0)
+	sha512HexList := make(common.SyncFileItemList, 0)
 	if err := filepath.Walk(m.rootPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -114,6 +113,30 @@ func (m *manager) list() (common.SyncFileItems, error) {
 	}
 
 	return sha512HexList, nil
+}
+
+func (m *manager) createSha512HexMap() (common.SyncFileItemMap, error) {
+	if err := m.prepareRoot(); err != nil {
+		return nil, err
+	}
+
+	sha512HexMap := make(common.SyncFileItemMap)
+	if err := filepath.Walk(m.rootPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && len(info.Name()) == 64 {
+			sha512HexMap[info.Name()] = common.SyncFileItem{
+				Sha512Hex: info.Name(),
+				Size:      int32(info.Size() - headerSize),
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return sha512HexMap, nil
 }
 
 // Full Sync with Master Data Node
@@ -137,62 +160,40 @@ func (m *manager) Sync(sourceAddr string) error {
 		m.nodeCacheMutex.Unlock()
 	}
 
-	currentFileItemList, err := m.list()
+	currentFilesMap, err := m.createSha512HexMap()
 	if err != nil {
 		return err
 	}
-	sort.Sort(currentFileItemList)
 
-	sourceFileItemList := make(common.SyncFileItems, 0)
+	sourceFilesMap := make(common.SyncFileItemMap)
 	if err := dn.SyncList(func(fileItem common.SyncFileItem, current uint64, total uint64) error {
-		sourceFileItemList = append(sourceFileItemList, fileItem)
+		sourceFilesMap[fileItem.Sha512Hex] = fileItem
 		return nil
 	}); err != nil {
 		return err
 	}
-	sort.Sort(sourceFileItemList)
 
-	wipeList := make(common.SyncFileItems, 0)
-	createList := make(common.SyncFileItems, 0)
+	wipeList := make(common.SyncFileItemList, 0)
+	createList := make(common.SyncFileItemList, 0)
 
-	for len(sourceFileItemList) > 0 {
-		sourceFileItem := sourceFileItemList[0]
-
-		if len(currentFileItemList) == 0 {
+	for _, sourceFileItem := range sourceFilesMap {
+		currentFileItem, has := currentFilesMap[sourceFileItem.Sha512Hex]
+		if !has {
 			createList = append(createList, sourceFileItem)
-			sourceFileItemList = sourceFileItemList[1:]
 			continue
 		}
 
-		currentFileItem := currentFileItemList[0]
-
-		if common.Compare(sourceFileItem, currentFileItem) {
-			sourceFileItemList = sourceFileItemList[1:]
-			currentFileItemList = currentFileItemList[1:]
-
-			continue
+		if !common.Compare(sourceFileItem, currentFileItem) {
+			createList = append(createList, sourceFileItem)
 		}
 
-		wipe := false
-		for i, currentFileItem := range currentFileItemList[1:] {
-			if common.Compare(sourceFileItem, currentFileItem) {
-				wipeList = append(wipeList, currentFileItemList[:i+1]...)
-				currentFileItemList = currentFileItemList[i+2:]
-				wipe = true
-				break
-			}
-		}
-		if wipe {
-			sourceFileItemList = sourceFileItemList[1:]
-			continue
-		}
-
-		createList = append(createList, sourceFileItem)
-		sourceFileItemList = sourceFileItemList[1:]
+		delete(currentFilesMap, sourceFileItem.Sha512Hex)
 	}
 
-	if len(currentFileItemList) > 0 {
-		wipeList = append(wipeList, currentFileItemList...)
+	if len(currentFilesMap) > 0 {
+		for _, fileItem := range currentFilesMap {
+			wipeList = append(wipeList, fileItem)
+		}
 	}
 
 	fmt.Printf("INFO: Sync will, create: %d / delete: %d\n", len(createList), len(wipeList))
@@ -316,16 +317,16 @@ func (m *manager) Wipe() error {
 		})
 	}
 
-	currentFileItemList, err := m.list()
+	currentFileList, err := m.createSha512HexList()
 	if err != nil {
 		return err
 	}
 
-	for len(currentFileItemList) > 0 {
-		if err := deleteHandler(currentFileItemList[0].Sha512Hex); err != nil {
-			continue
+	for len(currentFileList) > 0 {
+		if err := deleteHandler(currentFileList[0].Sha512Hex); err != nil {
+			currentFileList = append(currentFileList, currentFileList[0])
 		}
-		currentFileItemList = currentFileItemList[1:]
+		currentFileList = currentFileList[1:]
 	}
 
 	return nil
