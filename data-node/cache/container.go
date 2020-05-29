@@ -82,7 +82,13 @@ func (c *container) Query(sha512Hex string) []byte {
 	defer c.mutex.Unlock()
 
 	if index, has := c.index[sha512Hex]; has {
+		c.sortedIndex[index.sortIndex] = nil
+
 		index.date = time.Now().UTC()
+		index.sortIndex = len(c.sortedIndex)
+
+		c.sortedIndex = append(c.sortedIndex, &index)
+
 		return index.data
 	}
 
@@ -114,7 +120,7 @@ func (c *container) Upsert(sha512Hex string, data []byte) {
 
 	if c.limit < c.usage+dataSize {
 		size := int(c.usage + dataSize - c.limit)
-		c.trim(size)
+		c.trimUnsafe(size)
 	}
 
 	c.index[sha512Hex] = item
@@ -156,8 +162,7 @@ func (c *container) Purge() {
 			continue
 		}
 
-		indexAge :=
-			indexItem.date.Add(c.lifetime)
+		indexAge := indexItem.date.Add(c.lifetime)
 		if indexAge.Before(time.Now().UTC()) {
 			c.sortedIndex = append(c.sortedIndex[:i], c.sortedIndex[i+1:]...)
 			c.usage -= uint64(len(indexItem.data))
@@ -172,28 +177,27 @@ func (c *container) Purge() {
 	}
 }
 
-func (c *container) trim(size int) {
+func (c *container) trimUnsafe(size int) {
 	if c.limit == 0 {
 		return
 	}
-
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
 
 	for i, indexItem := range c.sortedIndex {
 		if indexItem == nil {
 			continue
 		}
 
+		indexAge := indexItem.date.Add(c.lifetime)
 		dataSize := len(indexItem.data)
+
+		if size <= 0 && indexAge.After(time.Now().UTC()) {
+			return
+		}
 
 		c.sortedIndex[i] = nil
 		c.usage -= uint64(dataSize)
 		delete(c.index, indexItem.sha512Hex)
 
 		size -= dataSize
-		if size <= 0 {
-			return
-		}
 	}
 }
