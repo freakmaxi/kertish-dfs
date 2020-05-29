@@ -7,31 +7,38 @@ import (
 	"strings"
 	"time"
 
+	"github.com/freakmaxi/kertish-dfs/basics/log"
 	"github.com/freakmaxi/kertish-dfs/manager-node/data"
 	"github.com/freakmaxi/kertish-dfs/manager-node/manager"
 	"github.com/freakmaxi/kertish-dfs/manager-node/routing"
 	"github.com/freakmaxi/kertish-dfs/manager-node/services"
 	"github.com/freakmaxi/locking-center-client-go/mutex"
+	"go.uber.org/zap"
 )
 
 var version = "XX.X.XXXX"
 
 func main() {
-	printWelcome()
-
 	args := os.Args[1:]
 	if len(args) > 0 && strings.Compare(args[0], "--version") == 0 {
 		fmt.Println(version)
 		return
 	}
 
-	fmt.Println("INFO: ---------- Starting Manager Node -----------")
+	logger, console := log.NewLogger("manager")
+	defer logger.Sync()
+
+	if console {
+		printWelcome()
+	}
+
+	logger.Info("---------- Starting Manager Node -----------")
 
 	bindAddr := os.Getenv("BIND_ADDRESS")
 	if len(bindAddr) == 0 {
 		bindAddr = ":9400"
 	}
-	fmt.Printf("INFO: BIND_ADDRESS: %s\n", bindAddr)
+	logger.Sugar().Infof("BIND_ADDRESS: %s", bindAddr)
 
 	healthTrackerIntervalString := os.Getenv("HEALTH_TRACKER_INTERVAL")
 	if len(healthTrackerIntervalString) == 0 {
@@ -39,61 +46,61 @@ func main() {
 	}
 	healthTrackerInterval, err := strconv.ParseUint(healthTrackerIntervalString, 10, 64)
 	if err != nil {
-		fmt.Printf("ERROR: Health Tracker Interval is wrong: %s\n", err.Error())
+		logger.Error("Health Tracker Interval is wrong", zap.Error(err))
 		os.Exit(5)
 	}
 	if healthTrackerInterval > 0 {
-		fmt.Printf("INFO: HEALTH_TRACKER_INTERVAL: %s second(s)\n", healthTrackerIntervalString)
+		logger.Sugar().Infof("HEALTH_TRACKER_INTERVAL: %s second(s)", healthTrackerIntervalString)
 	}
 
 	mongoConn := os.Getenv("MONGO_CONN")
 	if len(mongoConn) == 0 {
-		fmt.Println("ERROR: MONGO_CONN have to be specified")
+		logger.Error("MONGO_CONN have to be specified")
 		os.Exit(10)
 	}
-	fmt.Printf("INFO: MONGO_CONN: %s\n", mongoConn)
+	logger.Sugar().Infof("MONGO_CONN: %s", mongoConn)
 
 	mongoDb := os.Getenv("MONGO_DATABASE")
 	if len(mongoDb) == 0 {
 		mongoDb = "kertish-dfs"
 	}
-	fmt.Printf("INFO: MONGO_DATABASE: %s\n", mongoDb)
+	logger.Sugar().Infof("MONGO_DATABASE: %s", mongoDb)
 
 	redisConn := os.Getenv("REDIS_CONN")
 	if len(redisConn) == 0 {
-		fmt.Println("ERROR: REDIS_CONN have to be specified")
+		logger.Error("REDIS_CONN have to be specified")
 		os.Exit(11)
 	}
-	fmt.Printf("INFO: REDIS_CONN: %s\n", redisConn)
+	logger.Sugar().Infof("REDIS_CONN: %s", redisConn)
 
 	redisPassword := os.Getenv("REDIS_PASSWORD")
-	fmt.Printf("INFO: REDIS_PASSWORD: %t\n", len(redisPassword) > 0)
+	logger.Sugar().Infof("REDIS_PASSWORD: %t", len(redisPassword) > 0)
 
 	redisClusterMode := os.Getenv("REDIS_CLUSTER_MODE")
-	fmt.Printf("INFO: REDIS_CLUSTER_MODE: %t\n", len(redisClusterMode) > 0)
+	logger.Sugar().Infof("REDIS_CLUSTER_MODE: %t", len(redisClusterMode) > 0)
 
 	mutexConn := os.Getenv("LOCKING_CENTER")
 	if len(mutexConn) == 0 {
-		fmt.Println("ERROR: LOCKING_CENTER have to be specified")
+		logger.Error("LOCKING_CENTER have to be specified")
 		os.Exit(15)
 	}
-	fmt.Printf("INFO: LOCKING_CENTER: %s\n", mutexConn)
+	logger.Sugar().Infof("LOCKING_CENTER: %s", mutexConn)
 
 	m, err := mutex.NewLockingCenter(mutexConn)
 	if err != nil {
-		fmt.Printf("ERROR: Mutex Setup is failed. %s\n", err.Error())
+		logger.Error("Mutex Setup is failed", zap.Error(err))
 		os.Exit(20)
 	}
 
 	conn, err := data.NewConnection(mongoConn)
 	if err != nil {
-		fmt.Printf("ERROR: MongoDB Connection is failed. %s\n", err.Error())
+		logger.Error("MongoDB Connection is failed", zap.Error(err))
 		os.Exit(21)
 	}
 
 	dataClusters, err := data.NewClusters(conn, mongoDb, m)
 	if err != nil {
-		fmt.Printf("ERROR: Cluster Data Manager is failed. %s\n", err.Error())
+		logger.Error("Cluster Data Manager is failed", zap.Error(err))
 		os.Exit(22)
 	}
 
@@ -104,48 +111,48 @@ func main() {
 		indexClient, err = data.NewIndexClusterClient(strings.Split(redisConn, ","), redisPassword)
 	}
 	if err != nil {
-		fmt.Printf("ERROR: Index Setup is failed. %s\n", err.Error())
+		logger.Error("Index Setup is failed", zap.Error(err))
 		os.Exit(23)
 	}
 	index := data.NewIndex(indexClient, strings.ReplaceAll(mongoDb, " ", "_"))
 
 	metadata, err := data.NewMetadata(m, conn, mongoDb)
 	if err != nil {
-		fmt.Printf("ERROR: Metadata Manager is failed. %s\n", err.Error())
+		logger.Error("Metadata Manager is failed", zap.Error(err))
 		os.Exit(24)
 	}
 
-	health := manager.NewHealthTracker(dataClusters, index, metadata, time.Second*time.Duration(healthTrackerInterval))
+	health := manager.NewHealthTracker(dataClusters, index, metadata, logger, time.Second*time.Duration(healthTrackerInterval))
 	health.Start()
 
-	managerCluster, err := manager.NewCluster(dataClusters, index, health)
+	managerCluster, err := manager.NewCluster(dataClusters, index, logger, health)
 	if err != nil {
-		fmt.Printf("ERROR: Cluster Manager is failed. %s\n", err.Error())
+		logger.Error("Cluster Manager is failed", zap.Error(err))
 		os.Exit(25)
 	}
-	managerRouter := routing.NewManagerRouter(managerCluster, health)
+	managerRouter := routing.NewManagerRouter(managerCluster, health, logger)
 
 	// No need to block start up with cluster sync
 	go func() {
-		fmt.Print("INFO: Syncing Clusters...\n")
+		logger.Info("Syncing Clusters...")
 		errorList := health.SyncClusters()
 		if len(errorList) > 0 {
 			for _, err := range errorList {
-				fmt.Printf("ERROR: Sync is failed! %s\n", err.Error())
+				logger.Error("Sync is failed", zap.Error(err))
 			}
 			return
 		}
-		fmt.Print("INFO: Sync is done!\n")
+		logger.Info("Sync is done!")
 	}()
 
 	routerManager := routing.NewManager()
 	routerManager.Add(managerRouter)
 
-	managerNode := manager.NewNode(index, dataClusters)
+	managerNode := manager.NewNode(index, dataClusters, logger)
 	nodeRouter := routing.NewNodeRouter(managerNode)
 	routerManager.Add(nodeRouter)
 
-	proxy := services.NewProxy(bindAddr, routerManager)
+	proxy := services.NewProxy(bindAddr, routerManager, logger)
 	proxy.Start()
 
 	os.Exit(0)

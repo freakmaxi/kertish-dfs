@@ -1,7 +1,6 @@
 package routing
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/freakmaxi/kertish-dfs/manager-node/manager"
@@ -38,12 +37,7 @@ func (n *nodeRouter) Get() []*Definition {
 }
 
 func (n *nodeRouter) manipulate(w http.ResponseWriter, r *http.Request) {
-	defer func() {
-		err := r.Body.Close()
-		if err != nil {
-			fmt.Printf("ERROR: Request body close is failed. %s\n", err.Error())
-		}
-	}()
+	defer r.Body.Close()
 
 	switch r.Method {
 	case "POST":

@@ -1,22 +1,25 @@
 package manager
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	cluster2 "github.com/freakmaxi/kertish-dfs/manager-node/cluster"
+	"go.uber.org/zap"
 )
 
 type syncProcessor struct {
 	nodeCacheMutex sync.Mutex
 	nodeCache      map[string]cluster2.DataNode
+
+	logger *zap.Logger
 }
 
-func newSyncProcessor() *syncProcessor {
+func newSyncProcessor(logger *zap.Logger) *syncProcessor {
 	return &syncProcessor{
 		nodeCacheMutex: sync.Mutex{},
 		nodeCache:      make(map[string]cluster2.DataNode),
+		logger:         logger,
 	}
 }
 
@@ -45,7 +48,11 @@ func (d *syncProcessor) Sync(ns *nodeSync) bool {
 
 			if target.completed || target.counter <= 0 {
 				if !target.completed {
-					fmt.Printf("ERROR: Sync is failed: %s <- %s (CREATE)\n", target.node.Id, ns.sha512Hex)
+					d.logger.Error(
+						"Sync is failed (CREATE)",
+						zap.String("sha512Hex", ns.sha512Hex),
+						zap.String("targetNodeId", target.node.Id),
+					)
 				}
 				ns.targets = append(ns.targets[0:i], ns.targets[i+1:]...)
 				i--
@@ -60,7 +67,11 @@ func (d *syncProcessor) Sync(ns *nodeSync) bool {
 
 		if target.completed || target.counter <= 0 {
 			if !target.completed {
-				fmt.Printf("ERROR: Sync is failed: %s <- %s (DELETE)\n", target.node.Id, ns.sha512Hex)
+				d.logger.Error(
+					"Sync is failed (DELETE)",
+					zap.String("sha512Hex", ns.sha512Hex),
+					zap.String("targetNodeId", target.node.Id),
+				)
 			}
 			ns.targets = append(ns.targets[0:i], ns.targets[i+1:]...)
 			i--
@@ -79,13 +90,23 @@ func (d *syncProcessor) create(sourceAddress string, sha512Hex string, targets [
 			dn, err := d.get(target.node)
 			if err != nil {
 				target.counter--
-				fmt.Printf("WARN: Data Node Connection Creation is unsuccessful. nodeId: %s, address: %s - %s\n", target.node.Id, target.node.Address, err.Error())
+				d.logger.Warn(
+					"Data Node Connection Creation is unsuccessful",
+					zap.String("targetNodeId", target.node.Id),
+					zap.String("targetAddress", target.node.Address),
+					zap.Error(err),
+				)
 				return
 			}
 
 			if !dn.SyncCreate(sha512Hex, sourceAddress) {
 				target.counter--
-				fmt.Printf("WARN: Sync is unsuccessful: %s <- %s (CREATE)\n", target.node.Id, sha512Hex)
+				d.logger.Warn(
+					"Sync is unsuccessful (CREATE)",
+					zap.String("sha512Hex", sha512Hex),
+					zap.String("targetNodeId", target.node.Id),
+					zap.String("sourceAddress", sourceAddress),
+				)
 				return
 			}
 
@@ -105,13 +126,22 @@ func (d *syncProcessor) delete(sha512Hex string, targets []*targetContainer) {
 			dn, err := d.get(target.node)
 			if err != nil {
 				target.counter--
-				fmt.Printf("WARN: Data Node Connection Creation is unsuccessful. nodeId: %s, address: %s - %s\n", target.node.Id, target.node.Address, err.Error())
+				d.logger.Warn(
+					"Data Node Connection Creation is unsuccessful",
+					zap.String("targetNodeId", target.node.Id),
+					zap.String("targetAddress", target.node.Address),
+					zap.Error(err),
+				)
 				return
 			}
 
 			if !dn.SyncDelete(sha512Hex) {
 				target.counter--
-				fmt.Printf("WARN: Sync is unsuccessful: %s <- %s (DELETE)\n", target.node.Id, sha512Hex)
+				d.logger.Warn(
+					"Sync is unsuccessful (DELETE)",
+					zap.String("sha512Hex", sha512Hex),
+					zap.String("targetNodeId", target.node.Id),
+				)
 				return
 			}
 

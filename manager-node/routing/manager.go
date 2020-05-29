@@ -1,23 +1,25 @@
 package routing
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/freakmaxi/kertish-dfs/manager-node/manager"
+	"go.uber.org/zap"
 )
 
 type managerRouter struct {
 	manager manager.Cluster
 	health  manager.Health
+	logger  *zap.Logger
 
 	definitions []*Definition
 }
 
-func NewManagerRouter(clusterManager manager.Cluster, health manager.Health) Router {
+func NewManagerRouter(clusterManager manager.Cluster, health manager.Health, logger *zap.Logger) Router {
 	pR := &managerRouter{
 		manager:     clusterManager,
 		health:      health,
+		logger:      logger,
 		definitions: make([]*Definition, 0),
 	}
 	pR.setup()
@@ -40,12 +42,7 @@ func (m *managerRouter) Get() []*Definition {
 }
 
 func (m *managerRouter) manipulate(w http.ResponseWriter, r *http.Request) {
-	defer func() {
-		err := r.Body.Close()
-		if err != nil {
-			fmt.Printf("ERROR: Request body close is failed. %s\n", err.Error())
-		}
-	}()
+	defer r.Body.Close()
 
 	switch r.Method {
 	case "POST":

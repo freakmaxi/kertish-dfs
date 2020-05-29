@@ -1,7 +1,6 @@
 package manager
 
 import (
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -10,6 +9,7 @@ import (
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
 	cluster2 "github.com/freakmaxi/kertish-dfs/manager-node/cluster"
 	"github.com/freakmaxi/kertish-dfs/manager-node/data"
+	"go.uber.org/zap"
 )
 
 const defaultIntervalDuration = time.Second * 10
@@ -36,13 +36,14 @@ type health struct {
 	clusters         data.Clusters
 	index            data.Index
 	metadata         data.Metadata
+	logger           *zap.Logger
 	intervalDuration time.Duration
 
 	nodeCacheMutex sync.Mutex
 	nodeCache      map[string]cluster2.DataNode
 }
 
-func NewHealthTracker(clusters data.Clusters, index data.Index, metadata data.Metadata, intervalDuration time.Duration) Health {
+func NewHealthTracker(clusters data.Clusters, index data.Index, metadata data.Metadata, logger *zap.Logger, intervalDuration time.Duration) Health {
 	if intervalDuration == 0 {
 		intervalDuration = defaultIntervalDuration
 	}
@@ -51,6 +52,7 @@ func NewHealthTracker(clusters data.Clusters, index data.Index, metadata data.Me
 		clusters:         clusters,
 		index:            index,
 		metadata:         metadata,
+		logger:           logger,
 		intervalDuration: intervalDuration,
 		nodeCacheMutex:   sync.Mutex{},
 		nodeCache:        make(map[string]cluster2.DataNode),
@@ -83,7 +85,7 @@ func (h *health) maintain() {
 	for {
 		select {
 		case <-time.After(maintainDuration):
-			fmt.Print("INFO: Maintaining Clusters...\n")
+			h.logger.Info("Maintaining Clusters...")
 			// Fire Forget
 			go func() {
 				clusters, err := h.clusters.GetAll()
@@ -93,16 +95,20 @@ func (h *health) maintain() {
 
 				for _, cluster := range clusters {
 					if cluster.Frozen {
-						fmt.Printf("WARN: Frozen cluster is skipped to maintain. clusterId: %s\n", cluster.Id)
+						h.logger.Warn("Frozen cluster is skipped to maintain", zap.String("clusterId", cluster.Id))
 						continue
 					}
 
 					// Do not block all clusters and finished it one by one.
 					if err := h.SyncCluster(cluster, false); err != nil {
-						fmt.Printf("ERROR: Syncing cluster in Maintain is failed. clusterId: %s - %s\n", cluster.Id, err.Error())
+						h.logger.Error(
+							"Syncing cluster in Maintain is failed",
+							zap.String("clusterId", cluster.Id),
+							zap.Error(err),
+						)
 					}
 				}
-				fmt.Print("INFO: Maintain is completed!\n")
+				h.logger.Info("Maintain is completed!")
 			}()
 		}
 	}
@@ -161,7 +167,12 @@ func (h *health) checkMasterAlive(cluster *common.Cluster) bool {
 
 	dn, err := h.getDataNode(masterNode)
 	if err != nil {
-		fmt.Printf("ERROR: Master Node Live Check is failed. clusterId: %s, nodeId: %s - %s\n", cluster.Id, masterNode.Id, err.Error())
+		h.logger.Error(
+			"Master Node Live Check is failed",
+			zap.String("clusterId", cluster.Id),
+			zap.String("nodeId", masterNode.Id),
+			zap.Error(err),
+		)
 		return false
 	}
 
@@ -172,7 +183,12 @@ func (h *health) findBestMasterNodeCandidate(cluster *common.Cluster) *common.No
 	for _, node := range cluster.Nodes {
 		dn, err := h.getDataNode(node)
 		if err != nil {
-			fmt.Printf("ERROR: Finding Best Master Node Candidate is failed. clusterId: %s, nodeId: %s - %s\n", cluster.Id, node.Id, err.Error())
+			h.logger.Error(
+				"Finding Best Master Node Candidate is failed",
+				zap.String("clusterId", cluster.Id),
+				zap.String("nodeId", node.Id),
+				zap.Error(err),
+			)
 			continue
 		}
 
@@ -203,7 +219,12 @@ func (h *health) prioritizeNodesByConnectionQuality(cluster *common.Cluster) {
 	for _, node := range cluster.Nodes {
 		dn, err := h.getDataNode(node)
 		if err != nil {
-			fmt.Printf("ERROR: Prioritizing Node Connection Quality is failed. clusterId: %s, nodeId: %s - %s\n", cluster.Id, node.Id, err.Error())
+			h.logger.Error(
+				"Prioritizing Node Connection Quality is failed",
+				zap.String("clusterId", cluster.Id),
+				zap.String("nodeId", node.Id),
+				zap.Error(err),
+			)
 
 			node.Quality = int64(^uint(0) >> 1)
 			continue
@@ -223,7 +244,12 @@ func (h *health) notifyNewMasterInCluster(cluster *common.Cluster) {
 	for _, node := range cluster.Nodes {
 		dn, err := h.getDataNode(node)
 		if err != nil {
-			fmt.Printf("ERROR: Notifing New Master Node is failed. clusterId: %s, nodeId: %s - %s\n", cluster.Id, node.Id, err.Error())
+			h.logger.Error(
+				"Notifying New Master Node is failed",
+				zap.String("clusterId", cluster.Id),
+				zap.String("nodeId", node.Id),
+				zap.Error(err),
+			)
 			continue
 		}
 
@@ -292,7 +318,11 @@ func (h *health) SyncCluster(cluster *common.Cluster, keepFrozen bool) error {
 		}
 
 		if err := h.clusters.SetFreeze(cluster.Id, false); err != nil {
-			fmt.Printf("ERROR: Syncing error: unfreezing is failed for %s\n", cluster.Id)
+			h.logger.Error(
+				"Syncing error: unfreezing is failed",
+				zap.String("clusterId", cluster.Id),
+				zap.Error(err),
+			)
 		}
 	}()
 
@@ -313,12 +343,19 @@ func (h *health) SyncCluster(cluster *common.Cluster, keepFrozen bool) error {
 
 	fileItemList := mdn.SyncList()
 	if fileItemList == nil {
-		fmt.Printf("ERROR: Syncing error: node (%s) didn't response for SyncList\n", masterNode.Id)
+		h.logger.Error(
+			"Syncing error: node didn't response for SyncList",
+			zap.String("nodeId", masterNode.Id),
+		)
 		return errors.ErrPing
 	}
 
 	if err := h.index.Replace(cluster.Id, fileItemList); err != nil {
-		fmt.Printf("ERROR: Index replacement error: %s\n", err.Error())
+		h.logger.Error(
+			"Index replacement error",
+			zap.String("clusterId", cluster.Id),
+			zap.Error(err),
+		)
 		return errors.ErrPing
 	}
 
@@ -330,12 +367,19 @@ func (h *health) SyncCluster(cluster *common.Cluster, keepFrozen bool) error {
 
 			sdn, err := cluster2.NewDataNode(sN.Address)
 			if err != nil || !sdn.Join(cluster.Id, sN.Id, masterNode.Address) {
-				fmt.Printf("ERROR: Syncing error: %s\n", errors.ErrJoin.Error())
+				h.logger.Error(
+					"Syncing error",
+					zap.Error(errors.ErrJoin),
+				)
 				return
 			}
 
 			if !sdn.SyncFull(mN.Address) {
-				fmt.Printf("ERROR: Syncing node (%s) is failed. Source: %s\n", sN.Id, mN.Address)
+				h.logger.Error(
+					"Syncing node is failed",
+					zap.String("slaveNodeId", sN.Id),
+					zap.String("masterNodeAddress", mN.Address),
+				)
 			}
 		}(wg, masterNode, slaveNode)
 	}

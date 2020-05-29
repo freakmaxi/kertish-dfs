@@ -8,6 +8,7 @@ import (
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
 	cluster2 "github.com/freakmaxi/kertish-dfs/manager-node/cluster"
 	"github.com/freakmaxi/kertish-dfs/manager-node/data"
+	"go.uber.org/zap"
 )
 
 type Cluster interface {
@@ -35,13 +36,15 @@ type Cluster interface {
 type cluster struct {
 	clusters data.Clusters
 	index    data.Index
+	logger   *zap.Logger
 	health   Health
 }
 
-func NewCluster(clusters data.Clusters, index data.Index, health Health) (Cluster, error) {
+func NewCluster(clusters data.Clusters, index data.Index, logger *zap.Logger, health Health) (Cluster, error) {
 	return &cluster{
 		clusters: clusters,
 		index:    index,
+		logger:   logger,
 		health:   health,
 	}, nil
 }
@@ -317,7 +320,7 @@ func (c *cluster) MoveCluster(sourceClusterId string, targetClusterId string) (e
 }
 
 func (c *cluster) BalanceClusters(clusterIds []string) error {
-	balance := newBalance(c.clusters, c.index, c.health)
+	balance := newBalance(c.clusters, c.index, c.logger, c.health)
 	return balance.Balance(clusterIds)
 }
 

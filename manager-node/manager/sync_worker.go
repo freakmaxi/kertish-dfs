@@ -1,5 +1,7 @@
 package manager
 
+import "go.uber.org/zap"
+
 const queueLimit = 500
 const parallelLimit = 10
 
@@ -10,11 +12,11 @@ type syncWorker struct {
 	processor *syncProcessor
 }
 
-func newChannelContainer() *syncWorker {
+func newChannelContainer(logger *zap.Logger) *syncWorker {
 	return &syncWorker{
 		queueChan:       make(chan *nodeSync, queueLimit),
 		processSlotChan: make(chan int, parallelLimit),
-		processor:       newSyncProcessor(),
+		processor:       newSyncProcessor(logger),
 	}
 }
 

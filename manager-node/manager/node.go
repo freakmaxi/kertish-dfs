@@ -7,6 +7,7 @@ import (
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/manager-node/data"
+	"go.uber.org/zap"
 )
 
 const retryLimit = 10
@@ -40,11 +41,11 @@ type nodeSync struct {
 	targets    []*targetContainer
 }
 
-func NewNode(index data.Index, clusters data.Clusters) Node {
+func NewNode(index data.Index, clusters data.Clusters, logger *zap.Logger) Node {
 	return &node{
 		index:       index,
 		clusters:    clusters,
-		syncManager: newWorkerManager(),
+		syncManager: newWorkerManager(logger),
 	}
 }
 

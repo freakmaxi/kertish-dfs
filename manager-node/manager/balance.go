@@ -1,7 +1,6 @@
 package manager
 
 import (
-	"fmt"
 	"os"
 	"sort"
 	"sync"
@@ -10,6 +9,7 @@ import (
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
 	cluster2 "github.com/freakmaxi/kertish-dfs/manager-node/cluster"
 	"github.com/freakmaxi/kertish-dfs/manager-node/data"
+	"go.uber.org/zap"
 )
 
 const balanceThreshold = 0.05
@@ -18,6 +18,7 @@ const semaphoreLimit = 10
 type balance struct {
 	clusters data.Clusters
 	index    data.Index
+	logger   *zap.Logger
 	health   Health
 
 	mapMutex    sync.Mutex
@@ -27,10 +28,11 @@ type balance struct {
 	semaphoreChan  map[string]chan bool
 }
 
-func newBalance(clusters data.Clusters, index data.Index, health Health) *balance {
+func newBalance(clusters data.Clusters, index data.Index, logger *zap.Logger, health Health) *balance {
 	return &balance{
 		clusters:       clusters,
 		index:          index,
+		logger:         logger,
 		health:         health,
 		mapMutex:       sync.Mutex{},
 		indexingMap:    make(map[string]common.SyncFileItemList),
@@ -175,7 +177,7 @@ func (b *balance) Balance(clusterIds []string) error {
 			if err == os.ErrNotExist {
 				break
 			}
-			fmt.Printf("WARN: Balancing failure, unable to get chunk data: %s", err)
+			b.logger.Warn("Balancing failure, unable to get chunk data", zap.Error(err))
 			continue
 		}
 

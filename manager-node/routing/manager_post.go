@@ -2,13 +2,13 @@ package routing
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"go.uber.org/zap"
 )
 
 func (m *managerRouter) handlePost(w http.ResponseWriter, r *http.Request) {
@@ -54,7 +54,7 @@ func (m *managerRouter) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 	if err == nil {
 		if err := json.NewEncoder(w).Encode(cluster); err != nil {
-			fmt.Printf("ERROR: Post request is failed. %s\n", err.Error())
+			m.logger.Error("Register cluster request is failed", zap.Error(err))
 		}
 		return
 	}
@@ -66,7 +66,7 @@ func (m *managerRouter) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	e := common.NewError(200, err.Error())
 	if err := json.NewEncoder(w).Encode(e); err != nil {
-		fmt.Printf("ERROR: Post request is failed. %s\n", err.Error())
+		m.logger.Error("Register cluster request is failed", zap.Any("dfsError", e), zap.Error(err))
 	}
 }
 
@@ -80,7 +80,7 @@ func (m *managerRouter) handleReserve(w http.ResponseWriter, r *http.Request) {
 	reservationMap, err := m.manager.Reserve(size)
 	if err == nil {
 		if err := json.NewEncoder(w).Encode(reservationMap); err != nil {
-			fmt.Printf("ERROR: Post request is failed. %s\n", err.Error())
+			m.logger.Error("Reserve request is failed", zap.Error(err))
 		}
 		return
 	}
@@ -92,7 +92,7 @@ func (m *managerRouter) handleReserve(w http.ResponseWriter, r *http.Request) {
 	}
 	e := common.NewError(210, err.Error())
 	if err := json.NewEncoder(w).Encode(e); err != nil {
-		fmt.Printf("ERROR: Post request is failed. %s\n", err.Error())
+		m.logger.Error("Reserve request is failed", zap.Any("dfsError", e), zap.Error(err))
 	}
 }
 
@@ -106,7 +106,7 @@ func (m *managerRouter) handleMap(w http.ResponseWriter, r *http.Request, mapTyp
 	clusterMapping, err := m.manager.Map(sha512HexList, mapType)
 	if err == nil {
 		if err := json.NewEncoder(w).Encode(clusterMapping); err != nil {
-			fmt.Printf("ERROR: Post request is failed. %s\n", err.Error())
+			m.logger.Error("Map request is failed", zap.Error(err))
 		}
 		return
 	}
@@ -118,7 +118,7 @@ func (m *managerRouter) handleMap(w http.ResponseWriter, r *http.Request, mapTyp
 	}
 	e := common.NewError(220, err.Error())
 	if err := json.NewEncoder(w).Encode(e); err != nil {
-		fmt.Printf("ERROR: Post request is failed. %s\n", err.Error())
+		m.logger.Error("Map request is failed", zap.Error(err))
 	}
 }
 

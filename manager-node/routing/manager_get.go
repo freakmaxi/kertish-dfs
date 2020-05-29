@@ -2,13 +2,13 @@ package routing
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
 	"github.com/freakmaxi/kertish-dfs/manager-node/manager"
+	"go.uber.org/zap"
 )
 
 func (m *managerRouter) handleGet(w http.ResponseWriter, r *http.Request) {
@@ -61,7 +61,7 @@ func (m *managerRouter) handleSync(w http.ResponseWriter, r *http.Request) {
 
 	e := common.NewError(100, err.Error())
 	if err := json.NewEncoder(w).Encode(e); err != nil {
-		fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())
+		m.logger.Error("Sync request is failed", zap.String("clusterId", clusterId), zap.Any("dfsError", e), zap.Error(err))
 	}
 }
 
@@ -92,7 +92,7 @@ func (m *managerRouter) handleRepairConsistency(w http.ResponseWriter, r *http.R
 
 	e := common.NewError(105, err.Error())
 	if err := json.NewEncoder(w).Encode(e); err != nil {
-		fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())
+		m.logger.Error("Repair request is failed", zap.String("option", repairOption), zap.Any("dfsError", e), zap.Error(err))
 	}
 }
 
@@ -116,7 +116,13 @@ func (m *managerRouter) handleMove(w http.ResponseWriter, r *http.Request) {
 
 		e := common.NewError(130, err.Error())
 		if err := json.NewEncoder(w).Encode(e); err != nil {
-			fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())
+			m.logger.Error(
+				"Move request is failed",
+				zap.String("sourceClusterId", sourceClusterId),
+				zap.String("targetClusterId", targetClusterId),
+				zap.Any("dfsError", e),
+				zap.Error(err),
+			)
 		}
 	}
 }
@@ -139,7 +145,7 @@ func (m *managerRouter) handleBalance(w http.ResponseWriter, r *http.Request) {
 
 		e := common.NewError(135, err.Error())
 		if err := json.NewEncoder(w).Encode(e); err != nil {
-			fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())
+			m.logger.Error("Balance request is failed", zap.Strings("clusterIds", clusterIds), zap.Any("dfsError", e), zap.Error(err))
 		}
 	}
 }
@@ -161,7 +167,7 @@ func (m *managerRouter) handleClusters(w http.ResponseWriter, r *http.Request) {
 
 	if err == nil {
 		if err := json.NewEncoder(w).Encode(clusters); err != nil {
-			fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())
+			m.logger.Error("Get clusters request is failed", zap.String("clusterId", clusterId), zap.Error(err))
 		}
 		return
 	}
@@ -174,7 +180,7 @@ func (m *managerRouter) handleClusters(w http.ResponseWriter, r *http.Request) {
 
 	e := common.NewError(110, err.Error())
 	if err := json.NewEncoder(w).Encode(e); err != nil {
-		fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())
+		m.logger.Error("Get clusters request is failed", zap.Any("dfsError", e), zap.Error(err))
 	}
 }
 
@@ -199,7 +205,7 @@ func (m *managerRouter) handleFind(w http.ResponseWriter, r *http.Request) {
 
 	e := common.NewError(120, err.Error())
 	if err := json.NewEncoder(w).Encode(e); err != nil {
-		fmt.Printf("ERROR: Get request is failed. %s\n", err.Error())
+		m.logger.Error("Find request is failed", zap.Any("dfsError", e), zap.Error(err))
 	}
 }
 
