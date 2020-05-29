@@ -48,11 +48,12 @@ func (m *managerRouter) handleUnRegister(w http.ResponseWriter, r *http.Request)
 				w.WriteHeader(404)
 			} else {
 				w.WriteHeader(500)
+				m.logger.Error("Unregister cluster request is failed", zap.Error(err))
 			}
 
 			e := common.NewError(300, err.Error())
 			if err := json.NewEncoder(w).Encode(e); err != nil {
-				m.logger.Error("Unregister cluster request is failed", zap.Any("dfsError", e), zap.Error(err))
+				m.logger.Error("Response of unregister cluster request is failed", zap.Error(err))
 			}
 			return
 		}
@@ -64,11 +65,12 @@ func (m *managerRouter) handleUnRegister(w http.ResponseWriter, r *http.Request)
 				w.WriteHeader(423)
 			} else {
 				w.WriteHeader(500)
+				m.logger.Error("Unregister node request is failed", zap.Error(err))
 			}
 
 			e := common.NewError(350, err.Error())
 			if err := json.NewEncoder(w).Encode(e); err != nil {
-				m.logger.Error("Unregister node request is failed", zap.Any("dfsError", e), zap.Error(err))
+				m.logger.Error("Response of unregister node request is failed", zap.Error(err))
 			}
 			return
 		}
@@ -82,10 +84,11 @@ func (m *managerRouter) handleUnFreeze(w http.ResponseWriter, r *http.Request) {
 
 	if err := m.manager.UnFreezeClusters(clusterIds); err != nil {
 		w.WriteHeader(500)
+		m.logger.Error("Unfreeze request is failed", zap.Error(err))
 
 		e := common.NewError(355, err.Error())
 		if err := json.NewEncoder(w).Encode(e); err != nil {
-			m.logger.Error("Unfreeze request is failed", zap.Any("dfsError", e), zap.Error(err))
+			m.logger.Error("Response of unfreeze request is failed", zap.Error(err))
 		}
 		return
 	}
@@ -104,10 +107,11 @@ func (m *managerRouter) handleCommit(w http.ResponseWriter, r *http.Request) {
 
 	if err := m.manager.Commit(reservationId, clusterMap); err != nil {
 		w.WriteHeader(400)
+		m.logger.Error("Commit request is failed", zap.Error(err))
 
 		e := common.NewError(360, err.Error())
 		if err := json.NewEncoder(w).Encode(e); err != nil {
-			m.logger.Error("Commit request is failed", zap.Any("dfsError", e), zap.Error(err))
+			m.logger.Error("Response of commit request is failed", zap.Error(err))
 		}
 		return
 	}
@@ -124,10 +128,11 @@ func (m *managerRouter) handleDiscard(w http.ResponseWriter, r *http.Request) {
 
 	if err := m.manager.Discard(reservationId); err != nil {
 		w.WriteHeader(400)
+		m.logger.Error("Discard request is failed", zap.Error(err))
 
 		e := common.NewError(370, err.Error())
 		if err := json.NewEncoder(w).Encode(e); err != nil {
-			m.logger.Error("Discard request is failed", zap.Any("dfsError", e), zap.Error(err))
+			m.logger.Error("Response of discard request is failed", zap.Error(err))
 		}
 		return
 	}

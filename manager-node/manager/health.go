@@ -102,7 +102,7 @@ func (h *health) maintain() {
 					// Do not block all clusters and finished it one by one.
 					if err := h.SyncCluster(cluster, false); err != nil {
 						h.logger.Error(
-							"Syncing cluster in Maintain is failed",
+							"Syncing cluster in maintain is failed",
 							zap.String("clusterId", cluster.Id),
 							zap.Error(err),
 						)
@@ -168,7 +168,7 @@ func (h *health) checkMasterAlive(cluster *common.Cluster) bool {
 	dn, err := h.getDataNode(masterNode)
 	if err != nil {
 		h.logger.Error(
-			"Master Node Live Check is failed",
+			"Master node live check is failed",
 			zap.String("clusterId", cluster.Id),
 			zap.String("nodeId", masterNode.Id),
 			zap.Error(err),
@@ -184,7 +184,7 @@ func (h *health) findBestMasterNodeCandidate(cluster *common.Cluster) *common.No
 		dn, err := h.getDataNode(node)
 		if err != nil {
 			h.logger.Error(
-				"Finding Best Master Node Candidate is failed",
+				"Finding best master node candidate is failed",
 				zap.String("clusterId", cluster.Id),
 				zap.String("nodeId", node.Id),
 				zap.Error(err),
@@ -220,7 +220,7 @@ func (h *health) prioritizeNodesByConnectionQuality(cluster *common.Cluster) {
 		dn, err := h.getDataNode(node)
 		if err != nil {
 			h.logger.Error(
-				"Prioritizing Node Connection Quality is failed",
+				"Prioritizing node connection quality is failed",
 				zap.String("clusterId", cluster.Id),
 				zap.String("nodeId", node.Id),
 				zap.Error(err),
@@ -245,7 +245,7 @@ func (h *health) notifyNewMasterInCluster(cluster *common.Cluster) {
 		dn, err := h.getDataNode(node)
 		if err != nil {
 			h.logger.Error(
-				"Notifying New Master Node is failed",
+				"Notifying new master node is failed",
 				zap.String("clusterId", cluster.Id),
 				zap.String("nodeId", node.Id),
 				zap.Error(err),

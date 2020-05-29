@@ -57,11 +57,12 @@ func (m *managerRouter) handleSync(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(404)
 	} else {
 		w.WriteHeader(500)
+		m.logger.Error("Sync request is failed", zap.String("clusterId", clusterId), zap.Error(err))
 	}
 
 	e := common.NewError(100, err.Error())
 	if err := json.NewEncoder(w).Encode(e); err != nil {
-		m.logger.Error("Sync request is failed", zap.String("clusterId", clusterId), zap.Any("dfsError", e), zap.Error(err))
+		m.logger.Error("Response of sync request is failed", zap.Error(err))
 	}
 }
 
@@ -88,11 +89,12 @@ func (m *managerRouter) handleRepairConsistency(w http.ResponseWriter, r *http.R
 		w.WriteHeader(404)
 	} else {
 		w.WriteHeader(500)
+		m.logger.Error("Repair request is failed", zap.String("option", repairOption), zap.Error(err))
 	}
 
 	e := common.NewError(105, err.Error())
 	if err := json.NewEncoder(w).Encode(e); err != nil {
-		m.logger.Error("Repair request is failed", zap.String("option", repairOption), zap.Any("dfsError", e), zap.Error(err))
+		m.logger.Error("Response of repair request is failed", zap.Error(err))
 	}
 }
 
@@ -112,17 +114,17 @@ func (m *managerRouter) handleMove(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(507)
 		} else {
 			w.WriteHeader(500)
-		}
-
-		e := common.NewError(130, err.Error())
-		if err := json.NewEncoder(w).Encode(e); err != nil {
 			m.logger.Error(
 				"Move request is failed",
 				zap.String("sourceClusterId", sourceClusterId),
 				zap.String("targetClusterId", targetClusterId),
-				zap.Any("dfsError", e),
 				zap.Error(err),
 			)
+		}
+
+		e := common.NewError(130, err.Error())
+		if err := json.NewEncoder(w).Encode(e); err != nil {
+			m.logger.Error("Response of move request is failed", zap.Error(err))
 		}
 	}
 }
@@ -141,11 +143,12 @@ func (m *managerRouter) handleBalance(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(503)
 		} else {
 			w.WriteHeader(500)
+			m.logger.Error("Balance request is failed", zap.Strings("clusterIds", clusterIds), zap.Error(err))
 		}
 
 		e := common.NewError(135, err.Error())
 		if err := json.NewEncoder(w).Encode(e); err != nil {
-			m.logger.Error("Balance request is failed", zap.Strings("clusterIds", clusterIds), zap.Any("dfsError", e), zap.Error(err))
+			m.logger.Error("Response of balance request is failed", zap.Error(err))
 		}
 	}
 }
@@ -167,7 +170,7 @@ func (m *managerRouter) handleClusters(w http.ResponseWriter, r *http.Request) {
 
 	if err == nil {
 		if err := json.NewEncoder(w).Encode(clusters); err != nil {
-			m.logger.Error("Get clusters request is failed", zap.String("clusterId", clusterId), zap.Error(err))
+			m.logger.Error("Response of get clusters request is failed", zap.String("clusterId", clusterId), zap.Error(err))
 		}
 		return
 	}
@@ -176,11 +179,12 @@ func (m *managerRouter) handleClusters(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(404)
 	} else {
 		w.WriteHeader(500)
+		m.logger.Error("Get clusters request is failed", zap.String("clusterId", clusterId), zap.Error(err))
 	}
 
 	e := common.NewError(110, err.Error())
 	if err := json.NewEncoder(w).Encode(e); err != nil {
-		m.logger.Error("Get clusters request is failed", zap.Any("dfsError", e), zap.Error(err))
+		m.logger.Error("Response of get clusters request is failed", zap.Error(err))
 	}
 }
 
@@ -201,11 +205,12 @@ func (m *managerRouter) handleFind(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(503)
 	} else {
 		w.WriteHeader(500)
+		m.logger.Error("Find request is failed", zap.Error(err))
 	}
 
 	e := common.NewError(120, err.Error())
 	if err := json.NewEncoder(w).Encode(e); err != nil {
-		m.logger.Error("Find request is failed", zap.Any("dfsError", e), zap.Error(err))
+		m.logger.Error("Response of find request is failed", zap.Error(err))
 	}
 }
 

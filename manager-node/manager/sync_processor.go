@@ -91,7 +91,7 @@ func (d *syncProcessor) create(sourceAddress string, sha512Hex string, targets [
 			if err != nil {
 				target.counter--
 				d.logger.Warn(
-					"Data Node Connection Creation is unsuccessful",
+					"Data node connection creation is unsuccessful",
 					zap.String("targetNodeId", target.node.Id),
 					zap.String("targetAddress", target.node.Address),
 					zap.Error(err),
@@ -127,7 +127,7 @@ func (d *syncProcessor) delete(sha512Hex string, targets []*targetContainer) {
 			if err != nil {
 				target.counter--
 				d.logger.Warn(
-					"Data Node Connection Creation is unsuccessful",
+					"Data node connection creation is unsuccessful",
 					zap.String("targetNodeId", target.node.Id),
 					zap.String("targetAddress", target.node.Address),
 					zap.Error(err),

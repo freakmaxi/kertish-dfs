@@ -27,7 +27,7 @@ func (d *dfsRouter) handlePost(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(500)
 			}
 			d.logger.Error(
-				"Post request is failed",
+				"Create folder request is failed",
 				zap.String("path", requestedPaths[0]),
 				zap.String("applyTo", applyTo),
 				zap.Error(err),
@@ -70,7 +70,7 @@ func (d *dfsRouter) handlePost(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(500)
 			}
 			d.logger.Error(
-				"Post request is failed",
+				"Create file request is failed",
 				zap.String("path", requestedPaths[0]),
 				zap.String("applyTo", applyTo),
 				zap.Error(err),

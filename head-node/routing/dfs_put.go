@@ -47,7 +47,7 @@ func (d *dfsRouter) handlePut(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(500)
 			}
 			d.logger.Error(
-				"Put request is failed",
+				"Move request is failed",
 				zap.Strings("sources", requestedPaths),
 				zap.String("target", targetPath),
 				zap.Error(err),
@@ -71,7 +71,7 @@ func (d *dfsRouter) handlePut(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(500)
 			}
 			d.logger.Error(
-				"Put request is failed",
+				"Copy request is failed",
 				zap.Strings("sources", requestedPaths),
 				zap.String("target", targetPath),
 				zap.Error(err),
