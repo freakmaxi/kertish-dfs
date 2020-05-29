@@ -9,69 +9,76 @@ import (
 	"strings"
 	"time"
 
+	"github.com/freakmaxi/kertish-dfs/basics/log"
 	"github.com/freakmaxi/kertish-dfs/data-node/cache"
 	"github.com/freakmaxi/kertish-dfs/data-node/filesystem"
 	"github.com/freakmaxi/kertish-dfs/data-node/manager"
 	"github.com/freakmaxi/kertish-dfs/data-node/service"
+	"go.uber.org/zap"
 )
 
 var version = "XX.X.XXXX"
 
 func main() {
-	printWelcome()
-
 	args := os.Args[1:]
 	if len(args) > 0 && strings.Compare(args[0], "--version") == 0 {
 		fmt.Println(version)
 		return
 	}
 
-	fmt.Println("INFO: ------------ Starting Data Node ------------")
+	logger, console := log.NewLogger("data")
+	defer logger.Sync()
+
+	if console {
+		printWelcome()
+	}
+
+	logger.Info("------------ Starting Data Node ------------")
 
 	hardwareAddr, err := findHardwareAddress()
 	if err != nil {
-		fmt.Printf("ERROR: Unable to read hardware details: %s\n", err.Error())
+		logger.Error("Unable to read hardware details", zap.Error(err))
 		os.Exit(1)
 	}
-	fmt.Printf("INFO: HARDWARE_ID: %s\n", hardwareAddr)
+	logger.Sugar().Infof("HARDWARE_ID: %s", hardwareAddr)
 
 	bindAddr := os.Getenv("BIND_ADDRESS")
 	if matched, err := regexp.MatchString(`:\d{1,5}$`, bindAddr); err != nil || !matched {
 		bindAddr = fmt.Sprintf("%s:9430", bindAddr)
 	}
-	fmt.Printf("INFO: BIND_ADDRESS: %s\n", bindAddr)
+	logger.Sugar().Infof("BIND_ADDRESS: %s", bindAddr)
 
 	managerAddress := os.Getenv("MANAGER_ADDRESS")
 	if len(managerAddress) == 0 {
-		fmt.Println("ERROR: MANAGER_ADDRESS have to be specified")
+		logger.Error("MANAGER_ADDRESS have to be specified")
 		os.Exit(10)
 	}
-	fmt.Printf("INFO: MANAGER_ADDRESS: %s\n", managerAddress)
+	logger.Sugar().Infof("MANAGER_ADDRESS: %s", managerAddress)
 
 	sizeString := os.Getenv("SIZE")
 	if len(sizeString) == 0 {
-		fmt.Println("ERROR: SIZE have to be specified")
+		logger.Error("SIZE have to be specified")
 		os.Exit(50)
 	}
 	size, err := strconv.ParseUint(sizeString, 10, 64)
 	if err != nil {
-		fmt.Printf("ERROR: File System size is wrong: %s\n", err.Error())
+		logger.Error("File System size is wrong", zap.Error(err))
 		os.Exit(51)
 	}
 	if size == 0 {
-		fmt.Println("ERROR: File System size can not be 0")
+		logger.Error("File System size can not be 0")
 		os.Exit(52)
 	}
-	fmt.Printf("INFO: SIZE: %s (%s Gb)\n", sizeString, strconv.FormatUint(size/(1024*1024*1024), 10))
+	logger.Sugar().Infof("SIZE: %s (%s Gb)", sizeString, strconv.FormatUint(size/(1024*1024*1024), 10))
 
 	rootPath := os.Getenv("ROOT_PATH")
 	if len(rootPath) == 0 {
 		rootPath = "/opt"
 	}
-	fmt.Printf("INFO: ROOT_PATH: %s\n", rootPath)
+	logger.Sugar().Infof("ROOT_PATH: %s", rootPath)
 
-	fs := filesystem.NewManager(rootPath, size)
-	n := manager.NewNode(strings.Split(managerAddress, ","))
+	fs := filesystem.NewManager(rootPath, size, logger)
+	n := manager.NewNode(strings.Split(managerAddress, ","), logger)
 
 	cacheLifetime := 360
 	cacheLimitString := os.Getenv("CACHE_LIMIT")
@@ -80,13 +87,13 @@ func main() {
 	}
 	cacheLimit, err := strconv.ParseUint(cacheLimitString, 10, 64)
 	if err != nil {
-		fmt.Printf("ERROR: Cache Limit size is wrong: %s\n", err.Error())
+		logger.Error("Cache Limit size is wrong", zap.Error(err))
 		os.Exit(120)
 	}
 	if cacheLimit == 0 {
-		fmt.Println("WARN: Cache is disabled")
+		logger.Warn("Cache is disabled")
 	} else {
-		fmt.Printf("INFO: CACHE_LIMIT: %s (%s Gb)\n", cacheLimitString, strconv.FormatUint(cacheLimit/(1024*1024*1024), 10))
+		logger.Sugar().Infof("CACHE_LIMIT: %s (%s Gb)", cacheLimitString, strconv.FormatUint(cacheLimit/(1024*1024*1024), 10))
 
 		ccLifetimeString := os.Getenv("CACHE_LIFETIME")
 		if len(ccLifetimeString) == 0 {
@@ -94,36 +101,36 @@ func main() {
 		}
 		ccLifetime, err := strconv.ParseUint(ccLifetimeString, 10, 64)
 		if err != nil {
-			fmt.Printf("ERROR: Cache Lifetime is wrong: %s\n", err.Error())
+			logger.Error("Cache Lifetime is wrong", zap.Error(err))
 			os.Exit(130)
 		}
 		if ccLifetime == 0 {
-			fmt.Println("ERROR: Cache Lifetime can not be 0")
+			logger.Error("Cache Lifetime can not be 0")
 			os.Exit(131)
 		}
-		fmt.Printf("INFO: CACHE_LIFETIME: %s min.\n", ccLifetimeString)
+		logger.Sugar().Infof("CACHE_LIFETIME: %s min.", ccLifetimeString)
 	}
 
-	cc := cache.NewContainer(cacheLimit, time.Minute*time.Duration(cacheLifetime))
+	cc := cache.NewContainer(cacheLimit, time.Minute*time.Duration(cacheLifetime), logger)
 
-	c, err := service.NewCommander(fs, cc, n, hardwareAddr)
+	c, err := service.NewCommander(fs, cc, n, logger, hardwareAddr)
 	if err != nil {
-		fmt.Printf("ERROR: Commander creation is failed: %s\n", err.Error())
+		logger.Error("Commander creation is failed", zap.Error(err))
 		os.Exit(200)
 	}
 
-	s, err := service.NewServer(bindAddr, c)
+	s, err := service.NewServer(bindAddr, c, logger)
 	if err != nil {
-		fmt.Printf("ERROR: Server creation is failed: %s\n", err.Error())
+		logger.Error("Server creation is failed", zap.Error(err))
 		os.Exit(300)
 	}
 
-	fmt.Print("INFO: Waiting for handshake...")
+	logger.Info("Waiting for handshake...")
 	if err := n.Handshake(hardwareAddr, bindAddr, size); err != nil {
-		fmt.Printf(" %s\n", err.Error())
-		fmt.Printf("INFO: Data Node is starting as stand-alone on %s\n", bindAddr)
+		logger.Error("Handshake is failed", zap.Error(err))
+		logger.Sugar().Infof("Data Node is starting as stand-alone on %s", bindAddr)
 	} else {
-		fmt.Print(" done.\n")
+		logger.Info("Handshake is successful")
 
 		mode := "MASTER"
 		if len(n.MasterAddress()) > 0 {
@@ -131,15 +138,15 @@ func main() {
 
 			go func() {
 				if err := fs.Sync(n.MasterAddress()); err != nil {
-					fmt.Printf("WARN: Sync is failed (%s): %s\n", n.MasterAddress(), err.Error())
+					logger.Warn("Sync is failed", zap.String("masterNodeAddress", n.MasterAddress()), zap.Error(err))
 				}
 			}()
 		}
-		fmt.Printf("INFO: Data Node (%s) in Cluster (%s) is starting on %s as %s\n", n.NodeId(), n.ClusterId(), bindAddr, mode)
+		logger.Sugar().Infof("Data Node (%s) in Cluster (%s) is starting on %s as %s", n.NodeId(), n.ClusterId(), bindAddr, mode)
 	}
 
 	if err := s.Listen(); err != nil {
-		fmt.Printf("ERROR: Server listening is failed: %s\n", err.Error())
+		logger.Error("Server listening is failed", zap.Error(err))
 		os.Exit(400)
 	}
 

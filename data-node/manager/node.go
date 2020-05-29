@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
+	"go.uber.org/zap"
 )
 
 const managerEndPoint = "/client/node"
@@ -34,6 +35,7 @@ type Node interface {
 type node struct {
 	client      http.Client
 	managerAddr []string
+	logger      *zap.Logger
 
 	clusterId     string
 	nodeId        string
@@ -45,10 +47,11 @@ type node struct {
 	deleteFailureChan      chan common.SyncDeleteList
 }
 
-func NewNode(managerAddresses []string) Node {
+func NewNode(managerAddresses []string, logger *zap.Logger) Node {
 	node := &node{
 		client:                 http.Client{},
 		managerAddr:            managerAddresses,
+		logger:                 logger,
 		createNotificationChan: make(chan common.SyncFileItem, notificationChannelLimit),
 		createFailureChan:      make(chan common.SyncFileItemList, notificationChannelLimit),
 		deleteNotificationChan: make(chan common.SyncDelete, notificationChannelLimit),
@@ -101,7 +104,7 @@ func (n *node) createBulk(fileItemList common.SyncFileItemList, delay time.Durat
 	}
 
 	if err := n.create(fileItemList); err != nil {
-		fmt.Printf("WARN: Bulk (CREATE) notification is failed: %s\n", err)
+		n.logger.Warn("Bulk (CREATE) notification is failed", zap.Error(err))
 		n.createFailureChan <- fileItemList
 	}
 }
@@ -172,7 +175,7 @@ func (n *node) deleteBulk(syncDeleteList common.SyncDeleteList, delay time.Durat
 	}
 
 	if err := n.delete(syncDeleteList); err != nil {
-		fmt.Printf("WARN: Bulk (DELETE) notification is failed: %s\n", err)
+		n.logger.Warn("Bulk (DELETE) notification is failed", zap.Error(err))
 		n.deleteFailureChan <- syncDeleteList
 	}
 }
@@ -220,7 +223,7 @@ func (n *node) Join(clusterId string, nodeId string, masterAddress string) {
 		mode = "MASTER"
 	}
 
-	fmt.Printf("INFO: Data Node is joined to cluster (%s) with node id (%s) as %s\n", clusterId, nodeId, mode)
+	n.logger.Sugar().Infof("Data Node is joined to cluster (%s) with node id (%s) as %s", clusterId, nodeId, mode)
 }
 
 func (n *node) Mode(master bool) {
@@ -233,11 +236,11 @@ func (n *node) Mode(master bool) {
 		n.masterAddress = ""
 		mode = "MASTER"
 	}
-	fmt.Printf("INFO: Data Node (%s) is marked as %s\n", n.nodeId, mode)
+	n.logger.Sugar().Infof("Data Node (%s) is marked as %s", n.nodeId, mode)
 }
 
 func (n *node) Leave() {
-	fmt.Printf("INFO: Data Node is deleted from cluster (%s). Now working as stand-alone\n", n.clusterId)
+	n.logger.Sugar().Infof("Data Node is deleted from cluster (%s). Now working as stand-alone", n.clusterId)
 
 	n.clusterId = ""
 	n.nodeId = ""

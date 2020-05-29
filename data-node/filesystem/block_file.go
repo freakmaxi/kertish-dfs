@@ -4,7 +4,6 @@ import (
 	"crypto/sha512"
 	"encoding/binary"
 	"encoding/hex"
-	"fmt"
 	"hash"
 	"io"
 	"os"
@@ -12,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 const headerSize int64 = 2
@@ -50,9 +50,10 @@ type blockFile struct {
 
 	sha512Hex  string
 	targetPath string
+	logger     *zap.Logger
 }
 
-func NewBlockFile(root string, sha512Hex string) (BlockFile, error) {
+func NewBlockFile(root string, sha512Hex string, logger *zap.Logger) (BlockFile, error) {
 	blockFile := &blockFile{
 		sha512:     sha512.New512_256(),
 		sha512Hex:  sha512Hex,
@@ -60,6 +61,7 @@ func NewBlockFile(root string, sha512Hex string) (BlockFile, error) {
 		prepared:   true,
 		verified:   true,
 		canceled:   false,
+		logger:     logger,
 	}
 
 	file, err := os.OpenFile(blockFile.targetPath, os.O_RDWR, 0666)
@@ -265,7 +267,7 @@ func (b *blockFile) Close() {
 	}
 
 	if err := b.move(b.tempPath, b.targetPath); err != nil {
-		fmt.Printf("ERROR: File creation is failed silently: %s\n", err.Error())
+		b.logger.Error("File creation is failed silently", zap.Error(err))
 	}
 }
 

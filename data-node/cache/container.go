@@ -3,6 +3,8 @@ package cache
 import (
 	"sync"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 type Container interface {
@@ -30,18 +32,20 @@ func (p indexItemList) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 type container struct {
 	limit    uint64
-	usage    uint64
 	lifetime time.Duration
+	logger   *zap.Logger
+	usage    uint64
 
 	mutex       *sync.Mutex
 	index       map[string]indexItem
 	sortedIndex indexItemList
 }
 
-func NewContainer(limit uint64, lifetime time.Duration) Container {
+func NewContainer(limit uint64, lifetime time.Duration, logger *zap.Logger) Container {
 	container := &container{
 		limit:       limit,
 		lifetime:    lifetime,
+		logger:      logger,
 		mutex:       &sync.Mutex{},
 		index:       make(map[string]indexItem),
 		sortedIndex: make(indexItemList, 0),
@@ -61,7 +65,9 @@ func (c *container) start() {
 		for {
 			select {
 			case <-time.After(c.lifetime):
+				c.logger.Info("Purging Cache...")
 				c.Purge()
+				c.logger.Info("Cache Purging is completed!")
 			}
 		}
 	}()

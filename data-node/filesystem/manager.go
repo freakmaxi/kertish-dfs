@@ -1,7 +1,6 @@
 package filesystem
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -9,6 +8,7 @@ import (
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
 	"github.com/freakmaxi/kertish-dfs/data-node/cluster"
+	"go.uber.org/zap"
 )
 
 type Manager interface {
@@ -25,6 +25,7 @@ type Manager interface {
 type manager struct {
 	rootPath string
 	nodeSize uint64
+	logger   *zap.Logger
 
 	syncLock         sync.Mutex
 	createDeleteLock map[string]*sync.Mutex
@@ -33,10 +34,11 @@ type manager struct {
 	nodeCache      map[string]cluster.DataNode
 }
 
-func NewManager(rootPath string, nodeSize uint64) Manager {
+func NewManager(rootPath string, nodeSize uint64, logger *zap.Logger) Manager {
 	return &manager{
 		rootPath:         rootPath,
 		nodeSize:         nodeSize,
+		logger:           logger,
 		syncLock:         sync.Mutex{},
 		createDeleteLock: make(map[string]*sync.Mutex),
 		nodeCacheMutex:   sync.Mutex{},
@@ -75,7 +77,7 @@ func (m *manager) File(sha512Hex string, fileHandler func(blockFile BlockFile) e
 		return err
 	}
 
-	blockFile, err := NewBlockFile(m.rootPath, sha512Hex)
+	blockFile, err := NewBlockFile(m.rootPath, sha512Hex, m.logger)
 	if err != nil {
 		return err
 	}
@@ -196,15 +198,31 @@ func (m *manager) Sync(sourceAddr string) error {
 		}
 	}
 
-	fmt.Printf("INFO: Sync will, create: %d / delete: %d\n", len(createList), len(wipeList))
+	m.logger.Sugar().Infof("Sync will, create: %d / delete: %d", len(createList), len(wipeList))
 
 	createHandler := func(sha512Hex string, current int, total int) (resultError error) {
-		fmt.Printf("INFO: Syncing (%s) - %d / %d...", sha512Hex, current, total)
+		m.logger.Info(
+			"Syncing...",
+			zap.String("sha512Hex", sha512Hex),
+			zap.Int("current", current),
+			zap.Int("total", total),
+		)
 		defer func() {
 			if resultError == nil || resultError == errors.ErrQuit {
-				fmt.Print("\n")
+				m.logger.Info(
+					"Synced",
+					zap.String("sha512Hex", sha512Hex),
+					zap.Int("current", current),
+					zap.Int("total", total),
+				)
 			} else {
-				fmt.Printf(" FAILED! (%s)\n", resultError.Error())
+				m.logger.Error(
+					"Sync is failed",
+					zap.String("sha512Hex", sha512Hex),
+					zap.Int("current", current),
+					zap.Int("total", total),
+					zap.Error(resultError),
+				)
 			}
 		}()
 
@@ -228,7 +246,6 @@ func (m *manager) Sync(sourceAddr string) error {
 
 					if !blockFile.VerifyForce() {
 						if blockFile.Truncate(blockSize) != nil {
-							fmt.Print(" FAILED!")
 							return false
 						}
 						return true
@@ -238,7 +255,6 @@ func (m *manager) Sync(sourceAddr string) error {
 						return true
 					}
 
-					fmt.Print(" already synced!")
 					return false
 				},
 				func(data []byte) error {
@@ -246,23 +262,14 @@ func (m *manager) Sync(sourceAddr string) error {
 				},
 				func() bool {
 					if usageCountBackup == 1 {
-						verifyResult := blockFile.Verify()
-						if verifyResult {
-							fmt.Print(" done!")
-						}
-						return verifyResult
+						return blockFile.Verify()
 					}
 
 					if err := blockFile.ResetUsage(usageCountBackup); err != nil {
 						return false
 					}
 
-					if !blockFile.Verify() {
-						return false
-					}
-
-					fmt.Print(" done!")
-					return true
+					return blockFile.Verify()
 				})
 		})
 	}
@@ -281,7 +288,13 @@ func (m *manager) Sync(sourceAddr string) error {
 		totalWipeCount := len(wipeList)
 		for len(wipeList) > 0 {
 			if err := deleteHandler(wipeList[0].Sha512Hex); err != nil {
-				fmt.Printf("ERROR: Sync cannot delete (%s) - %d / %d: %s\n", wipeList[0].Sha512Hex, totalWipeCount-(len(wipeList)-1), totalWipeCount, err.Error())
+				m.logger.Error(
+					"Sync cannot delete",
+					zap.String("sha512Hex", wipeList[0].Sha512Hex),
+					zap.Int("current", totalWipeCount-(len(wipeList)-1)),
+					zap.Int("total", totalWipeCount),
+					zap.Error(err),
+				)
 				continue
 			}
 			wipeList = wipeList[1:]
@@ -295,7 +308,13 @@ func (m *manager) Sync(sourceAddr string) error {
 		totalCreateCount := len(createList)
 		for len(createList) > 0 {
 			if err := createHandler(createList[0].Sha512Hex, totalCreateCount-(len(createList)-1), totalCreateCount); err != nil {
-				fmt.Printf("ERROR: Sync cannot create (%s) - %d / %d: %s\n", createList[0].Sha512Hex, totalCreateCount-(len(createList)-1), totalCreateCount, err.Error())
+				m.logger.Error(
+					"Sync cannot create",
+					zap.String("sha512Hex", createList[0].Sha512Hex),
+					zap.Int("current", totalCreateCount-(len(createList)-1)),
+					zap.Int("total", totalCreateCount),
+					zap.Error(err),
+				)
 				continue
 			}
 			createList = createList[1:]

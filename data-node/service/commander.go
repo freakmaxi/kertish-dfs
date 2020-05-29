@@ -15,6 +15,7 @@ import (
 	"github.com/freakmaxi/kertish-dfs/data-node/cluster"
 	"github.com/freakmaxi/kertish-dfs/data-node/filesystem"
 	"github.com/freakmaxi/kertish-dfs/data-node/manager"
+	"go.uber.org/zap"
 )
 
 const commandBuffer = 4             // 4b
@@ -25,18 +26,20 @@ type Commander interface {
 }
 
 type commander struct {
-	fs    filesystem.Manager
-	cache cache.Container
-	node  manager.Node
+	fs     filesystem.Manager
+	cache  cache.Container
+	node   manager.Node
+	logger *zap.Logger
 
 	hardwareAddr string
 }
 
-func NewCommander(fs filesystem.Manager, cc cache.Container, node manager.Node, hardwareAddr string) (Commander, error) {
+func NewCommander(fs filesystem.Manager, cc cache.Container, node manager.Node, logger *zap.Logger, hardwareAddr string) (Commander, error) {
 	return &commander{
 		fs:           fs,
 		cache:        cc,
 		node:         node,
+		logger:       logger,
 		hardwareAddr: hardwareAddr,
 	}, nil
 }
@@ -87,13 +90,22 @@ func (c *commander) Handler(conn net.Conn) {
 	buffer := make([]byte, commandBuffer)
 
 	if err := c.readWithTimeout(conn, buffer, len(buffer)); err != nil {
-		fmt.Printf("ERROR: Stream unable to read: Connection: %s, %s\n", conn.RemoteAddr().String(), err.Error())
+		c.logger.Error(
+			"Stream unable to read",
+			zap.String("connection", conn.RemoteAddr().String()),
+			zap.Error(err),
+		)
 		return
 	}
 
 	if err := c.process(string(buffer), conn); err != nil {
 		if err != errors.ErrQuit {
-			fmt.Printf("ERROR: Unable to process command (%s): Connection: %s, %s\n", string(buffer), conn.RemoteAddr().String(), err.Error())
+			c.logger.Error(
+				"Unable to process command",
+				zap.String("command", string(buffer)),
+				zap.String("connection", conn.RemoteAddr().String()),
+				zap.Error(err),
+			)
 		}
 		_ = c.writeWithTimeout(conn, []byte("-"))
 		return

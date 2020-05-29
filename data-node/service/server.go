@@ -3,6 +3,8 @@ package service
 import (
 	"fmt"
 	"net"
+
+	"go.uber.org/zap"
 )
 
 type Server interface {
@@ -13,12 +15,13 @@ type Server interface {
 type server struct {
 	address   *net.TCPAddr
 	commander Commander
+	logger    *zap.Logger
 
 	listener *net.TCPListener
 	quiting  bool
 }
 
-func NewServer(address string, c Commander) (Server, error) {
+func NewServer(address string, c Commander, logger *zap.Logger) (Server, error) {
 	if len(address) == 0 {
 		return nil, fmt.Errorf("address should be defined")
 	}
@@ -27,6 +30,7 @@ func NewServer(address string, c Commander) (Server, error) {
 	return &server{
 		address:   addr,
 		commander: c,
+		logger:    logger,
 	}, nil
 }
 
@@ -40,7 +44,7 @@ func (s *server) Listen() error {
 	for !s.quiting {
 		c, err := s.listener.Accept()
 		if err != nil {
-			fmt.Printf("ERROR: Unable to accept connection: %s\n", err.Error())
+			s.logger.Error("Unable to accept connection", zap.Error(err))
 			continue
 		}
 		go s.commander.Handler(c)
