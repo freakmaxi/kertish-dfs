@@ -1,12 +1,12 @@
 package routing
 
 import (
-	"fmt"
 	"net/http"
 	"os"
 	"strings"
 
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"go.uber.org/zap"
 )
 
 func (d *dfsRouter) handleDelete(w http.ResponseWriter, r *http.Request) {
@@ -34,6 +34,6 @@ func (d *dfsRouter) handleDelete(w http.ResponseWriter, r *http.Request) {
 		} else {
 			w.WriteHeader(500)
 		}
-		fmt.Printf("ERROR: Delete request for %s is failed. %s\n", requestedPaths[0], err.Error())
+		d.logger.Error("Delete request is failed", zap.String("path", requestedPaths[0]), zap.Error(err))
 	}
 }

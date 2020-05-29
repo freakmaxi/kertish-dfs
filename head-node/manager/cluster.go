@@ -16,6 +16,7 @@ import (
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
 	cluster2 "github.com/freakmaxi/kertish-dfs/head-node/cluster"
+	"go.uber.org/zap"
 )
 
 const managerEndPoint = "/client/manager"
@@ -30,12 +31,13 @@ type Cluster interface {
 type cluster struct {
 	client      http.Client
 	managerAddr []string
+	logger      *zap.Logger
 
 	nodeCacheMutex sync.Mutex
 	nodeCache      map[string]cluster2.DataNode
 }
 
-func NewCluster(managerAddresses []string) (Cluster, error) {
+func NewCluster(managerAddresses []string, logger *zap.Logger) (Cluster, error) {
 	if len(managerAddresses) == 0 {
 		return nil, os.ErrInvalid
 	}
@@ -43,6 +45,7 @@ func NewCluster(managerAddresses []string) (Cluster, error) {
 	return &cluster{
 		client:         http.Client{},
 		managerAddr:    managerAddresses,
+		logger:         logger,
 		nodeCacheMutex: sync.Mutex{},
 		nodeCache:      make(map[string]cluster2.DataNode),
 	}, nil
@@ -71,17 +74,25 @@ func (c *cluster) Create(size uint64, reader io.Reader) (common.DataChunks, erro
 		return nil, err
 	}
 
-	create := NewCreate(reservation, c.getDataNode)
+	create := NewCreate(reservation, c.logger, c.getDataNode)
 	chunks, clusterUsageMap, err := create.process(reader, c.findCluster)
 	if err != nil {
 		if err := c.discardReservation(reservation.Id); err != nil {
-			fmt.Printf("ERROR: Discarding reservationMap (%s) is failed: %s\n", reservation.Id, err.Error())
+			c.logger.Error(
+				"Discarding reservationMap is failed",
+				zap.String("reservationId", reservation.Id),
+				zap.Error(err),
+			)
 		}
 		return nil, err
 	}
 
 	if err := c.commitReservation(reservation.Id, clusterUsageMap); err != nil {
-		fmt.Printf("ERROR: Committing reservationMap (%s) is failed: %s\n", reservation.Id, err.Error())
+		c.logger.Error(
+			"Committing reservationMap is failed",
+			zap.String("reservationId", reservation.Id),
+			zap.Error(err),
+		)
 	}
 
 	return chunks, nil

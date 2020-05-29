@@ -1,12 +1,12 @@
 package routing
 
 import (
-	"fmt"
 	"net/http"
 	"os"
 	"strings"
 
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"go.uber.org/zap"
 )
 
 func (d *dfsRouter) handlePost(w http.ResponseWriter, r *http.Request) {
@@ -26,7 +26,12 @@ func (d *dfsRouter) handlePost(w http.ResponseWriter, r *http.Request) {
 			} else {
 				w.WriteHeader(500)
 			}
-			fmt.Printf("ERROR: Post request for %s (%s) is failed. %s\n", requestedPaths[0], applyTo, err.Error())
+			d.logger.Error(
+				"Post request is failed",
+				zap.String("path", requestedPaths[0]),
+				zap.String("applyTo", applyTo),
+				zap.Error(err),
+			)
 			return
 		}
 	case "file":
@@ -64,7 +69,12 @@ func (d *dfsRouter) handlePost(w http.ResponseWriter, r *http.Request) {
 			} else {
 				w.WriteHeader(500)
 			}
-			fmt.Printf("ERROR: Post request for %s (%s) is failed. %s\n", requestedPaths[0], applyTo, err.Error())
+			d.logger.Error(
+				"Post request is failed",
+				zap.String("path", requestedPaths[0]),
+				zap.String("applyTo", applyTo),
+				zap.Error(err),
+			)
 			return
 		}
 	}

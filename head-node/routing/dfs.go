@@ -1,7 +1,6 @@
 package routing
 
 import (
-	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -9,17 +8,20 @@ import (
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/head-node/manager"
+	"go.uber.org/zap"
 )
 
 type dfsRouter struct {
-	dfs manager.Dfs
+	dfs    manager.Dfs
+	logger *zap.Logger
 
 	definitions []*Definition
 }
 
-func NewDfsRouter(dfs manager.Dfs) Router {
+func NewDfsRouter(dfs manager.Dfs, logger *zap.Logger) Router {
 	pR := &dfsRouter{
 		dfs:         dfs,
+		logger:      logger,
 		definitions: make([]*Definition, 0),
 	}
 	pR.setup()
@@ -42,12 +44,7 @@ func (d *dfsRouter) Get() []*Definition {
 }
 
 func (d *dfsRouter) manipulate(w http.ResponseWriter, r *http.Request) {
-	defer func() {
-		err := r.Body.Close()
-		if err != nil {
-			fmt.Printf("ERROR: Request body close is failed. %s\n", err.Error())
-		}
-	}()
+	defer r.Body.Close()
 
 	switch r.Method {
 	case "GET":

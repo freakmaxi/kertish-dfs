@@ -5,94 +5,101 @@ import (
 	"os"
 	"strings"
 
+	"github.com/freakmaxi/kertish-dfs/basics/log"
 	"github.com/freakmaxi/kertish-dfs/head-node/data"
 	"github.com/freakmaxi/kertish-dfs/head-node/manager"
 	"github.com/freakmaxi/kertish-dfs/head-node/routing"
 	"github.com/freakmaxi/kertish-dfs/head-node/services"
 	"github.com/freakmaxi/locking-center-client-go/mutex"
+	"go.uber.org/zap"
 )
 
 var version = "XX.X.XXXX"
 
 func main() {
-	printWelcome()
-
 	args := os.Args[1:]
 	if len(args) > 0 && strings.Compare(args[0], "--version") == 0 {
 		fmt.Println(version)
 		return
 	}
 
-	fmt.Println("INFO: ------------ Starting Head Node ------------")
+	logger, console := log.NewLogger("head")
+	defer logger.Sync()
+
+	if console {
+		printWelcome()
+	}
+
+	logger.Info("------------ Starting Head Node ------------")
 
 	bindAddr := os.Getenv("BIND_ADDRESS")
 	if len(bindAddr) == 0 {
 		bindAddr = ":4000"
 	}
-	fmt.Printf("INFO: BIND_ADDRESS: %s\n", bindAddr)
+	logger.Sugar().Infof("BIND_ADDRESS: %s", bindAddr)
 
 	managerAddress := os.Getenv("MANAGER_ADDRESS")
 	if len(managerAddress) == 0 {
-		fmt.Println("ERROR: MANAGER_ADDRESS have to be specified")
+		logger.Error("MANAGER_ADDRESS have to be specified")
 		os.Exit(10)
 	}
-	fmt.Printf("INFO: MANAGER_ADDRESS: %s\n", managerAddress)
+	logger.Sugar().Infof("MANAGER_ADDRESS: %s", managerAddress)
 
 	mongoConn := os.Getenv("MONGO_CONN")
 	if len(mongoConn) == 0 {
-		fmt.Println("ERROR: MONGO_CONN have to be specified")
+		logger.Error("MONGO_CONN have to be specified")
 		os.Exit(11)
 	}
-	fmt.Printf("INFO: MONGO_CONN: %s\n", mongoConn)
+	logger.Sugar().Infof("MONGO_CONN: %s", mongoConn)
 
 	mongoDb := os.Getenv("MONGO_DATABASE")
 	if len(mongoDb) == 0 {
 		mongoDb = "kertish-dfs"
 	}
-	fmt.Printf("INFO: MONGO_DATABASE: %s\n", mongoDb)
+	logger.Sugar().Infof("MONGO_DATABASE: %s", mongoDb)
 
 	mutexConn := os.Getenv("LOCKING_CENTER")
 	if len(mutexConn) == 0 {
-		fmt.Println("ERROR: LOCKING_CENTER have to be specified")
+		logger.Error("LOCKING_CENTER have to be specified")
 		os.Exit(13)
 	}
-	fmt.Printf("INFO: LOCKING_CENTER: %s\n", mutexConn)
+	logger.Sugar().Infof("LOCKING_CENTER: %s", mutexConn)
 
 	m, err := mutex.NewLockingCenter(mutexConn)
 	if err != nil {
-		fmt.Printf("ERROR: Mutex Setup is failed. %s\n", err.Error())
+		logger.Error("Mutex Setup is failed", zap.Error(err))
 		os.Exit(14)
 	}
 
 	conn, err := data.NewConnection(mongoConn)
 	if err != nil {
-		fmt.Printf("ERROR: MongoDB Connection is failed. %s\n", err.Error())
+		logger.Error("MongoDB Connection is failed", zap.Error(err))
 		os.Exit(15)
 	}
 
 	metadata, err := data.NewMetadata(m, conn, mongoDb)
 	if err != nil {
-		fmt.Printf("ERROR: Metadata Manager is failed. %s\n", err.Error())
+		logger.Error("Metadata Manager is failed", zap.Error(err))
 		os.Exit(18)
 	}
 
-	cluster, err := manager.NewCluster([]string{managerAddress})
+	cluster, err := manager.NewCluster([]string{managerAddress}, logger)
 	if err != nil {
-		fmt.Printf("ERROR: Cluster Manager is failed. %s\n", err.Error())
+		logger.Error("Cluster Manager is failed", zap.Error(err))
 		os.Exit(20)
 	}
 	dfs := manager.NewDfs(metadata, cluster)
 	// create root if not exists
 	if err := dfs.CreateFolder("/"); err != nil && err != os.ErrExist {
-		fmt.Printf("ERROR: Unable to create cluster root path. %s\n", err.Error())
+		logger.Error("Unable to create cluster root path", zap.Error(err))
 		os.Exit(21)
 	}
-	dfsRouter := routing.NewDfsRouter(dfs)
+	dfsRouter := routing.NewDfsRouter(dfs, logger)
 
 	routerManager := routing.NewManager()
 	routerManager.Add(dfsRouter)
 
-	proxy := services.NewProxy(bindAddr, routerManager)
+	proxy := services.NewProxy(bindAddr, routerManager, logger)
 	proxy.Start()
 
 	os.Exit(0)

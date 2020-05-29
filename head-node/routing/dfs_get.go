@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
+	"go.uber.org/zap"
 )
 
 func (d *dfsRouter) handleGet(w http.ResponseWriter, r *http.Request) {
@@ -63,7 +64,7 @@ func (d *dfsRouter) handleGet(w http.ResponseWriter, r *http.Request) {
 		} else {
 			w.WriteHeader(500)
 		}
-		fmt.Printf("ERROR: Get request for %s is failed. %s\n", strings.Join(requestedPaths, " "), err.Error())
+		d.logger.Error("Get request is failed", zap.Strings("paths", requestedPaths), zap.Error(err))
 	}
 }
 

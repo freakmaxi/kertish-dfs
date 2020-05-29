@@ -10,10 +10,12 @@ import (
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
 	cluster2 "github.com/freakmaxi/kertish-dfs/head-node/cluster"
+	"go.uber.org/zap"
 )
 
 type create struct {
 	reservationMap          *common.ReservationMap
+	logger                  *zap.Logger
 	dataNodeProviderHandler func(address string) (cluster2.DataNode, error)
 	failed                  bool
 
@@ -28,9 +30,10 @@ type dataState struct {
 	address string
 }
 
-func NewCreate(reservationMap *common.ReservationMap, dataNodeProviderHandler func(address string) (cluster2.DataNode, error)) *create {
+func NewCreate(reservationMap *common.ReservationMap, logger *zap.Logger, dataNodeProviderHandler func(address string) (cluster2.DataNode, error)) *create {
 	return &create{
 		reservationMap:          reservationMap,
+		logger:                  logger,
 		dataNodeProviderHandler: dataNodeProviderHandler,
 		failed:                  false,
 		chunks:                  make([]dataState, 0),
@@ -85,7 +88,12 @@ func (c *create) upload(wg *sync.WaitGroup, clusterMap common.ClusterMap, data [
 		if err != errors.ErrNoAvailableActionNode {
 			c.failed = true
 
-			fmt.Printf("ERROR: Find Cluster is failed. index: %d, clusterId: %s -  %s\n", clusterMap.Chunk.Starts(), clusterMap.Id, err.Error())
+			c.logger.Error(
+				"Find Cluster is failed",
+				zap.Uint64("index", clusterMap.Chunk.Starts()),
+				zap.String("clusterId", clusterMap.Id),
+				zap.Error(err),
+			)
 			return
 		}
 		clusterId = clusterMap.Id
@@ -96,7 +104,13 @@ func (c *create) upload(wg *sync.WaitGroup, clusterMap common.ClusterMap, data [
 	if err != nil {
 		c.failed = true
 
-		fmt.Printf("ERROR: Unable to find data node. index: %d, clusterId: %s, address: %s -  %s\n", clusterMap.Chunk.Starts(), clusterMap.Id, address, err.Error())
+		c.logger.Error(
+			"Unable to find data node",
+			zap.Uint64("index", clusterMap.Chunk.Starts()),
+			zap.String("clusterId", clusterMap.Id),
+			zap.String("address", address),
+			zap.Error(err),
+		)
 		return
 	}
 
@@ -104,7 +118,12 @@ func (c *create) upload(wg *sync.WaitGroup, clusterMap common.ClusterMap, data [
 	if err != nil {
 		c.failed = true
 
-		fmt.Printf("ERROR: Create on Cluster is failed. index: %d, clusterId: %s -  %s\n", clusterMap.Chunk.Starts(), clusterMap.Id, err.Error())
+		c.logger.Error(
+			"Create on Cluster is failed",
+			zap.Uint64("index", clusterMap.Chunk.Starts()),
+			zap.String("clusterId", clusterMap.Id),
+			zap.Error(err),
+		)
 		return
 	}
 
@@ -132,14 +151,22 @@ func (c *create) revert() {
 
 		dn, err := c.dataNodeProviderHandler(chunk.address)
 		if err != nil {
-			fmt.Printf("ERROR: Unable to find data node. address: %s -  %s\n", chunk.address, err.Error())
+			c.logger.Error(
+				"Unable to find data node",
+				zap.String("address", chunk.address),
+				zap.Error(err),
+			)
 
 			c.chunks = append(c.chunks[1:], chunk)
 			continue
 		}
 
 		if err := dn.Delete(chunk.Hash); err != nil {
-			fmt.Printf("ERROR: Revert create is failed. address: %s -  %s\n", chunk.address, err.Error())
+			c.logger.Error(
+				"Revert create is failed",
+				zap.String("address", chunk.address),
+				zap.Error(err),
+			)
 
 			c.chunks = append(c.chunks[1:], chunk)
 			continue

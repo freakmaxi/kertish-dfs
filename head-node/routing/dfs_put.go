@@ -1,7 +1,6 @@
 package routing
 
 import (
-	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -9,6 +8,7 @@ import (
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"go.uber.org/zap"
 )
 
 func (d *dfsRouter) handlePut(w http.ResponseWriter, r *http.Request) {
@@ -46,7 +46,12 @@ func (d *dfsRouter) handlePut(w http.ResponseWriter, r *http.Request) {
 			} else {
 				w.WriteHeader(500)
 			}
-			fmt.Printf("ERROR: Put request for source: %s and target: %s is failed. %s\n", strings.Join(requestedPaths, " "), targetPath, err.Error())
+			d.logger.Error(
+				"Put request is failed",
+				zap.Strings("sources", requestedPaths),
+				zap.String("target", targetPath),
+				zap.Error(err),
+			)
 		}
 	case "c":
 		if err := d.dfs.Copy(requestedPaths, targetPath, join, overwrite); err != nil {
@@ -65,7 +70,12 @@ func (d *dfsRouter) handlePut(w http.ResponseWriter, r *http.Request) {
 			} else {
 				w.WriteHeader(500)
 			}
-			fmt.Printf("ERROR: Put request for source: %s and target: %s is failed. %s\n", strings.Join(requestedPaths, " "), targetPath, err.Error())
+			d.logger.Error(
+				"Put request is failed",
+				zap.Strings("sources", requestedPaths),
+				zap.String("target", targetPath),
+				zap.Error(err),
+			)
 		}
 	}
 }
