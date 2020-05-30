@@ -38,9 +38,8 @@ func (d *dfsRouter) handleGet(w http.ResponseWriter, r *http.Request) {
 
 			if calculateUsage {
 				folder.CalculateUsage(func(shadows common.FolderShadows) {
-					for _, folder := range shadows {
-						size, _ := d.dfs.Size(folder.Full)
-						folder.Size = size
+					for _, shadow := range shadows {
+						shadow.Size, _ = d.dfs.Size(shadow.Full)
 					}
 				})
 			}
