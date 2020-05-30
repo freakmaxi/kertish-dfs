@@ -88,10 +88,10 @@ func (m *managerRouter) handleRepairConsistency(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if err == errors.ErrProcessing {
-		w.WriteHeader(102)
-	} else if err == errors.ErrNotFound {
+	if err == errors.ErrNotFound {
 		w.WriteHeader(404)
+	} else if err == errors.ErrProcessing {
+		w.WriteHeader(423)
 	} else {
 		w.WriteHeader(500)
 		m.logger.Error("Repair request is failed", zap.String("option", repairOption), zap.Error(err))
