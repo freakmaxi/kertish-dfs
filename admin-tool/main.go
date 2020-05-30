@@ -124,8 +124,8 @@ func main() {
 			fmt.Println("cluster sync is canceled")
 		}
 	case "repairConsistency":
-		fmt.Println("CAUTION: Repair consistency will prevent access to all clusters for any kind of actions. It is " +
-			"a long running process and it may take hours/days to complete depending on your DFS setup and Repair model.")
+		fmt.Println("CAUTION: Repair consistency is a long running process that may take hours/days to complete " +
+			"depending on your DFS setup and will create partial action prevention on cluster data nodes.")
 		fmt.Print("Do you want to continue? (y/N) ")
 		reader := bufio.NewReader(os.Stdin)
 		char, _, err := reader.ReadRune()
@@ -135,16 +135,11 @@ func main() {
 
 		switch char {
 		case 'Y', 'y':
-			anim := common.NewAnimation(terminal.NewStdOut(), "metadata file chunk consistency repair is in progress...")
-			anim.Start()
-
 			if err := manager.RepairConsistency([]string{fc.managerAddress}, fc.repairConsistency); err != nil {
-				anim.Cancel()
-
 				fmt.Printf("%s\n", err.Error())
 				os.Exit(55)
 			}
-			anim.Stop()
+			fmt.Println("Consistency repair is started, you can check the state with -get-clusters option")
 		default:
 			fmt.Println("cluster chunk consistency repair is canceled")
 		}

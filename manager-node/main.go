@@ -104,17 +104,18 @@ func main() {
 		os.Exit(22)
 	}
 
-	var indexClient data.IndexClient
+	var cacheClient data.CacheClient
 	if len(redisClusterMode) == 0 {
-		indexClient, err = data.NewIndexStandaloneClient(redisConn, redisPassword)
+		cacheClient, err = data.NewCacheStandaloneClient(redisConn, redisPassword)
 	} else {
-		indexClient, err = data.NewIndexClusterClient(strings.Split(redisConn, ","), redisPassword)
+		cacheClient, err = data.NewCacheClusterClient(strings.Split(redisConn, ","), redisPassword)
 	}
 	if err != nil {
-		logger.Error("Index Setup is failed", zap.Error(err))
+		logger.Error("Cache Client Setup is failed", zap.Error(err))
 		os.Exit(23)
 	}
-	index := data.NewIndex(indexClient, strings.ReplaceAll(mongoDb, " ", "_"))
+	index := data.NewIndex(cacheClient, strings.ReplaceAll(mongoDb, " ", "_"))
+	operation := data.NewOperation(cacheClient, strings.ReplaceAll(mongoDb, " ", "_"))
 
 	metadata, err := data.NewMetadata(m, conn, mongoDb)
 	if err != nil {
@@ -122,7 +123,7 @@ func main() {
 		os.Exit(24)
 	}
 
-	health := manager.NewHealthTracker(dataClusters, index, metadata, logger, time.Second*time.Duration(healthTrackerInterval))
+	health := manager.NewHealthTracker(dataClusters, index, metadata, operation, logger, time.Second*time.Duration(healthTrackerInterval))
 	health.Start()
 
 	managerCluster, err := manager.NewCluster(dataClusters, index, logger, health)

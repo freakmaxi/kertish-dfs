@@ -26,5 +26,6 @@ var (
 	ErrNoDiskSpace                  = errors.New("no available disk space for this operation")
 	ErrNotFound                     = errors.New("cluster/node not found")
 
-	ErrShowUsage = errors.New("show usage")
+	ErrShowUsage  = errors.New("show usage")
+	ErrProcessing = errors.New("another operation in progress")
 )

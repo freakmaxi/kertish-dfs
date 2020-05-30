@@ -30,12 +30,19 @@ type Health interface {
 	SyncClusterById(clusterId string) error
 	SyncCluster(cluster *common.Cluster, keepFrozen bool) error
 	RepairConsistency(repairType RepairType) error
+
+	Operations() Operations
+}
+
+type Operations interface {
+	RepairDetail() data.RepairDetail
 }
 
 type health struct {
 	clusters         data.Clusters
 	index            data.Index
 	metadata         data.Metadata
+	operation        data.Operation
 	logger           *zap.Logger
 	intervalDuration time.Duration
 
@@ -43,7 +50,7 @@ type health struct {
 	nodeCache      map[string]cluster2.DataNode
 }
 
-func NewHealthTracker(clusters data.Clusters, index data.Index, metadata data.Metadata, logger *zap.Logger, intervalDuration time.Duration) Health {
+func NewHealthTracker(clusters data.Clusters, index data.Index, metadata data.Metadata, operation data.Operation, logger *zap.Logger, intervalDuration time.Duration) Health {
 	if intervalDuration == 0 {
 		intervalDuration = defaultIntervalDuration
 	}
@@ -52,6 +59,7 @@ func NewHealthTracker(clusters data.Clusters, index data.Index, metadata data.Me
 		clusters:         clusters,
 		index:            index,
 		metadata:         metadata,
+		operation:        operation,
 		logger:           logger,
 		intervalDuration: intervalDuration,
 		nodeCacheMutex:   sync.Mutex{},
@@ -388,21 +396,63 @@ func (h *health) SyncCluster(cluster *common.Cluster, keepFrozen bool) error {
 	return nil
 }
 
+func (h *health) RepairDetail() data.RepairDetail {
+	v, err := h.operation.RepairDetail()
+	if err != nil {
+		return data.RepairDetail{Processing: true} // On an error, just return as it is still processing
+	}
+	return v
+}
+
 func (h *health) RepairConsistency(repairType RepairType) error {
+	if h.RepairDetail().Processing {
+		return errors.ErrProcessing
+	}
+
+	if err := h.operation.SetRepairing(true, false); err != nil {
+		return err
+	}
+
+	go func() {
+		zapRepairType := zap.String("repairType", "full")
+		switch repairType {
+		case RT_Structure:
+			zapRepairType = zap.String("repairType", "structure")
+		case RT_Integrity:
+			zapRepairType = zap.String("repairType", "integrity")
+		}
+		h.logger.Info("Consistency repair is started...", zapRepairType)
+
+		if err := h.repairConsistency(repairType); err != nil {
+			_ = h.operation.SetRepairing(false, false)
+			h.logger.Error("Consistency repair is failed", zap.Error(err))
+			return
+		}
+		_ = h.operation.SetRepairing(false, true)
+		h.logger.Info("Consistency repair is completed!")
+	}()
+
+	return nil
+}
+
+func (h *health) repairConsistency(repairType RepairType) error {
 	repairStructure := repairType == RT_Full || repairType == RT_Structure
 	repairIntegrity := repairType == RT_Full || repairType == RT_Integrity
 
 	if repairStructure {
+		h.logger.Info("Repairing metadata structure consistency...")
 		// Repair Structure
 		if err := h.repairStructure(); err != nil {
 			return err
 		}
+		h.logger.Info("Metadata structure consistency repair is completed!")
 	}
 
 	if !repairIntegrity {
 		return nil
 	}
 
+	h.logger.Info("Repairing metadata integrity...")
 	// Repair Integrity
 	clusters, err := h.clusters.GetAll()
 	if err != nil {
@@ -452,25 +502,30 @@ func (h *health) RepairConsistency(repairType RepairType) error {
 	}); err != nil {
 		return err
 	}
+	h.logger.Info("Metadata integrity repair is completed!")
 
-	// Make Zombie File Chunk Cleanup
-	for clusterId, matchedFileItemList := range matchedFileItemListMap {
-		zombieFileItemList, err := h.index.Extract(clusterId, matchedFileItemList)
-		if err != nil {
-			return err
-		}
-
-		masterNode := clusterMap[clusterId].Master()
-		mdn, err := cluster2.NewDataNode(masterNode.Address)
-		if err != nil {
-			return err
-		}
-
-		for _, zombieFileItem := range zombieFileItemList {
-			if err := mdn.Delete(zombieFileItem.Sha512Hex); err != nil {
+	if len(matchedFileItemListMap) > 0 {
+		h.logger.Info("Cleaning up zombie file chunks...")
+		// Make Zombie File Chunk Cleanup
+		for clusterId, matchedFileItemList := range matchedFileItemListMap {
+			zombieFileItemList, err := h.index.Extract(clusterId, matchedFileItemList)
+			if err != nil {
 				return err
 			}
+
+			masterNode := clusterMap[clusterId].Master()
+			mdn, err := cluster2.NewDataNode(masterNode.Address)
+			if err != nil {
+				return err
+			}
+
+			for _, zombieFileItem := range zombieFileItemList {
+				if err := mdn.Delete(zombieFileItem.Sha512Hex); err != nil {
+					return err
+				}
+			}
 		}
+		h.logger.Info("Zombie file chunks clean up is completed!")
 	}
 
 	return nil
@@ -488,4 +543,8 @@ func (h *health) repairStructure() error {
 		}
 		return tree.Normalize(), nil
 	})
+}
+
+func (h *health) Operations() Operations {
+	return h
 }

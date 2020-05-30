@@ -267,7 +267,7 @@ func RepairConsistency(managerAddr []string, repairModel string) error {
 	}
 	defer res.Body.Close()
 
-	if res.StatusCode != 200 {
+	if res.StatusCode != 202 {
 		var e common.Error
 		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
 			return err
@@ -343,6 +343,17 @@ func GetClusters(managerAddr []string, clusterId string) error {
 		fmt.Printf("      Total Size:      %d (%d Gb)\n", total, total/(1024*1024*1024))
 		available := total - used
 		fmt.Printf("      Total Available: %d (%d Gb)\n", available, available/(1024*1024*1024))
+		if strings.Compare(res.Header.Get("X-Repairing"), "true") == 0 {
+			fmt.Printf("      Repairing:       In progress\n")
+		} else {
+			repairCompletedTimestamp := res.Header.Get("X-Repairing-Timestamp")
+			if len(repairCompletedTimestamp) > 0 {
+				repairCompletedTime, err := time.Parse(time.RFC3339, repairCompletedTimestamp)
+				if err == nil {
+					fmt.Printf("      Repairing:       Completed at %s\n", repairCompletedTime.Local().Format("2006 Jan 02 15:04:05"))
+				}
+			}
+		}
 		fmt.Println()
 	}
 

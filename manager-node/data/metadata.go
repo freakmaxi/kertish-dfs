@@ -43,16 +43,16 @@ func (m *metadata) context() context.Context {
 }
 
 func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error)) error {
-	m.mutex.Lock(metadataLockKey)
-	defer m.mutex.Unlock(metadataLockKey)
-
-	opts := options.Find()
-	opts.SetSort(bson.M{"full": -1})
+	m.mutex.Wait(metadataLockKey)
 
 	total, err := m.col.CountDocuments(m.context(), bson.M{})
 	if err != nil {
 		return err
 	}
+
+	opts := options.Find()
+	opts.SetSort(bson.M{"full": -1})
+	opts.SetProjection(bson.M{"_id": 1, "full": 1})
 
 	cursor, err := m.col.Find(m.context(), bson.M{}, opts)
 	if err != nil {
@@ -63,8 +63,19 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 	}
 	defer cursor.Close(m.context())
 
-	handlerFunc := func(f *common.Folder) error {
-		changed, err := folderHandler(f)
+	handlerFunc := func(id primitive.ObjectID, folderPath string) error {
+		m.mutex.Lock(folderPath)
+		defer m.mutex.Unlock(folderPath)
+
+		var folder *common.Folder
+		if err := m.col.FindOne(m.context(), bson.M{"_id": id}).Decode(&folder); err != nil {
+			if err == mongo.ErrNoDocuments {
+				return nil
+			}
+			return err
+		}
+
+		changed, err := folderHandler(folder)
 		if err != nil {
 			return err
 		}
@@ -72,7 +83,7 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 			return nil
 		}
 
-		if err := m.save([]*common.Folder{f}, false); err != nil {
+		if err := m.save([]*common.Folder{folder}, false); err != nil {
 			return err
 		}
 		return nil
@@ -80,11 +91,10 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 
 	handled := int64(0)
 	for cursor.Next(m.context()) {
-		var folder *common.Folder
-		if err := cursor.Decode(&folder); err != nil {
-			return err
-		}
-		if err := handlerFunc(folder); err != nil {
+		id := cursor.Current.Lookup("_id").ObjectID()
+		folderPath := cursor.Current.Lookup("full").String()
+
+		if err := handlerFunc(id, folderPath); err != nil {
 			return err
 		}
 		handled++

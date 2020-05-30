@@ -3,7 +3,9 @@ package routing
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
@@ -82,10 +84,13 @@ func (m *managerRouter) handleRepairConsistency(w http.ResponseWriter, r *http.R
 
 	err := m.health.RepairConsistency(repairType)
 	if err == nil {
+		w.WriteHeader(202)
 		return
 	}
 
-	if err == errors.ErrNotFound {
+	if err == errors.ErrProcessing {
+		w.WriteHeader(102)
+	} else if err == errors.ErrNotFound {
 		w.WriteHeader(404)
 	} else {
 		w.WriteHeader(500)
@@ -169,6 +174,13 @@ func (m *managerRouter) handleClusters(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err == nil {
+		repairDetail := m.health.Operations().RepairDetail()
+
+		w.Header().Add("X-Repairing", strconv.FormatBool(repairDetail.Processing))
+		if repairDetail.Timestamp != nil {
+			w.Header().Add("X-Repairing-Timestamp", repairDetail.Timestamp.Format(time.RFC3339))
+		}
+
 		if err := json.NewEncoder(w).Encode(clusters); err != nil {
 			m.logger.Error("Response of get clusters request is failed", zap.String("clusterId", clusterId), zap.Error(err))
 		}

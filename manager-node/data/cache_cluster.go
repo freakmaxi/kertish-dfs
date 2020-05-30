@@ -2,11 +2,11 @@ package data
 
 import "github.com/mediocregopher/radix/v3"
 
-type indexCluster struct {
+type cacheCluster struct {
 	cluster *radix.Cluster
 }
 
-func NewIndexClusterClient(addresses []string, password string) (IndexClient, error) {
+func NewCacheClusterClient(addresses []string, password string) (CacheClient, error) {
 	connFunc := func(network string, addr string) (radix.Conn, error) {
 		return radix.Dial(
 			network,
@@ -22,26 +22,25 @@ func NewIndexClusterClient(addresses []string, password string) (IndexClient, er
 		return nil, err
 	}
 
-	return &indexCluster{
+	return &cacheCluster{
 		cluster: cluster,
 	}, nil
 }
 
-func (r indexCluster) Del(keys ...string) error {
+func (r cacheCluster) Del(keys ...string) error {
 	return r.cluster.Do(radix.Cmd(nil, "DEL", keys...))
 }
 
-func (r indexCluster) HSet(key, field string, value string) error {
+func (r cacheCluster) HSet(key, field string, value string) error {
 	return r.cluster.Do(radix.Cmd(nil, "HSET", key, field, value))
 }
 
-func (r indexCluster) HGet(key, field string) (*string, error) {
+func (r cacheCluster) HGet(key, field string) (*string, error) {
 	var result string
 	value := radix.MaybeNil{
 		Rcv: &result,
 	}
-	err := r.cluster.Do(radix.Cmd(&value, "HGET", key, field))
-	if err != nil {
+	if err := r.cluster.Do(radix.Cmd(&value, "HGET", key, field)); err != nil {
 		return nil, err
 	}
 	if value.Nil {
@@ -50,7 +49,7 @@ func (r indexCluster) HGet(key, field string) (*string, error) {
 	return &result, nil
 }
 
-func (r indexCluster) HDel(key string, fields ...string) error {
+func (r cacheCluster) HDel(key string, fields ...string) error {
 	args := make([]string, 0)
 	args = append(args, key)
 	args = append(args, fields...)
@@ -58,7 +57,7 @@ func (r indexCluster) HDel(key string, fields ...string) error {
 	return r.cluster.Do(radix.Cmd(nil, "HDEL", args...))
 }
 
-func (r indexCluster) HGetAll(key string) (map[string]string, error) {
+func (r cacheCluster) HGetAll(key string) (map[string]string, error) {
 	var value map[string]string
 	err := r.cluster.Do(radix.Cmd(&value, "HGETALL", key))
 	if err != nil {
@@ -67,7 +66,7 @@ func (r indexCluster) HGetAll(key string) (map[string]string, error) {
 	return value, nil
 }
 
-func (r indexCluster) HMSet(key string, values map[string]string) error {
+func (r cacheCluster) HMSet(key string, values map[string]string) error {
 	args := make([]string, 0)
 	args = append(args, key)
 	for k, v := range values {
@@ -88,8 +87,26 @@ func (r indexCluster) HMSet(key string, values map[string]string) error {
 	return r.cluster.Do(radix.Cmd(nil, "HMSET", args...))
 }
 
-func (r indexCluster) Pipeline(commands []radix.CmdAction) error {
+func (r cacheCluster) Pipeline(commands []radix.CmdAction) error {
 	return r.cluster.Do(radix.Pipeline(commands...))
 }
 
-var _ IndexClient = &indexCluster{}
+func (r cacheCluster) Get(key string) (*string, error) {
+	var result string
+	value := radix.MaybeNil{
+		Rcv: &result,
+	}
+	if err := r.cluster.Do(radix.Cmd(&value, "GET", key)); err != nil {
+		return nil, err
+	}
+	if value.Nil {
+		return nil, nil
+	}
+	return &result, nil
+}
+
+func (r cacheCluster) Set(key string, value string) error {
+	return r.cluster.Do(radix.Cmd(nil, "SET", key, value))
+}
+
+var _ CacheClient = &cacheCluster{}

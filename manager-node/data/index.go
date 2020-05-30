@@ -14,16 +14,6 @@ import (
 
 const multiSetStepLimit = 50000
 
-type IndexClient interface {
-	Del(keys ...string) error
-	HSet(key, field string, value string) error
-	HGet(key, field string) (*string, error)
-	HDel(key string, fields ...string) error
-	HGetAll(key string) (map[string]string, error)
-	HMSet(key string, values map[string]string) error
-	Pipeline(commands []radix.CmdAction) error
-}
-
 type Index interface {
 	Add(clusterId string, fileItem common.SyncFileItem) error
 	AddBulk(clusterId string, fileItemList common.SyncFileItemList) error
@@ -39,11 +29,11 @@ type Index interface {
 type index struct {
 	mutex *sync.Mutex
 
-	client    IndexClient
+	client    CacheClient
 	keyPrefix string
 }
 
-func NewIndex(client IndexClient, keyPrefix string) Index {
+func NewIndex(client CacheClient, keyPrefix string) Index {
 	return &index{
 		client:    client,
 		keyPrefix: keyPrefix,
