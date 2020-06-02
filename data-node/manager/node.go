@@ -30,11 +30,14 @@ type Node interface {
 	ClusterId() string
 	NodeId() string
 	MasterAddress() string
+
+	NodeSize() uint64
 }
 
 type node struct {
 	client      http.Client
 	managerAddr []string
+	nodeSize    uint64
 	logger      *zap.Logger
 
 	clusterId     string
@@ -47,10 +50,11 @@ type node struct {
 	deleteFailureChan      chan common.SyncDeleteList
 }
 
-func NewNode(managerAddresses []string, logger *zap.Logger) Node {
+func NewNode(managerAddresses []string, nodeSize uint64, logger *zap.Logger) Node {
 	node := &node{
 		client:                 http.Client{},
 		managerAddr:            managerAddresses,
+		nodeSize:               nodeSize,
 		logger:                 logger,
 		createNotificationChan: make(chan common.SyncFileItem, notificationChannelLimit),
 		createFailureChan:      make(chan common.SyncFileItemList, notificationChannelLimit),
@@ -304,3 +308,9 @@ func (n *node) NodeId() string {
 func (n *node) MasterAddress() string {
 	return n.masterAddress
 }
+
+func (n *node) NodeSize() uint64 {
+	return n.nodeSize
+}
+
+var _ Node = &node{}

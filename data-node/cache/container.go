@@ -12,6 +12,7 @@ type Container interface {
 
 	Upsert(sha512Hex string, data []byte)
 	Remove(sha512Hex string)
+	Invalidate()
 
 	Purge()
 }
@@ -142,6 +143,18 @@ func (c *container) Remove(sha512Hex string) {
 	}
 
 	delete(c.index, sha512Hex)
+}
+
+func (c *container) Invalidate() {
+	if c.limit == 0 {
+		return
+	}
+
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	c.sortedIndex = make(indexItemList, 0)
+	c.index = make(map[string]indexItem)
 }
 
 func (c *container) Purge() {

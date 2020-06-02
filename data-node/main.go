@@ -77,8 +77,12 @@ func main() {
 	}
 	logger.Sugar().Infof("ROOT_PATH: %s", rootPath)
 
-	fs := filesystem.NewManager(rootPath, size, logger)
-	n := manager.NewNode(strings.Split(managerAddress, ","), logger)
+	m, err := filesystem.NewManager(rootPath, logger)
+	if err != nil {
+		logger.Error("File System Manager creation is failed", zap.Error(err))
+		os.Exit(80)
+	}
+	n := manager.NewNode(strings.Split(managerAddress, ","), size, logger)
 
 	cacheLifetime := 360
 	cacheLimitString := os.Getenv("CACHE_LIMIT")
@@ -113,7 +117,7 @@ func main() {
 
 	cc := cache.NewContainer(cacheLimit, time.Minute*time.Duration(cacheLifetime), logger)
 
-	c, err := service.NewCommander(fs, cc, n, logger, hardwareAddr)
+	c, err := service.NewCommander(m, cc, n, logger, hardwareAddr)
 	if err != nil {
 		logger.Error("Commander creation is failed", zap.Error(err))
 		os.Exit(200)
@@ -137,7 +141,7 @@ func main() {
 			mode = "SLAVE"
 
 			go func() {
-				if err := fs.Sync(n.MasterAddress()); err != nil {
+				if err := m.Sync().Start(n.MasterAddress()); err != nil {
 					logger.Warn("Sync is failed", zap.String("masterNodeAddress", n.MasterAddress()), zap.Error(err))
 				}
 			}()

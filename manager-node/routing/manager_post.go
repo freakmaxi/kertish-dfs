@@ -22,6 +22,8 @@ func (m *managerRouter) handlePost(w http.ResponseWriter, r *http.Request) {
 	switch action {
 	case "register":
 		m.handleRegister(w, r)
+	case "snapshot":
+		m.handleCreateSnapshot(w, r)
 	case "reserve":
 		m.handleReserve(w, r)
 	case "readMap", "createMap", "deleteMap":
@@ -69,6 +71,27 @@ func (m *managerRouter) handleRegister(w http.ResponseWriter, r *http.Request) {
 	e := common.NewError(200, err.Error())
 	if err := json.NewEncoder(w).Encode(e); err != nil {
 		m.logger.Error("Response of register cluster request is failed", zap.Error(err))
+	}
+}
+
+func (m *managerRouter) handleCreateSnapshot(w http.ResponseWriter, r *http.Request) {
+	clusterId := r.Header.Get("X-Options")
+	if len(clusterId) == 0 {
+		w.WriteHeader(422)
+		return
+	}
+
+	err := m.manager.CreateSnapshot(clusterId)
+	if err == nil {
+		return
+	}
+
+	w.WriteHeader(400)
+	m.logger.Error("Create snapshot request is failed", zap.Error(err))
+
+	e := common.NewError(205, err.Error())
+	if err := json.NewEncoder(w).Encode(e); err != nil {
+		m.logger.Error("Response of create snapshot request is failed", zap.Error(err))
 	}
 }
 
@@ -130,7 +153,7 @@ func (m *managerRouter) handleMap(w http.ResponseWriter, r *http.Request, mapTyp
 
 func (m *managerRouter) validatePostAction(action string) bool {
 	switch action {
-	case "register", "reserve", "readMap", "createMap", "deleteMap":
+	case "register", "snapshot", "reserve", "readMap", "createMap", "deleteMap":
 		return true
 	}
 	return false

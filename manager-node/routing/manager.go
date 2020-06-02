@@ -47,6 +47,8 @@ func (m *managerRouter) manipulate(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "POST":
 		m.handlePost(w, r)
+	case "PUT":
+		m.handlePut(w, r)
 	case "DELETE":
 		m.handleDelete(w, r)
 	case "GET":

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,9 +27,14 @@ const commandSyncDelete = "SYDE"
 const commandSyncMove = "SYMV"
 const commandSyncList = "SYLS"
 const commandSyncFull = "SYFL"
+const commandSnapshotCreate = "SSCR"
+const commandSnapshotDelete = "SSDE"
+const commandSnapshotRestore = "SSRS"
 const commandPing = "PING"
 const commandSize = "SIZE"
 const commandUsed = "USED"
+
+const snapshotTimeLayout = "20060102150405"
 
 type DataNode interface {
 	Create(data []byte) (string, error)
@@ -44,8 +50,12 @@ type DataNode interface {
 	SyncCreate(sha512Hex string, sourceNodeAddr string) bool
 	SyncDelete(sha512Hex string) bool
 	SyncMove(sha512Hex string, sourceNodeAddr string) bool
-	SyncList() common.SyncFileItemList
+	SyncList() (*common.SyncContainer, error)
 	SyncFull(sourceNodeAddr string) bool
+
+	SnapshotCreate() bool
+	SnapshotDelete(snapshotIndex uint64) bool
+	SnapshotRestore(snapshotIndex uint64) bool
 
 	Ping() int64
 	Size() (uint64, error)
@@ -430,7 +440,10 @@ func (d *dataNode) SyncMove(sha512Hex string, sourceNodeAddr string) bool {
 	}) == nil
 }
 
-func (d *dataNode) SyncList() (fileItemList common.SyncFileItemList) {
+func (d *dataNode) SyncList() (*common.SyncContainer, error) {
+	container := common.NewSyncContainer()
+	container.FileItems = make(map[string]common.SyncFileItem)
+
 	if err := d.connect(func(conn *net.TCPConn) error {
 		if _, err := conn.Write([]byte(commandSyncList)); err != nil {
 			return err
@@ -440,28 +453,68 @@ func (d *dataNode) SyncList() (fileItemList common.SyncFileItemList) {
 			return fmt.Errorf("data node refused the sync list request")
 		}
 
-		var fileItemListLength uint64
-		if err := binary.Read(conn, binary.LittleEndian, &fileItemListLength); err != nil {
+		pullFileItemsFunc := func(targetFileItems map[string]common.SyncFileItem) error {
+			var rootFileItemsLength uint64
+			if err := binary.Read(conn, binary.LittleEndian, &rootFileItemsLength); err != nil {
+				return err
+			}
+
+			for i := uint64(0); i < rootFileItemsLength; i++ {
+				sha512Hex, err := d.hashAsHex(conn)
+				if err != nil {
+					return err
+				}
+
+				var usage uint16
+				if err := binary.Read(conn, binary.LittleEndian, &usage); err != nil {
+					return err
+				}
+
+				var size int32
+				if err := binary.Read(conn, binary.LittleEndian, &size); err != nil {
+					return err
+				}
+
+				targetFileItems[sha512Hex] = common.SyncFileItem{
+					Sha512Hex: sha512Hex,
+					Usage:     usage,
+					Size:      size,
+				}
+			}
+
+			return nil
+		}
+
+		var snapshotsLength uint64
+		if err := binary.Read(conn, binary.LittleEndian, &snapshotsLength); err != nil {
 			return err
 		}
 
-		fileItemList = make(common.SyncFileItemList, fileItemListLength)
-		for current := uint64(1); current <= fileItemListLength; current++ {
-			sha512Hex, err := d.hashAsHex(conn)
+		if err := pullFileItemsFunc(container.FileItems); err != nil {
+			return err
+		}
+
+		for i := uint64(0); i < snapshotsLength; i++ {
+			var snapshotTimeUint uint64
+			if err := binary.Read(conn, binary.LittleEndian, &snapshotTimeUint); err != nil {
+				return err
+			}
+
+			snapshotTime, err := time.Parse(snapshotTimeLayout, strconv.FormatUint(snapshotTimeUint, 10))
 			if err != nil {
 				return err
 			}
 
-			var size int32
-			if err := binary.Read(conn, binary.LittleEndian, &size); err != nil {
+			snapshotContainer := common.NewContainer(snapshotTime)
+			snapshotContainer.FileItems = make(map[string]common.SyncFileItem)
+
+			if err := pullFileItemsFunc(snapshotContainer.FileItems); err != nil {
 				return err
 			}
 
-			fileItemList[current-1] = common.SyncFileItem{
-				Sha512Hex: sha512Hex,
-				Size:      size,
-			}
+			container.Snapshots = append(container.Snapshots, snapshotContainer)
 		}
+		container.Sort()
 
 		if !d.result(conn) {
 			return fmt.Errorf("sync list command is failed on data node")
@@ -469,9 +522,10 @@ func (d *dataNode) SyncList() (fileItemList common.SyncFileItemList) {
 
 		return nil
 	}); err != nil {
-		return nil
+		return nil, err
 	}
-	return
+
+	return container, nil
 }
 
 func (d *dataNode) SyncFull(sourceNodeAddr string) bool {
@@ -491,6 +545,56 @@ func (d *dataNode) SyncFull(sourceNodeAddr string) bool {
 
 		if !d.result(conn) {
 			return fmt.Errorf("sync full command is failed on data node")
+		}
+
+		return nil
+	}) == nil
+}
+
+func (d *dataNode) SnapshotCreate() bool {
+	return d.connect(func(conn *net.TCPConn) error {
+		if _, err := conn.Write([]byte(commandSnapshotCreate)); err != nil {
+			return err
+		}
+
+		if !d.result(conn) {
+			return fmt.Errorf("snapshot create command is failed on data node")
+		}
+
+		return nil
+	}) == nil
+}
+
+func (d *dataNode) SnapshotDelete(snapshotIndex uint64) bool {
+	return d.connect(func(conn *net.TCPConn) error {
+		if _, err := conn.Write([]byte(commandSnapshotDelete)); err != nil {
+			return err
+		}
+
+		if err := binary.Write(conn, binary.LittleEndian, snapshotIndex); err != nil {
+			return err
+		}
+
+		if !d.result(conn) {
+			return fmt.Errorf("snapshot delete command is failed on data node")
+		}
+
+		return nil
+	}) == nil
+}
+
+func (d *dataNode) SnapshotRestore(snapshotIndex uint64) bool {
+	return d.connect(func(conn *net.TCPConn) error {
+		if _, err := conn.Write([]byte(commandSnapshotRestore)); err != nil {
+			return err
+		}
+
+		if err := binary.Write(conn, binary.LittleEndian, snapshotIndex); err != nil {
+			return err
+		}
+
+		if !d.result(conn) {
+			return fmt.Errorf("snapshot restore command is failed on data node")
 		}
 
 		return nil
@@ -544,8 +648,8 @@ func (d *dataNode) Size() (size uint64, err error) {
 	return
 }
 
-func (d *dataNode) Used() (used uint64, err error) {
-	err = d.connect(func(conn *net.TCPConn) error {
+func (d *dataNode) Used() (used uint64, usedErr error) {
+	usedErr = d.connect(func(conn *net.TCPConn) error {
 		if _, err := conn.Write([]byte(commandUsed)); err != nil {
 			return err
 		}

@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 )
@@ -14,16 +16,19 @@ import (
 const commandSyncRead = "SYRD"
 const commandSyncList = "SYLS"
 const chunkSize = 1024 * 1024 // 1mb
+const snapshotTimeLayout = "20060102150405"
 
 type DataNode interface {
-	SyncRead(sha512Hex string, drop bool, usageCountHandler func(blockSize uint32, usageCount uint16) bool, dataHandler func(data []byte) error, verifyHandler func() bool) error
-	SyncList(readHandler func(fileItem common.SyncFileItem, current uint64, total uint64) error) error
+	SyncList() (*common.SyncContainer, error)
+	SyncRead(sha512Hex string, drop bool,
+		usageCountHandler func(blockSize uint32, usageCount uint16) bool,
+		dataHandler func(data []byte) error,
+		verifyHandler func() bool,
+	) error
 }
 
 type dataNode struct {
 	address *net.TCPAddr
-
-	conn *net.TCPConn
 }
 
 func NewDataNode(address string) (DataNode, error) {
@@ -37,32 +42,28 @@ func NewDataNode(address string) (DataNode, error) {
 	}, nil
 }
 
-func (d *dataNode) connect() error {
-	var err error
-	d.conn, err = net.DialTCP("tcp", nil, d.address)
+func (d *dataNode) connect(connectionHandler func(conn *net.TCPConn) error) error {
+	conn, err := net.DialTCP("tcp", nil, d.address)
 	if err != nil {
 		return err
 	}
-	return nil
+	defer conn.Close()
+
+	return connectionHandler(conn)
 }
 
-func (d *dataNode) close() {
-	_ = d.conn.Close()
-}
-
-func (d *dataNode) result() bool {
+func (d *dataNode) result(conn *net.TCPConn) bool {
 	b := make([]byte, 1)
-	_, err := d.conn.Read(b)
+	_, err := conn.Read(b)
 	if err != nil {
 		return false
 	}
-
 	return strings.Compare("+", string(b)) == 0
 }
 
-func (d *dataNode) hashAsHex() (string, error) {
+func (d *dataNode) hashAsHex(conn *net.TCPConn) (string, error) {
 	h := make([]byte, 32)
-	total, err := io.ReadAtLeast(d.conn, h, len(h))
+	total, err := io.ReadAtLeast(conn, h, len(h))
 	if err != nil {
 		return "", err
 	}
@@ -72,128 +73,166 @@ func (d *dataNode) hashAsHex() (string, error) {
 	return hex.EncodeToString(h), nil
 }
 
-func (d *dataNode) SyncRead(sha512Hex string, drop bool, compareHandler func(blockSize uint32, usageCount uint16) bool, dataHandler func([]byte) error, verifyHandler func() bool) error {
-	if err := d.connect(); err != nil {
-		return err
-	}
-	defer d.close()
+func (d *dataNode) SyncList() (*common.SyncContainer, error) {
+	container := common.NewSyncContainer()
+	container.FileItems = make(map[string]common.SyncFileItem)
 
-	if _, err := d.conn.Write([]byte(commandSyncRead)); err != nil {
-		return err
-	}
-
-	sha512Sum, err := hex.DecodeString(sha512Hex)
-	if err != nil {
-		return err
-	}
-	if _, err := d.conn.Write(sha512Sum); err != nil {
-		return err
-	}
-
-	if err := binary.Write(d.conn, binary.LittleEndian, drop); err != nil {
-		return err
-	}
-
-	if !d.result() {
-		return fmt.Errorf("data node refused the read request")
-	}
-
-	var blockSize uint32
-	if err := binary.Read(d.conn, binary.LittleEndian, &blockSize); err != nil {
-		return err
-	}
-
-	var usageCount uint16
-	if err := binary.Read(d.conn, binary.LittleEndian, &usageCount); err != nil {
-		return err
-	}
-	if !compareHandler(blockSize, usageCount) {
-		if _, err := d.conn.Write([]byte{'-'}); err != nil {
+	if err := d.connect(func(conn *net.TCPConn) error {
+		if _, err := conn.Write([]byte(commandSyncList)); err != nil {
 			return err
 		}
-		return nil
-	}
-	if _, err := d.conn.Write([]byte{'+'}); err != nil {
-		return err
-	}
 
-	readBuffer := make([]byte, chunkSize)
-	if blockSize < chunkSize {
-		readBuffer = make([]byte, blockSize)
-	}
-	for blockSize > 0 {
-		_, err := io.ReadAtLeast(d.conn, readBuffer, len(readBuffer))
-		if err != nil {
-			if err == io.EOF {
-				break
+		if !d.result(conn) {
+			return fmt.Errorf("data node refused the sync list request")
+		}
+
+		pullFileItemsFunc := func(targetFileItems map[string]common.SyncFileItem) error {
+			var rootFileItemsLength uint64
+			if err := binary.Read(conn, binary.LittleEndian, &rootFileItemsLength); err != nil {
+				return err
 			}
+
+			for i := uint64(0); i < rootFileItemsLength; i++ {
+				sha512Hex, err := d.hashAsHex(conn)
+				if err != nil {
+					return err
+				}
+
+				var usage uint16
+				if err := binary.Read(conn, binary.LittleEndian, &usage); err != nil {
+					return err
+				}
+
+				var size int32
+				if err := binary.Read(conn, binary.LittleEndian, &size); err != nil {
+					return err
+				}
+
+				targetFileItems[sha512Hex] = common.SyncFileItem{
+					Sha512Hex: sha512Hex,
+					Usage:     usage,
+					Size:      size,
+				}
+			}
+
+			return nil
+		}
+
+		var snapshotsLength uint64
+		if err := binary.Read(conn, binary.LittleEndian, &snapshotsLength); err != nil {
 			return err
 		}
 
-		if err := dataHandler(readBuffer); err != nil {
+		if err := pullFileItemsFunc(container.FileItems); err != nil {
 			return err
 		}
 
-		blockSize -= uint32(len(readBuffer))
+		for i := uint64(0); i < snapshotsLength; i++ {
+			var snapshotTimeUint uint64
+			if err := binary.Read(conn, binary.LittleEndian, &snapshotTimeUint); err != nil {
+				return err
+			}
+
+			snapshotTime, err := time.Parse(snapshotTimeLayout, strconv.FormatUint(snapshotTimeUint, 10))
+			if err != nil {
+				return err
+			}
+
+			snapshotContainer := common.NewContainer(snapshotTime)
+			snapshotContainer.FileItems = make(map[string]common.SyncFileItem)
+
+			if err := pullFileItemsFunc(snapshotContainer.FileItems); err != nil {
+				return err
+			}
+
+			container.Snapshots = append(container.Snapshots, snapshotContainer)
+		}
+		container.Sort()
+
+		if !d.result(conn) {
+			return fmt.Errorf("sync list command is failed on data node")
+		}
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return container, nil
+}
+
+func (d *dataNode) SyncRead(sha512Hex string, drop bool, compareHandler func(blockSize uint32, usageCount uint16) bool, dataHandler func([]byte) error, verifyHandler func() bool) error {
+	return d.connect(func(conn *net.TCPConn) error {
+		if _, err := conn.Write([]byte(commandSyncRead)); err != nil {
+			return err
+		}
+
+		sha512Sum, err := hex.DecodeString(sha512Hex)
+		if err != nil {
+			return err
+		}
+		if _, err := conn.Write(sha512Sum); err != nil {
+			return err
+		}
+
+		if err := binary.Write(conn, binary.LittleEndian, drop); err != nil {
+			return err
+		}
+
+		if !d.result(conn) {
+			return fmt.Errorf("data node refused the sync read request")
+		}
+
+		var blockSize uint32
+		if err := binary.Read(conn, binary.LittleEndian, &blockSize); err != nil {
+			return err
+		}
+
+		var usageCount uint16
+		if err := binary.Read(conn, binary.LittleEndian, &usageCount); err != nil {
+			return err
+		}
+		if !compareHandler(blockSize, usageCount) {
+			_, err := conn.Write([]byte{'-'})
+			return err
+		}
+		if _, err := conn.Write([]byte{'+'}); err != nil {
+			return err
+		}
+
+		readBuffer := make([]byte, chunkSize)
 		if blockSize < chunkSize {
 			readBuffer = make([]byte, blockSize)
 		}
-	}
+		for blockSize > 0 {
+			_, err := io.ReadAtLeast(conn, readBuffer, len(readBuffer))
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				return err
+			}
 
-	if !d.result() {
-		return fmt.Errorf("read command is failed on data node")
-	}
+			if err := dataHandler(readBuffer); err != nil {
+				return err
+			}
 
-	if !verifyHandler() {
-		return fmt.Errorf("read result is not verified")
-	}
-
-	return nil
-}
-
-func (d *dataNode) SyncList(readHandler func(fileItem common.SyncFileItem, current uint64, total uint64) error) error {
-	if err := d.connect(); err != nil {
-		return err
-	}
-	defer d.close()
-
-	if _, err := d.conn.Write([]byte(commandSyncList)); err != nil {
-		return err
-	}
-
-	if !d.result() {
-		return fmt.Errorf("data node refused the sync list request")
-	}
-
-	var fileItemListLength uint64
-	if err := binary.Read(d.conn, binary.LittleEndian, &fileItemListLength); err != nil {
-		return err
-	}
-
-	for current := uint64(1); current <= fileItemListLength; current++ {
-		sha512Hex, err := d.hashAsHex()
-		if err != nil {
-			return err
+			blockSize -= uint32(len(readBuffer))
+			if blockSize < chunkSize {
+				readBuffer = make([]byte, blockSize)
+			}
 		}
 
-		var size int32
-		if err := binary.Read(d.conn, binary.LittleEndian, &size); err != nil {
-			return err
+		if !d.result(conn) {
+			return fmt.Errorf("sync read command is failed on data node")
 		}
 
-		if err := readHandler(common.SyncFileItem{
-			Sha512Hex: sha512Hex,
-			Size:      size,
-		}, current, fileItemListLength); err != nil {
-			return err
+		if !verifyHandler() {
+			return fmt.Errorf("sync read result is not verified")
 		}
-	}
 
-	if !d.result() {
-		return fmt.Errorf("sync full command is failed on data node")
-	}
-
-	return nil
+		return nil
+	})
 }
 
 var _ DataNode = &dataNode{}

@@ -25,6 +25,8 @@ func (m *managerRouter) handleDelete(w http.ResponseWriter, r *http.Request) {
 		m.handleUnRegister(w, r)
 	case "unfreeze":
 		m.handleUnFreeze(w, r)
+	case "snapshot":
+		m.handleDeleteSnapshot(w, r)
 	case "commit":
 		m.handleCommit(w, r)
 	case "discard":
@@ -96,6 +98,32 @@ func (m *managerRouter) handleUnFreeze(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
 }
 
+func (m *managerRouter) handleDeleteSnapshot(w http.ResponseWriter, r *http.Request) {
+	clusterId, snapshotIndex, err := m.describeDeleteSnapshotOptions(r.Header.Get("X-Options"))
+	if len(clusterId) == 0 || err != nil {
+		w.WriteHeader(422)
+		if err != nil {
+			e := common.NewError(380, err.Error())
+			if err := json.NewEncoder(w).Encode(e); err != nil {
+				m.logger.Error("Response of delete snapshot request is failed", zap.Error(err))
+			}
+		}
+	}
+
+	err = m.manager.DeleteSnapshot(clusterId, snapshotIndex)
+	if err == nil {
+		return
+	}
+
+	w.WriteHeader(400)
+	m.logger.Error("Delete snapshot request is failed", zap.Error(err))
+
+	e := common.NewError(380, err.Error())
+	if err := json.NewEncoder(w).Encode(e); err != nil {
+		m.logger.Error("Response of delete snapshot request is failed", zap.Error(err))
+	}
+}
+
 func (m *managerRouter) handleCommit(w http.ResponseWriter, r *http.Request) {
 	reservationId := r.Header.Get("X-Reservation-Id")
 	clusterMap, err := m.describeReservationCommitOptions(r.Header.Get("X-Options"))
@@ -142,7 +170,7 @@ func (m *managerRouter) handleDiscard(w http.ResponseWriter, r *http.Request) {
 
 func (m *managerRouter) validateDeleteAction(action string) bool {
 	switch action {
-	case "unregister", "unfreeze", "commit", "discard":
+	case "unregister", "unfreeze", "snapshot", "commit", "discard":
 		return true
 	}
 	return false
@@ -161,6 +189,21 @@ func (m *managerRouter) describeUnRegisterOptions(options string) (string, strin
 	id := options[2:]
 
 	return idType, id, nil
+}
+
+func (m *managerRouter) describeDeleteSnapshotOptions(options string) (string, uint64, error) {
+	clusterId := ""
+	eqIdx := strings.Index(options, "=")
+	if eqIdx > -1 {
+		clusterId = options[:eqIdx]
+		options = options[eqIdx+1:]
+	}
+	snapshotIndex, err := strconv.ParseUint(options, 10, 64)
+	if err != nil {
+		return "", 0, err
+	}
+
+	return clusterId, snapshotIndex, nil
 }
 
 func (m *managerRouter) describeReservationCommitOptions(options string) (map[string]uint64, error) {

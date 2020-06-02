@@ -288,6 +288,7 @@ func (c *clusters) ResetStats(cluster *common.Cluster) error {
 		"$set": bson.M{
 			"reservations": cluster.Reservations,
 			"used":         cluster.Used,
+			"snapshots":    cluster.Snapshots,
 		},
 	}
 
@@ -348,6 +349,7 @@ func (c *clusters) overwrite(clusters common.Clusters) error {
 
 		for _, cluster := range clusters {
 			sort.Sort(cluster.Nodes)
+			sort.Sort(cluster.Snapshots)
 
 			filter := bson.M{"clusterId": cluster.Id}
 			opts := (&options.UpdateOptions{}).SetUpsert(true)

@@ -229,6 +229,93 @@ func Unfreeze(managerAddr []string, clusterIds []string) error {
 	return nil
 }
 
+func CreateSnapshot(managerAddr []string, clusterId string) error {
+	req, err := http.NewRequest("POST", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Action", "snapshot")
+	req.Header.Set("X-Options", clusterId)
+
+	res, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != 200 {
+		if res.StatusCode == 422 {
+			return fmt.Errorf("")
+		}
+
+		var e common.Error
+		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
+			return err
+		}
+		return fmt.Errorf(e.Message)
+	}
+
+	return nil
+}
+
+func DeleteSnapshot(managerAddr []string, clusterId string, snapshotIndex uint64) error {
+	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Action", "snapshot")
+	req.Header.Set("X-Options", fmt.Sprintf("%s=%d", clusterId, snapshotIndex))
+
+	res, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != 200 {
+		if res.StatusCode == 422 {
+			return fmt.Errorf("")
+		}
+
+		var e common.Error
+		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
+			return err
+		}
+		return fmt.Errorf(e.Message)
+	}
+
+	return nil
+}
+
+func RestoreSnapshot(managerAddr []string, clusterId string, snapshotIndex uint64) error {
+	req, err := http.NewRequest("PUT", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Action", "snapshot")
+	req.Header.Set("X-Options", fmt.Sprintf("%s=%d", clusterId, snapshotIndex))
+
+	res, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != 200 {
+		if res.StatusCode == 422 {
+			return fmt.Errorf("")
+		}
+
+		var e common.Error
+		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
+			return err
+		}
+		return fmt.Errorf(e.Message)
+	}
+
+	return nil
+}
+
 func SyncClusters(managerAddr []string) error {
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
 	if err != nil {
@@ -335,6 +422,15 @@ func GetClusters(managerAddr []string, clusterId string) error {
 			state = "Frozen"
 		}
 		fmt.Printf("      Status:    %s\n", state)
+		if len(cluster.Snapshots) > 0 {
+			for i, snapshot := range cluster.Snapshots {
+				if i == 0 {
+					fmt.Printf("      Snapshots: %-4d %s\n", i, snapshot.Format("2006 Jan 02 15:04:05"))
+					continue
+				}
+				fmt.Printf("                 %-4d %s\n", i, snapshot.Format("2006 Jan 02 15:04:05"))
+			}
+		}
 		fmt.Println()
 	}
 

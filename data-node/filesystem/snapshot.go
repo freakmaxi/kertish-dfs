@@ -1,0 +1,289 @@
+package filesystem
+
+import (
+	"encoding/binary"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"io/ioutil"
+	"os"
+	"path"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/freakmaxi/kertish-dfs/basics/common"
+	dnc "github.com/freakmaxi/kertish-dfs/data-node/common"
+	"github.com/freakmaxi/kertish-dfs/data-node/filesystem/block"
+	"go.uber.org/zap"
+)
+
+const snapshotPrefix = "snapshot."
+const snapshotTimeLayout = "20060102150405"
+const snapshotHeaderBackupFile = "headers.backup"
+
+type Snapshot interface {
+	Create(targetSnapshot *time.Time) (*time.Time, error)
+	Delete(targetSnapshot time.Time) error
+	Restore(sourceSnapshot time.Time) error
+
+	ReadHeaderBackup(snapshot time.Time) (HeaderMap, error)
+	ReplaceHeaderBackup(snapshot time.Time, headerMap HeaderMap) error
+
+	Latest() (*time.Time, error)
+	Dates() (common.Snapshots, error)
+
+	PathName(snapshot time.Time) string
+	ToUint(snapshot time.Time) uint64
+}
+
+type HeaderMap map[string]uint16
+
+type snapshot struct {
+	rootPath string
+	logger   *zap.Logger
+}
+
+func NewSnapshot(rootPath string, logger *zap.Logger) Snapshot {
+	return &snapshot{
+		rootPath: rootPath,
+		logger:   logger,
+	}
+}
+
+func (s *snapshot) ReadHeaderBackup(snapshot time.Time) (HeaderMap, error) {
+	headerMap := make(HeaderMap)
+
+	snapshotPathName := s.PathName(snapshot)
+	snapshotPath := path.Join(s.rootPath, snapshotPathName)
+
+	headerBackupFilePath := path.Join(snapshotPath, snapshotHeaderBackupFile)
+	headerFile, err := os.OpenFile(headerBackupFilePath, os.O_RDONLY, 0666)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return headerMap, nil
+		}
+		return nil, err
+	}
+	defer headerFile.Close()
+
+	sha512HexBytes := make([]byte, 32)
+	var usage uint16
+
+	for {
+		if _, err := io.ReadAtLeast(headerFile, sha512HexBytes, len(sha512HexBytes)); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, err
+		}
+
+		if err := binary.Read(headerFile, binary.LittleEndian, &usage); err != nil {
+			return nil, err
+		}
+
+		sha512Hex := hex.EncodeToString(sha512HexBytes)
+		headerMap[sha512Hex] = usage
+	}
+
+	return headerMap, nil
+}
+
+func (s *snapshot) ReplaceHeaderBackup(snapshot time.Time, headerMap HeaderMap) error {
+	snapshotPathName := s.PathName(snapshot)
+	snapshotPath := path.Join(s.rootPath, snapshotPathName)
+
+	headerBackupFilePath := path.Join(snapshotPath, snapshotHeaderBackupFile)
+	headerFile, err := os.OpenFile(headerBackupFilePath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+	if err != nil {
+		return err
+	}
+	defer headerFile.Close()
+
+	for sha512Hex, usage := range headerMap {
+		sha512HexBytes, err := hex.DecodeString(sha512Hex)
+		if err != nil {
+			return err
+		}
+		if _, err := headerFile.Write(sha512HexBytes); err != nil {
+			return err
+		}
+
+		if err := binary.Write(headerFile, binary.LittleEndian, usage); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *snapshot) Create(targetSnapshot *time.Time) (snapshotTime *time.Time, snapshotErr error) {
+	nextSnapshot := time.Now().UTC()
+	if targetSnapshot != nil {
+		nextSnapshot = *targetSnapshot
+	}
+	nextSnapshotPath := path.Join(s.rootPath, s.PathName(nextSnapshot))
+
+	_, err := os.Stat(nextSnapshotPath)
+	if err == nil {
+		return nil, os.ErrExist
+	}
+	if !os.IsNotExist(err) {
+		return nil, err
+	}
+	if err := os.MkdirAll(nextSnapshotPath, 0777); err != nil {
+		return nil, err
+	}
+	defer func() {
+		if snapshotErr == nil {
+			return
+		}
+
+		if err := s.Delete(nextSnapshot); err != nil {
+			s.logger.Error("Unable to delete snapshot path", zap.Error(err))
+		}
+	}()
+
+	headerBackupFilePath := path.Join(nextSnapshotPath, snapshotHeaderBackupFile)
+	headerFile, err := os.OpenFile(headerBackupFilePath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+	if err != nil {
+		return nil, err
+	}
+	defer headerFile.Close()
+
+	if err := dnc.Traverse(s.rootPath, func(info os.FileInfo) error {
+		sha512Hex := info.Name()
+
+		blockFile, err := block.NewFile(s.rootPath, sha512Hex, s.logger)
+		if err != nil {
+			return err
+		}
+		defer blockFile.Close()
+
+		sha512HexBytes, err := hex.DecodeString(sha512Hex)
+		if err != nil {
+			return err
+		}
+		if _, err := headerFile.Write(sha512HexBytes); err != nil {
+			return err
+		}
+
+		if err := binary.Write(headerFile, binary.LittleEndian, blockFile.Usage()); err != nil {
+			return err
+		}
+
+		return os.Link(path.Join(s.rootPath, sha512Hex), path.Join(nextSnapshotPath, sha512Hex))
+	}); err != nil {
+		return nil, err
+	}
+
+	return &nextSnapshot, nil
+}
+
+func (s *snapshot) Delete(targetSnapshot time.Time) error {
+	targetSnapshotPathName := s.PathName(targetSnapshot)
+	targetSnapshotPath := path.Join(s.rootPath, targetSnapshotPathName)
+
+	return os.RemoveAll(targetSnapshotPath)
+}
+
+func (s *snapshot) Restore(sourceSnapshot time.Time) error {
+	sourceSnapshotPathName := s.PathName(sourceSnapshot)
+	sourceSnapshotPath := path.Join(s.rootPath, sourceSnapshotPathName)
+
+	_, err := os.Stat(sourceSnapshotPath)
+	if err != nil {
+		return err
+	}
+
+	targetBlock, err := block.NewManager(s.rootPath, s.logger)
+	if err != nil {
+		return err
+	}
+
+	sourceHeaderMap, err := s.ReadHeaderBackup(sourceSnapshot)
+	if err != nil {
+		return err
+	}
+
+	sourceBlock, err := block.NewManager(sourceSnapshotPath, s.logger)
+	if err != nil {
+		return err
+	}
+
+	if err := targetBlock.Wipe(); err != nil {
+		return err
+	}
+
+	return sourceBlock.Traverse(func(sourceFile block.File) error {
+		return targetBlock.LockFile(sourceFile.Id(), func(targetFile block.File) error {
+			return sourceFile.Read(func(data []byte) error {
+				return targetFile.Write(data)
+			},
+				func() error {
+					usage, has := sourceHeaderMap[sourceFile.Id()]
+					if !has {
+						usage = sourceFile.Usage()
+					}
+
+					if err := targetFile.ResetUsage(usage); err != nil {
+						return err
+					}
+
+					if !targetFile.Verify() {
+						return fmt.Errorf("file is not verified")
+					}
+
+					return nil
+				},
+			)
+		})
+	})
+}
+
+func (s *snapshot) Latest() (*time.Time, error) {
+	snapshots, err := s.Dates()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(snapshots) == 0 {
+		return nil, nil
+	}
+
+	return &snapshots[len(snapshots)-1], nil
+}
+
+func (s *snapshot) Dates() (common.Snapshots, error) {
+	infos, err := ioutil.ReadDir(s.rootPath)
+	if err != nil {
+		return nil, err
+	}
+
+	snapshots := make(common.Snapshots, 0)
+	for _, info := range infos {
+		name := info.Name()
+		if !info.IsDir() || !strings.HasPrefix(name, snapshotPrefix) {
+			continue
+		}
+
+		snapshot := name[len(snapshotPrefix):]
+		snapshotTime, err := time.Parse(snapshotTimeLayout, snapshot)
+		if err == nil {
+			snapshots = append(snapshots, snapshotTime)
+		}
+	}
+	sort.Sort(snapshots)
+
+	return snapshots, nil
+}
+
+func (s *snapshot) PathName(snapshot time.Time) string {
+	return fmt.Sprintf("%s%s", snapshotPrefix, snapshot.Format(snapshotTimeLayout))
+}
+
+func (s *snapshot) ToUint(snapshot time.Time) uint64 {
+	snapshotUint, _ := strconv.ParseUint(snapshot.Format(snapshotTimeLayout), 10, 64)
+	return snapshotUint
+}

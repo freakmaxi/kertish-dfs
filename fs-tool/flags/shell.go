@@ -627,16 +627,17 @@ func (s *shellCommand) searchInLocalFolder(basePath string, v string, onlyFolder
 
 	_, basePathName := path.Split(basePath)
 	matches := make([][]string, 0)
-	if err := filepath.Walk(basePath, func(path string, info os.FileInfo, err error) error {
+	if err := filepath.Walk(basePath, func(p string, info os.FileInfo, err error) error {
 		if err != nil {
 			if os.IsPermission(err) {
 				return nil
 			}
 			return err
 		}
-		if strings.Compare(path, basePath) == 0 || strings.Compare(info.Name(), basePathName) == 0 {
+		if strings.Compare(p, basePath) == 0 || strings.Compare(info.Name(), basePathName) == 0 {
 			return nil
 		}
+
 		if strings.Index(info.Name(), v) != 0 {
 			if info.IsDir() {
 				return filepath.SkipDir

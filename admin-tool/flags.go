@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -48,6 +49,9 @@ type flagContainer struct {
 	removeNode         string
 	unfreeze           []string
 	unfreezeAll        bool
+	createSnapshot     string
+	deleteSnapshot     string
+	restoreSnapshot    string
 	syncClusters       bool
 	getCluster         string
 	getClusters        bool
@@ -121,6 +125,67 @@ func (f *flagContainer) Define(v string) int {
 		f.active = "unFreeze"
 	}
 
+	if len(f.createSnapshot) != 0 {
+		activeCount++
+		f.active = "createSnapshot"
+	}
+
+	if len(f.deleteSnapshot) != 0 {
+		paramTest := f.deleteSnapshot
+
+		eqIdx := strings.Index(paramTest, "=")
+		if eqIdx == -1 {
+			fmt.Println("you should define the snapshot index for the cluster")
+			fmt.Println()
+			return 1
+		}
+
+		clusterId := paramTest[:eqIdx]
+		if len(clusterId) == 0 {
+			fmt.Println("you should define the target cluster id")
+			fmt.Println()
+			return 1
+		}
+
+		_, err := strconv.ParseUint(paramTest[eqIdx+1:], 10, 64)
+		if err != nil {
+			fmt.Println("snapshot index should be 0 or positive numeric value")
+			fmt.Println()
+			return 1
+		}
+
+		activeCount++
+		f.active = "deleteSnapshot"
+	}
+
+	if len(f.restoreSnapshot) != 0 {
+		paramTest := f.restoreSnapshot
+
+		eqIdx := strings.Index(paramTest, "=")
+		if eqIdx == -1 {
+			fmt.Println("you should define the snapshot index for the cluster")
+			fmt.Println()
+			return 1
+		}
+
+		clusterId := paramTest[:eqIdx]
+		if len(clusterId) == 0 {
+			fmt.Println("you should define the target cluster id")
+			fmt.Println()
+			return 1
+		}
+
+		_, err := strconv.ParseUint(paramTest[eqIdx+1:], 10, 64)
+		if err != nil {
+			fmt.Println("snapshot index should be 0 or positive numeric value")
+			fmt.Println()
+			return 1
+		}
+
+		activeCount++
+		f.active = "restoreSnapshot"
+	}
+
 	if f.syncClusters {
 		activeCount++
 		f.active = "syncClusters"
@@ -190,6 +255,17 @@ Ex: clusterId=192.168.0.1:9430,192.168.0.2:9430`)
 
 	var repairConsistency string
 	set.StringVar(&repairConsistency, `repair-consistency`, "", `Repair file chunk node distribution consistency in metadata and data nodes and mark as zombie for the broken ones. Provide repair model for consistency repairing operation or leave empty to run full repair. Possible repair models (full, structure, integrity)`)
+
+	var createSnapshot string
+	set.StringVar(&createSnapshot, `create-snapshot`, "", `Creates snapshot on a cluster. Provide cluster id to create snapshot.`)
+
+	var deleteSnapshot string
+	set.StringVar(&deleteSnapshot, `delete-snapshot`, "", `Deletes a snapshot on a cluster. Provide cluster id with snapshot index to be deleted.
+Ex: clusterId=snapshotIndex`)
+
+	var restoreSnapshot string
+	set.StringVar(&restoreSnapshot, `restore-snapshot`, "", `Restores a snapshot in the cluster. Provide cluster id with snapshot index to be restored.
+Ex: clusterId=snapshotIndex`)
 
 	set.Bool(`sync-clusters`, false, `Synchronise all clusters and their nodes for data consistency`)
 	set.Bool(`help`, false, `Print this usage documentation`)
@@ -269,6 +345,9 @@ Ex: clusterId=192.168.0.1:9430,192.168.0.2:9430`)
 		removeNode:         removeNode,
 		unfreeze:           uf,
 		unfreezeAll:        ufa,
+		createSnapshot:     createSnapshot,
+		deleteSnapshot:     deleteSnapshot,
+		restoreSnapshot:    restoreSnapshot,
 		syncClusters:       strings.Index(strings.Join(os.Args, " "), "sync-clusters") > -1,
 		getCluster:         getCluster,
 		getClusters:        strings.Index(strings.Join(os.Args, " "), "get-clusters") > -1,

@@ -53,6 +53,7 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 	opts := options.Find()
 	opts.SetSort(bson.M{"full": -1})
 	opts.SetProjection(bson.M{"_id": 1, "full": 1})
+	opts.SetNoCursorTimeout(true)
 
 	cursor, err := m.col.Find(m.context(), bson.M{}, opts)
 	if err != nil {
@@ -83,16 +84,13 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 			return nil
 		}
 
-		if err := m.save([]*common.Folder{folder}, false); err != nil {
-			return err
-		}
-		return nil
+		return m.save([]*common.Folder{folder}, false)
 	}
 
 	handled := int64(0)
 	for cursor.Next(m.context()) {
 		id := cursor.Current.Lookup("_id").ObjectID()
-		folderPath := cursor.Current.Lookup("full").String()
+		folderPath := cursor.Current.Lookup("full").StringValue()
 
 		if err := handlerFunc(id, folderPath); err != nil {
 			return err

@@ -29,6 +29,10 @@ type Cluster interface {
 	BalanceClusters(clusterIds []string) error
 	UnFreezeClusters(clusterIds []string) error
 
+	CreateSnapshot(clusterId string) error
+	DeleteSnapshot(clusterId string, snapshotIndex uint64) error
+	RestoreSnapshot(clusterId string, snapshotIndex uint64) error
+
 	Map(sha512HexList []string, mapType common.MapType) (map[string]string, error)
 	Find(sha512Hex string, mapType common.MapType) (string, string, error)
 }
@@ -289,20 +293,33 @@ func (c *cluster) MoveCluster(sourceClusterId string, targetClusterId string) (e
 		return err
 	}
 
-	sourceFileItemList := smdn.SyncList()
-	if sourceFileItemList == nil {
+	sourceContainer, err := smdn.SyncList()
+	if err != nil {
+		c.logger.Error(
+			"Unable to get sync list from data node",
+			zap.String("nodeId", sourceMasterNode.Id),
+			zap.String("nodeAddress", sourceMasterNode.Address),
+			zap.Error(err),
+		)
 		return errors.ErrPing
 	}
 
-	var syncErr error
-	for len(sourceFileItemList) > 0 {
-		sourceFileItem := sourceFileItemList[0]
+	for i := len(sourceContainer.Snapshots) - 1; i >= 0; i-- {
+		if !smdn.SnapshotDelete(uint64(i)) {
+			c.logger.Error(
+				"Unable to drop snapshots, it will create problem in future so move process must be failed",
+				zap.String("nodeId", sourceMasterNode.Id),
+				zap.String("nodeAddress", sourceMasterNode.Address),
+			)
+			return errors.ErrSnapshot
+		}
+	}
 
-		if !tmdn.SyncMove(sourceFileItem.Sha512Hex, sourceMasterNode.Address) {
+	var syncErr error
+	for sha512Hex := range sourceContainer.FileItems {
+		if !tmdn.SyncMove(sha512Hex, sourceMasterNode.Address) {
 			syncErr = errors.ErrSync
 		}
-
-		sourceFileItemList = sourceFileItemList[1:]
 	}
 
 	syncClustersFunc := func(wg *sync.WaitGroup, cluster *common.Cluster, keepFrozen bool) {
@@ -343,6 +360,63 @@ func (c *cluster) UnFreezeClusters(clusterIds []string) error {
 	}
 
 	return nil
+}
+
+func (c *cluster) CreateSnapshot(clusterId string) error {
+	cluster, err := c.clusters.Get(clusterId)
+	if err != nil {
+		return err
+	}
+
+	masterNode := cluster.Master()
+	dn, err := cluster2.NewDataNode(masterNode.Address)
+	if err != nil {
+		return err
+	}
+
+	if !dn.SnapshotCreate() {
+		return errors.ErrSnapshot
+	}
+
+	return c.health.SyncCluster(cluster, false)
+}
+
+func (c *cluster) DeleteSnapshot(clusterId string, snapshotIndex uint64) error {
+	cluster, err := c.clusters.Get(clusterId)
+	if err != nil {
+		return err
+	}
+
+	masterNode := cluster.Master()
+	dn, err := cluster2.NewDataNode(masterNode.Address)
+	if err != nil {
+		return err
+	}
+
+	if !dn.SnapshotDelete(snapshotIndex) {
+		return errors.ErrSnapshot
+	}
+
+	return c.health.SyncCluster(cluster, false)
+}
+
+func (c *cluster) RestoreSnapshot(clusterId string, snapshotIndex uint64) error {
+	cluster, err := c.clusters.Get(clusterId)
+	if err != nil {
+		return err
+	}
+
+	masterNode := cluster.Master()
+	dn, err := cluster2.NewDataNode(masterNode.Address)
+	if err != nil {
+		return err
+	}
+
+	if !dn.SnapshotRestore(snapshotIndex) {
+		return errors.ErrSnapshot
+	}
+
+	return c.health.SyncCluster(cluster, false)
 }
 
 func (c *cluster) Map(sha512HexList []string, mapType common.MapType) (map[string]string, error) {

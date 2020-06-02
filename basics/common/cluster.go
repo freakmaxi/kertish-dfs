@@ -16,6 +16,7 @@ type Cluster struct {
 	Reservations map[string]uint64 `json:"reservations"`
 	Paralyzed    bool              `json:"paralyzed"`
 	Frozen       bool              `json:"frozen"`
+	Snapshots    Snapshots         `json:"snapshots"`
 }
 
 type Clusters []*Cluster
@@ -27,7 +28,7 @@ func (c Clusters) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
 func NewCluster(id string) *Cluster {
 	return &Cluster{
 		Id:           id,
-		Nodes:        NodeList{},
+		Nodes:        make(NodeList, 0),
 		Reservations: make(map[string]uint64),
 		Paralyzed:    true,
 		Frozen:       true,

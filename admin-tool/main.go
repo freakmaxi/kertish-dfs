@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/freakmaxi/kertish-dfs/admin-tool/manager"
 	"github.com/freakmaxi/kertish-dfs/basics/common"
@@ -98,6 +100,86 @@ func main() {
 			os.Exit(45)
 		}
 		fmt.Println("ok.")
+	case "createSnapshot":
+		fmt.Println("CAUTION: The snapshot creation will prevent the access to the cluster!")
+		fmt.Print("Do you want to continue? (y/N) ")
+		reader := bufio.NewReader(os.Stdin)
+		char, _, err := reader.ReadRune()
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		switch char {
+		case 'Y', 'y':
+			anim := common.NewAnimation(terminal.NewStdOut(), "creating snapshot...")
+			anim.Start()
+
+			if err := manager.CreateSnapshot([]string{fc.managerAddress}, fc.createSnapshot); err != nil {
+				anim.Cancel()
+
+				fmt.Printf("%s\n", err.Error())
+				os.Exit(75)
+			}
+			anim.Stop()
+		default:
+			fmt.Println("snapshot creation is canceled")
+		}
+	case "deleteSnapshot":
+		fmt.Println("CAUTION: You are about to delete the snapshot")
+		fmt.Print("Do you want to continue? (y/N) ")
+		reader := bufio.NewReader(os.Stdin)
+		char, _, err := reader.ReadRune()
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		switch char {
+		case 'Y', 'y':
+			anim := common.NewAnimation(terminal.NewStdOut(), "deleting snapshot...")
+			anim.Start()
+
+			eqIdx := strings.Index(fc.deleteSnapshot, "=")
+			clusterId := fc.deleteSnapshot[:eqIdx]
+			snapshotIndex, _ := strconv.ParseUint(fc.deleteSnapshot[eqIdx+1:], 10, 64)
+
+			if err := manager.DeleteSnapshot([]string{fc.managerAddress}, clusterId, snapshotIndex); err != nil {
+				anim.Cancel()
+
+				fmt.Printf("%s\n", err.Error())
+				os.Exit(50)
+			}
+			anim.Stop()
+		default:
+			fmt.Println("snapshot deletion is canceled")
+		}
+	case "restoreSnapshot":
+		fmt.Println("CAUTION: When you restore the snapshot, current state of the data will be reverted to the snapshot point.")
+		fmt.Print("Do you want to continue? (y/N) ")
+		reader := bufio.NewReader(os.Stdin)
+		char, _, err := reader.ReadRune()
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		switch char {
+		case 'Y', 'y':
+			anim := common.NewAnimation(terminal.NewStdOut(), "restoring snapshot...")
+			anim.Start()
+
+			eqIdx := strings.Index(fc.restoreSnapshot, "=")
+			clusterId := fc.restoreSnapshot[:eqIdx]
+			snapshotIndex, _ := strconv.ParseUint(fc.restoreSnapshot[eqIdx+1:], 10, 64)
+
+			if err := manager.RestoreSnapshot([]string{fc.managerAddress}, clusterId, snapshotIndex); err != nil {
+				anim.Cancel()
+
+				fmt.Printf("%s\n", err.Error())
+				os.Exit(50)
+			}
+			anim.Stop()
+		default:
+			fmt.Println("snapshot restoration is canceled")
+		}
 	case "syncClusters":
 		fmt.Println("CAUTION: The sync of clusters will be started simultaneously on each cluster and it will " +
 			"prevent the access to the syncing cluster for read, write and delete operations!")

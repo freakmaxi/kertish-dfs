@@ -14,6 +14,7 @@ var (
 	ErrZombieAlive           = errors.New("zombie file is still alive, try again to kill")
 	ErrJoinConflict          = errors.New("joining source folders will have conflict in target")
 	ErrSync                  = errors.New("syncing is failed")
+	ErrSnapshot              = errors.New("snapshot operation is failed")
 
 	ErrExists                       = errors.New("cluster is already exists")
 	ErrPing                         = errors.New("node is not reachable")

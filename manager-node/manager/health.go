@@ -206,12 +206,12 @@ func (h *health) findBestMasterNodeCandidate(cluster *common.Cluster) *common.No
 			continue
 		}
 
-		serverFileItemList := dn.SyncList()
-		if serverFileItemList == nil {
+		container, err := dn.SyncList()
+		if err != nil {
 			continue
 		}
 
-		failed, err := h.index.Compare(cluster.Id, serverFileItemList)
+		failed, err := h.index.Compare(cluster.Id, container.FileItems.ToList())
 		if err != nil {
 			continue
 		}
@@ -342,29 +342,36 @@ func (h *health) SyncCluster(cluster *common.Cluster, keepFrozen bool) error {
 		return errors.ErrJoin
 	}
 
-	cluster.Reservations = make(map[string]uint64)
-	cluster.Used, _ = mdn.Used()
-
-	if len(slaveNodes) == 0 {
-		return nil
-	}
-
-	fileItemList := mdn.SyncList()
-	if fileItemList == nil {
+	container, err := mdn.SyncList()
+	if err != nil {
 		h.logger.Error(
 			"Syncing error: node didn't response for SyncList",
 			zap.String("nodeId", masterNode.Id),
+			zap.Error(err),
 		)
 		return errors.ErrPing
 	}
 
-	if err := h.index.Replace(cluster.Id, fileItemList); err != nil {
+	// this changes will save in reset stats
+	cluster.Reservations = make(map[string]uint64)
+	cluster.Used, _ = mdn.Used()
+	cluster.Snapshots = make(common.Snapshots, 0)
+	for _, snapshotContainer := range container.Snapshots {
+		cluster.Snapshots = append(cluster.Snapshots, snapshotContainer.Date)
+	}
+	// ---
+
+	if err := h.index.Replace(cluster.Id, container.FileItems.ToList()); err != nil {
 		h.logger.Error(
 			"Index replacement error",
 			zap.String("clusterId", cluster.Id),
 			zap.Error(err),
 		)
 		return errors.ErrPing
+	}
+
+	if len(slaveNodes) == 0 {
+		return nil
 	}
 
 	wg := &sync.WaitGroup{}
@@ -452,6 +459,12 @@ func (h *health) repairConsistency(repairType RepairType) error {
 		return nil
 	}
 
+	syncErrors := h.SyncClusters()
+	if len(syncErrors) > 0 {
+		h.logger.Error("Sync is failed for integrity repair", zap.Errors("syncErrors", syncErrors))
+		return errors.ErrSync
+	}
+
 	h.logger.Info("Repairing metadata integrity...")
 	// Repair Integrity
 	clusters, err := h.clusters.GetAll()
@@ -504,28 +517,45 @@ func (h *health) repairConsistency(repairType RepairType) error {
 	}
 	h.logger.Info("Metadata integrity repair is completed!")
 
-	if len(matchedFileItemListMap) > 0 {
-		h.logger.Info("Cleaning up zombie file chunks...")
-		// Make Zombie File Chunk Cleanup
-		for clusterId, matchedFileItemList := range matchedFileItemListMap {
-			zombieFileItemList, err := h.index.Extract(clusterId, matchedFileItemList)
-			if err != nil {
-				return err
-			}
+	// Make Orphan File Chunk Cleanup
+	for clusterId, matchedFileItemList := range matchedFileItemListMap {
+		orphanFileItemList, err := h.index.Extract(clusterId, matchedFileItemList)
+		if err != nil {
+			return err
+		}
 
-			masterNode := clusterMap[clusterId].Master()
-			mdn, err := cluster2.NewDataNode(masterNode.Address)
-			if err != nil {
-				return err
-			}
+		if len(orphanFileItemList) == 0 {
+			continue
+		}
 
-			for _, zombieFileItem := range zombieFileItemList {
-				if err := mdn.Delete(zombieFileItem.Sha512Hex); err != nil {
-					return err
-				}
+		masterNode := clusterMap[clusterId].Master()
+		mdn, err := cluster2.NewDataNode(masterNode.Address)
+		if err != nil {
+			return err
+		}
+
+		h.logger.Sugar().Infof("Cleaning up orphan file chunks for %s...", clusterId)
+
+		if !mdn.SnapshotCreate() {
+			h.logger.Error("Unable to create snapshot, cleanup is skipped", zap.String("clusterId", clusterId))
+			continue
+		}
+
+		if err := h.SyncClusterById(clusterId); err != nil {
+			h.logger.Error(
+				"Unable to sync cluster for snapshot but will be recovered later",
+				zap.String("clusterId", clusterId),
+				zap.Error(err),
+			)
+		}
+
+		for _, orphanFileItem := range orphanFileItemList {
+			if err := mdn.Delete(orphanFileItem.Sha512Hex); err != nil {
+				return err
 			}
 		}
-		h.logger.Info("Zombie file chunks clean up is completed!")
+
+		h.logger.Sugar().Infof("Orphan file chunks clean up for %s is completed!", clusterId)
 	}
 
 	return nil
