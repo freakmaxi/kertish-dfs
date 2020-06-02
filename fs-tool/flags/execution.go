@@ -48,7 +48,7 @@ func cleanEmptyArguments(args []string) {
 }
 
 func createTemporary(sources []string, target string) error {
-	targetFile, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_RDWR, 0777)
+	targetFile, err := os.OpenFile(target, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
 		return fmt.Errorf("unable to create temporary file: %s", err.Error())
 	}

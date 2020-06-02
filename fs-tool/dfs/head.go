@@ -311,7 +311,7 @@ func Pull(headAddresses []string, sources []string, target string, readRange *co
 		return fmt.Errorf("unsuccessful operation")
 	}
 
-	if err := os.Mkdir(target, 0777); err != nil {
+	if err := os.MkdirAll(target, 0777); err != nil {
 		return fmt.Errorf("unable to create %s", target)
 	}
 
