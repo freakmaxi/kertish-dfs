@@ -317,6 +317,9 @@ func (s *synchronize) delete(wg *sync.WaitGroup, b block.Manager, wipeList commo
 		fileItem := wipeList[0]
 
 		if err := b.File(fileItem.Sha512Hex, func(blockFile block.File) error {
+			if blockFile.Temporary() {
+				return nil
+			}
 			return blockFile.Wipe()
 		}); err != nil {
 			s.logger.Error(
@@ -326,7 +329,6 @@ func (s *synchronize) delete(wg *sync.WaitGroup, b block.Manager, wipeList commo
 				zap.Int("total", totalWipeCount),
 				zap.Error(err),
 			)
-			wipeList = append(wipeList, fileItem)
 		}
 		wipeList = wipeList[1:]
 	}
@@ -347,7 +349,6 @@ func (s *synchronize) create(wg *sync.WaitGroup, sourceNode cluster.DataNode, b 
 				zap.Int("total", totalCreateCount),
 				zap.Error(err),
 			)
-			createList = append(createList, fileItem)
 		}
 		createList = createList[1:]
 	}
