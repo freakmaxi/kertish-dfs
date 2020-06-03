@@ -65,7 +65,12 @@ func (m *managerRouter) handleRegister(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(409)
 	} else {
 		w.WriteHeader(400)
-		m.logger.Error("Register cluster request is failed", zap.Error(err))
+		m.logger.Error(
+			"Register cluster request is failed",
+			zap.String("clusterId", clusterId),
+			zap.Strings("addresses", addresses),
+			zap.Error(err),
+		)
 	}
 
 	e := common.NewError(200, err.Error())
@@ -87,7 +92,7 @@ func (m *managerRouter) handleCreateSnapshot(w http.ResponseWriter, r *http.Requ
 	}
 
 	w.WriteHeader(400)
-	m.logger.Error("Create snapshot request is failed", zap.Error(err))
+	m.logger.Error("Create snapshot request is failed", zap.String("clusterId", clusterId), zap.Error(err))
 
 	e := common.NewError(205, err.Error())
 	if err := json.NewEncoder(w).Encode(e); err != nil {
@@ -114,7 +119,7 @@ func (m *managerRouter) handleReserve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(507)
 	} else {
 		w.WriteHeader(400)
-		m.logger.Error("Reserve request is failed", zap.Error(err))
+		m.logger.Error("Reserve request is failed", zap.Uint64("size", size), zap.Error(err))
 	}
 
 	e := common.NewError(210, err.Error())
@@ -142,7 +147,7 @@ func (m *managerRouter) handleMap(w http.ResponseWriter, r *http.Request, mapTyp
 		w.WriteHeader(503)
 	} else {
 		w.WriteHeader(400)
-		m.logger.Error("Map request is failed", zap.Error(err))
+		m.logger.Error("Map request is failed", zap.Strings("sha512HexList", sha512HexList), zap.Error(err))
 	}
 
 	e := common.NewError(220, err.Error())
