@@ -432,6 +432,7 @@ func (c *commander) sycr(conn net.Conn) error {
 		}
 
 		return dn.SyncRead(
+			0,
 			sha512Hex,
 			false,
 			func(blockSize uint32, usageCount uint16) bool {
@@ -479,7 +480,25 @@ func (c *commander) syrd(conn net.Conn) error {
 		return err
 	}
 
-	return c.fs.Block().File(sha512Hex, func(blockFile block.File) error {
+	var snapshotTimeUint64 uint64
+	if err := c.readBinaryWithTimeout(conn, &snapshotTimeUint64); err != nil {
+		return err
+	}
+
+	blockManager := c.fs.Block()
+	if snapshotTimeUint64 > 0 {
+		snapshotTime, err := c.fs.Snapshot().FromUint(snapshotTimeUint64)
+		if err != nil {
+			return err
+		}
+
+		blockManager, err = c.fs.Snapshot().Block(*snapshotTime)
+		if err != nil {
+			return err
+		}
+	}
+
+	return blockManager.File(sha512Hex, func(blockFile block.File) error {
 		if blockFile.Temporary() {
 			return os.ErrNotExist
 		}
@@ -567,6 +586,7 @@ func (c *commander) symv(conn net.Conn) error {
 		}
 
 		return dn.SyncRead(
+			0,
 			sha512Hex,
 			true,
 			func(blockSize uint32, usageCount uint16) bool {

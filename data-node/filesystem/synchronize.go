@@ -212,7 +212,7 @@ func (s *synchronize) syncFileItems(sourceNode cluster.DataNode, snapshotTime *t
 	go s.delete(wg, b, wipeList)
 
 	wg.Add(1)
-	go s.create(wg, sourceNode, b, createList)
+	go s.create(wg, sourceNode, snapshotTime, b, createList)
 
 	wg.Wait()
 
@@ -334,14 +334,14 @@ func (s *synchronize) delete(wg *sync.WaitGroup, b block.Manager, wipeList commo
 	}
 }
 
-func (s *synchronize) create(wg *sync.WaitGroup, sourceNode cluster.DataNode, b block.Manager, createList common.SyncFileItemList) {
+func (s *synchronize) create(wg *sync.WaitGroup, sourceNode cluster.DataNode, snapshotTime *time.Time, b block.Manager, createList common.SyncFileItemList) {
 	defer wg.Done()
 
 	totalCreateCount := len(createList)
 	for len(createList) > 0 {
 		fileItem := createList[0]
 
-		if err := s.createBlockFile(sourceNode, b, fileItem, totalCreateCount-(len(createList)-1), totalCreateCount); err != nil {
+		if err := s.createBlockFile(sourceNode, snapshotTime, b, fileItem, totalCreateCount-(len(createList)-1), totalCreateCount); err != nil {
 			s.logger.Error(
 				"Sync cannot create",
 				zap.String("sha512Hex", fileItem.Sha512Hex),
@@ -354,7 +354,7 @@ func (s *synchronize) create(wg *sync.WaitGroup, sourceNode cluster.DataNode, b 
 	}
 }
 
-func (s *synchronize) createBlockFile(sourceNode cluster.DataNode, b block.Manager, fileItem common.SyncFileItem, current int, total int) (resultError error) {
+func (s *synchronize) createBlockFile(sourceNode cluster.DataNode, snapshotTime *time.Time, b block.Manager, fileItem common.SyncFileItem, current int, total int) (resultError error) {
 	s.logger.Info(
 		"Syncing...",
 		zap.String("sha512Hex", fileItem.Sha512Hex),
@@ -381,10 +381,16 @@ func (s *synchronize) createBlockFile(sourceNode cluster.DataNode, b block.Manag
 		)
 	}()
 
+	snapshotTimeUint64 := uint64(0)
+	if snapshotTime != nil {
+		snapshotTimeUint64 = s.snapshot.ToUint(*snapshotTime)
+	}
+
 	return b.File(fileItem.Sha512Hex, func(blockFile block.File) error {
 		usageCountBackup := uint16(1)
 
 		return sourceNode.SyncRead(
+			snapshotTimeUint64,
 			fileItem.Sha512Hex,
 			false,
 			func(blockSize uint32, usageCount uint16) bool {

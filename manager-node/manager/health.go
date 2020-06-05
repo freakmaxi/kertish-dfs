@@ -14,6 +14,7 @@ import (
 
 const defaultIntervalDuration = time.Second * 10
 const maintainDuration = time.Hour * 24
+const parallelRepair = 10
 
 type RepairType int
 
@@ -175,7 +176,7 @@ func (h *health) checkMasterAlive(cluster *common.Cluster) bool {
 
 	dn, err := h.getDataNode(masterNode)
 	if err != nil {
-		h.logger.Error(
+		h.logger.Warn(
 			"Master node live check is failed",
 			zap.String("clusterId", cluster.Id),
 			zap.String("nodeId", masterNode.Id),
@@ -191,7 +192,7 @@ func (h *health) findBestMasterNodeCandidate(cluster *common.Cluster) *common.No
 	for _, node := range cluster.Nodes {
 		dn, err := h.getDataNode(node)
 		if err != nil {
-			h.logger.Error(
+			h.logger.Warn(
 				"Finding best master node candidate is failed",
 				zap.String("clusterId", cluster.Id),
 				zap.String("nodeId", node.Id),
@@ -227,7 +228,7 @@ func (h *health) prioritizeNodesByConnectionQuality(cluster *common.Cluster) {
 	for _, node := range cluster.Nodes {
 		dn, err := h.getDataNode(node)
 		if err != nil {
-			h.logger.Error(
+			h.logger.Warn(
 				"Prioritizing node connection quality is failed",
 				zap.String("clusterId", cluster.Id),
 				zap.String("nodeId", node.Id),
@@ -252,7 +253,7 @@ func (h *health) notifyNewMasterInCluster(cluster *common.Cluster) {
 	for _, node := range cluster.Nodes {
 		dn, err := h.getDataNode(node)
 		if err != nil {
-			h.logger.Error(
+			h.logger.Warn(
 				"Notifying new master node is failed",
 				zap.String("clusterId", cluster.Id),
 				zap.String("nodeId", node.Id),
@@ -486,6 +487,14 @@ func (h *health) repairConsistency(repairType RepairType) error {
 		for _, file := range folder.Files {
 			file.Resurrect()
 
+			if len(file.Chunks) == 0 {
+				file.Size = 0
+				file.Zombie = true
+
+				changed = true
+				break
+			}
+
 			missingChunkHashes := make([]string, 0)
 			for _, chunk := range file.Chunks {
 				clusterId, fileItem, err := h.index.Find(clusterIds, chunk.Hash)
@@ -512,33 +521,45 @@ func (h *health) repairConsistency(repairType RepairType) error {
 			changed = true
 		}
 		return changed, nil
-	}); err != nil {
+	}, parallelRepair); err != nil {
 		return err
 	}
 	h.logger.Info("Metadata integrity repair is completed!")
 
 	// Make Orphan File Chunk Cleanup
-	for clusterId, matchedFileItemList := range matchedFileItemListMap {
+	cleanupOrphanFunc := func(wg *sync.WaitGroup, clusterId string, matchedFileItemList common.SyncFileItemList) {
+		defer wg.Done()
+
 		orphanFileItemList, err := h.index.Extract(clusterId, matchedFileItemList)
 		if err != nil {
-			return err
+			h.logger.Error(
+				"Unable to extract orphan list",
+				zap.String("clusterId", clusterId),
+				zap.Error(err),
+			)
+			return
 		}
 
 		if len(orphanFileItemList) == 0 {
-			continue
+			return
 		}
 
 		masterNode := clusterMap[clusterId].Master()
 		mdn, err := cluster2.NewDataNode(masterNode.Address)
 		if err != nil {
-			return err
+			h.logger.Error(
+				"Unable to make connection to master data node for orphan cleanup",
+				zap.String("clusterId", clusterId),
+				zap.Error(err),
+			)
+			return
 		}
 
 		h.logger.Sugar().Infof("Cleaning up orphan file chunks for %s...", clusterId)
 
 		if !mdn.SnapshotCreate() {
 			h.logger.Error("Unable to create snapshot, cleanup is skipped", zap.String("clusterId", clusterId))
-			continue
+			return
 		}
 
 		if err := h.SyncClusterById(clusterId); err != nil {
@@ -551,12 +572,34 @@ func (h *health) repairConsistency(repairType RepairType) error {
 
 		for _, orphanFileItem := range orphanFileItemList {
 			if err := mdn.Delete(orphanFileItem.Sha512Hex); err != nil {
-				return err
+				h.logger.Error(
+					"Deleting orphan file is failed",
+					zap.String("clusterId", clusterId),
+					zap.String("sha512Hex", orphanFileItem.Sha512Hex),
+					zap.Uint16("usage", orphanFileItem.Usage),
+					zap.Int32("size", orphanFileItem.Size),
+					zap.Error(err),
+				)
+				continue
 			}
+			h.logger.Info(
+				"Orphan file is deleted",
+				zap.String("clusterId", clusterId),
+				zap.String("sha512Hex", orphanFileItem.Sha512Hex),
+				zap.Uint16("usage", orphanFileItem.Usage),
+				zap.Int32("size", orphanFileItem.Size),
+			)
 		}
 
 		h.logger.Sugar().Infof("Orphan file chunks clean up for %s is completed!", clusterId)
 	}
+
+	wg := &sync.WaitGroup{}
+	for clusterId, matchedFileItemList := range matchedFileItemListMap {
+		wg.Add(1)
+		go cleanupOrphanFunc(wg, clusterId, matchedFileItemList)
+	}
+	wg.Wait()
 
 	return nil
 }

@@ -3,9 +3,11 @@ package data
 import (
 	"context"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
+	"github.com/freakmaxi/kertish-dfs/basics/errors"
 	"github.com/freakmaxi/locking-center-client-go/mutex"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -14,7 +16,7 @@ import (
 )
 
 type Metadata interface {
-	Cursor(folderHandler func(folder *common.Folder) (bool, error)) error
+	Cursor(folderHandler func(folder *common.Folder) (bool, error), parallelSize uint8) error
 	LockTree(folderHandler func(folders []*common.Folder) ([]*common.Folder, error)) error
 }
 
@@ -42,8 +44,14 @@ func (m *metadata) context() context.Context {
 	return ctx
 }
 
-func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error)) error {
+func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error), parallelSize uint8) error {
 	m.mutex.Wait(metadataLockKey)
+
+	semaphoreChan := make(chan bool, parallelSize)
+	for i := 0; i < cap(semaphoreChan); i++ {
+		semaphoreChan <- true
+	}
+	defer close(semaphoreChan)
 
 	total, err := m.col.CountDocuments(m.context(), bson.M{})
 	if err != nil {
@@ -64,39 +72,80 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 	}
 	defer cursor.Close(m.context())
 
-	handlerFunc := func(id primitive.ObjectID, folderPath string) error {
+	handlerFunc := func(wg *sync.WaitGroup, id primitive.ObjectID, folderPath string, errorChan chan error) {
+		defer wg.Done()
+		defer func() { semaphoreChan <- true }()
+
 		m.mutex.Lock(folderPath)
 		defer m.mutex.Unlock(folderPath)
 
 		var folder *common.Folder
 		if err := m.col.FindOne(m.context(), bson.M{"_id": id}).Decode(&folder); err != nil {
 			if err == mongo.ErrNoDocuments {
-				return nil
+				return
 			}
-			return err
+			errorChan <- err
+			return
 		}
 
 		changed, err := folderHandler(folder)
 		if err != nil {
-			return err
+			errorChan <- err
+			return
 		}
 		if !changed {
-			return nil
+			return
 		}
 
-		return m.save([]*common.Folder{folder}, false)
+		if err := m.save([]*common.Folder{folder}, false); err != nil {
+			errorChan <- err
+		}
 	}
 
 	handled := int64(0)
+	wg := &sync.WaitGroup{}
+	errorChan := make(chan error, parallelSize)
+
 	for cursor.Next(m.context()) {
 		id := cursor.Current.Lookup("_id").ObjectID()
 		folderPath := cursor.Current.Lookup("full").StringValue()
 
-		if err := handlerFunc(id, folderPath); err != nil {
-			return err
-		}
+		wg.Add(1)
+		go handlerFunc(wg, id, folderPath, errorChan)
+
 		handled++
+
+		<-semaphoreChan
+
+		if len(errorChan) > 0 {
+			break
+		}
 	}
+	wg.Wait()
+
+	close(errorChan)
+
+	bulkError := errors.NewBulkError()
+
+	wg.Add(1)
+	go func(wg *sync.WaitGroup) {
+		defer wg.Done()
+		for {
+			select {
+			case err, more := <-errorChan:
+				if !more {
+					return
+				}
+				bulkError.Add(err)
+			}
+		}
+	}(wg)
+	wg.Wait()
+
+	if bulkError.HasError() {
+		return bulkError
+	}
+
 	if handled != total {
 		return os.ErrInvalid
 	}

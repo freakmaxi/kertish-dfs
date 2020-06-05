@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
@@ -28,6 +29,8 @@ type Snapshot interface {
 	Delete(targetSnapshot time.Time) error
 	Restore(sourceSnapshot time.Time) error
 
+	Block(snapshot time.Time) (block.Manager, error)
+
 	ReadHeaderBackup(snapshot time.Time) (HeaderMap, error)
 	ReplaceHeaderBackup(snapshot time.Time, headerMap HeaderMap) error
 
@@ -35,6 +38,7 @@ type Snapshot interface {
 	Dates() (common.Snapshots, error)
 
 	PathName(snapshot time.Time) string
+	FromUint(snapshotUint uint64) (*time.Time, error)
 	ToUint(snapshot time.Time) uint64
 }
 
@@ -43,12 +47,17 @@ type HeaderMap map[string]uint16
 type snapshot struct {
 	rootPath string
 	logger   *zap.Logger
+
+	blocksMutex sync.Mutex
+	blocks      map[time.Time]block.Manager
 }
 
 func NewSnapshot(rootPath string, logger *zap.Logger) Snapshot {
 	return &snapshot{
-		rootPath: rootPath,
-		logger:   logger,
+		rootPath:    rootPath,
+		logger:      logger,
+		blocksMutex: sync.Mutex{},
+		blocks:      make(map[time.Time]block.Manager),
 	}
 }
 
@@ -161,6 +170,10 @@ func (s *snapshot) Create(targetSnapshot *time.Time) (snapshotTime *time.Time, s
 		}
 		defer blockFile.Close()
 
+		if blockFile.Temporary() {
+			return nil
+		}
+
 		sha512HexBytes, err := hex.DecodeString(sha512Hex)
 		if err != nil {
 			return err
@@ -242,6 +255,27 @@ func (s *snapshot) Restore(sourceSnapshot time.Time) error {
 	})
 }
 
+func (s *snapshot) Block(snapshot time.Time) (block.Manager, error) {
+	s.blocksMutex.Lock()
+	defer s.blocksMutex.Unlock()
+
+	b, has := s.blocks[snapshot]
+	if !has {
+		snapshotPathName := s.PathName(snapshot)
+		snapshotPath := path.Join(s.rootPath, snapshotPathName)
+
+		var err error
+		b, err = block.NewManager(snapshotPath, s.logger)
+		if err != nil {
+			return nil, err
+		}
+
+		s.blocks[snapshot] = b
+	}
+
+	return b, nil
+}
+
 func (s *snapshot) Latest() (*time.Time, error) {
 	snapshots, err := s.Dates()
 	if err != nil {
@@ -281,6 +315,14 @@ func (s *snapshot) Dates() (common.Snapshots, error) {
 
 func (s *snapshot) PathName(snapshot time.Time) string {
 	return fmt.Sprintf("%s%s", snapshotPrefix, snapshot.Format(snapshotTimeLayout))
+}
+
+func (s *snapshot) FromUint(snapshotUint uint64) (*time.Time, error) {
+	snapshotTime, err := time.Parse(snapshotTimeLayout, strconv.FormatUint(snapshotUint, 10))
+	if err != nil {
+		return nil, err
+	}
+	return &snapshotTime, nil
 }
 
 func (s *snapshot) ToUint(snapshot time.Time) uint64 {

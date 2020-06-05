@@ -20,7 +20,7 @@ const snapshotTimeLayout = "20060102150405"
 
 type DataNode interface {
 	SyncList() (*common.SyncContainer, error)
-	SyncRead(sha512Hex string, drop bool,
+	SyncRead(snapshotTimeUint64 uint64, sha512Hex string, drop bool,
 		usageCountHandler func(blockSize uint32, usageCount uint16) bool,
 		dataHandler func(data []byte) error,
 		verifyHandler func() bool,
@@ -161,7 +161,7 @@ func (d *dataNode) SyncList() (*common.SyncContainer, error) {
 	return container, nil
 }
 
-func (d *dataNode) SyncRead(sha512Hex string, drop bool, compareHandler func(blockSize uint32, usageCount uint16) bool, dataHandler func([]byte) error, verifyHandler func() bool) error {
+func (d *dataNode) SyncRead(snapshotTimeUint64 uint64, sha512Hex string, drop bool, compareHandler func(blockSize uint32, usageCount uint16) bool, dataHandler func([]byte) error, verifyHandler func() bool) error {
 	return d.connect(func(conn *net.TCPConn) error {
 		if _, err := conn.Write([]byte(commandSyncRead)); err != nil {
 			return err
@@ -176,6 +176,10 @@ func (d *dataNode) SyncRead(sha512Hex string, drop bool, compareHandler func(blo
 		}
 
 		if err := binary.Write(conn, binary.LittleEndian, drop); err != nil {
+			return err
+		}
+
+		if err := binary.Write(conn, binary.LittleEndian, snapshotTimeUint64); err != nil {
 			return err
 		}
 
