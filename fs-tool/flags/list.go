@@ -141,7 +141,7 @@ func (l *listCommand) printAsList(folder *common.Folder) {
 	}
 
 	for _, f := range folder.Folders {
-		l.output.Printf("d %7v %s %s\n", l.sizeToString(f.Size), f.Created.Format("2006 Jan 02 15:04"), f.Name)
+		l.output.Printf("d %7v %s %s\n", l.sizeToString(f.Size), f.Created.Format(common.FriendlyTimeFormat), f.Name)
 	}
 
 	for _, f := range folder.Files {
@@ -151,9 +151,9 @@ func (l *listCommand) printAsList(folder *common.Folder) {
 			lockChar = "↯"
 		} else if f.Locked() {
 			lockChar = "•"
-			name = fmt.Sprintf("%s (locked till %s)", name, f.Lock.Till.Local().Format("2006 Jan 02 15:04"))
+			name = fmt.Sprintf("%s (locked till %s)", name, f.Lock.Till.Local().Format(common.FriendlyTimeFormat))
 		}
-		l.output.Printf("%s %7v %s %s\n", lockChar, l.sizeToString(f.Size), f.Modified.Local().Format("2006 Jan 02 15:04"), name)
+		l.output.Printf("%s %7v %s %s\n", lockChar, l.sizeToString(f.Size), f.Modified.Local().Format(common.FriendlyTimeFormat), name)
 	}
 
 	l.output.Refresh()

@@ -197,7 +197,7 @@ func (s *synchronize) syncFileItems(sourceNode cluster.DataNode, snapshotTime *t
 		snapshotPathName := s.snapshot.PathName(*snapshotTime)
 		dataPath = path.Join(s.rootPath, snapshotPathName)
 
-		syncLoc = fmt.Sprintf("SNAPSHOT %s", snapshotTime.Format("2006 Jan 02 15:04:05"))
+		syncLoc = fmt.Sprintf("SNAPSHOT %s", snapshotTime.Format(common.FriendlyTimeFormatWithSeconds))
 	}
 	s.logger.Sugar().Infof("Sync (%s) will, create: %d / delete: %d", syncLoc, len(createList), len(wipeList))
 

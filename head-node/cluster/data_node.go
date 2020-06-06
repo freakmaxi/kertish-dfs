@@ -88,7 +88,7 @@ func (d *dataNode) Create(data []byte) (exists bool, sha512Hex string, err error
 		}
 
 		if !d.result(conn) {
-			return fmt.Errorf("create command is failed on data cluster")
+			return fmt.Errorf("create command is failed on data node")
 		}
 
 		sha512Hex = hex.EncodeToString(sha512Sum)

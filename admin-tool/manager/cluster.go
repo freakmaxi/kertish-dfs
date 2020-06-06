@@ -425,10 +425,10 @@ func GetClusters(managerAddr []string, clusterId string) error {
 		if len(cluster.Snapshots) > 0 {
 			for i, snapshot := range cluster.Snapshots {
 				if i == 0 {
-					fmt.Printf("      Snapshots: %-4d %s\n", i, snapshot.Format("2006 Jan 02 15:04:05"))
+					fmt.Printf("      Snapshots: %-4d %s\n", i, snapshot.Format(common.FriendlyTimeFormatWithSeconds))
 					continue
 				}
-				fmt.Printf("                 %-4d %s\n", i, snapshot.Format("2006 Jan 02 15:04:05"))
+				fmt.Printf("                 %-4d %s\n", i, snapshot.Format(common.FriendlyTimeFormatWithSeconds))
 			}
 		}
 		fmt.Println()
@@ -446,7 +446,7 @@ func GetClusters(managerAddr []string, clusterId string) error {
 			if len(repairCompletedTimestamp) > 0 {
 				repairCompletedTime, err := time.Parse(time.RFC3339, repairCompletedTimestamp)
 				if err == nil {
-					fmt.Printf("      Repairing:       Completed at %s\n", repairCompletedTime.Local().Format("2006 Jan 02 15:04:05"))
+					fmt.Printf("      Repairing:       Completed at %s\n", repairCompletedTime.Local().Format(common.FriendlyTimeFormatWithSeconds))
 				}
 			}
 		}
