@@ -86,38 +86,60 @@ func newFile(name string) *File {
 	}
 }
 
-func (f *File) Ingest(deletedChunkHashes []string, missingChunkHashes []string) {
-	if len(deletedChunkHashes) == 0 && len(missingChunkHashes) == 0 {
+func (f *File) IngestDeletion(deletionResult DeletionResult) {
+	if len(deletionResult.Untouched) == 0 && len(deletionResult.Deleted) == 0 && len(deletionResult.Missing) == 0 {
 		return
 	}
 
 	chunks := make(DataChunks, len(f.Chunks))
 	copy(chunks, f.Chunks)
 
-	absentChunkHashesMap := make(map[string]bool)
-	for _, deletedChunkHash := range deletedChunkHashes {
-		absentChunkHashesMap[deletedChunkHash] = true
+	untouchedChunkHashesMap := make(map[string]bool)
+	for _, untouchedChunkHash := range deletionResult.Untouched {
+		untouchedChunkHashesMap[untouchedChunkHash] = true
 	}
 
-	for _, missingChunkHash := range missingChunkHashes {
-		absentChunkHashesMap[missingChunkHash] = true
+	deletedChunkHashesMap := make(map[string]bool)
+	for _, deletedChunkHash := range deletionResult.Deleted {
+		deletedChunkHashesMap[deletedChunkHash] = true
+	}
+
+	missingChunkHashesMap := make(map[string]bool)
+	for _, missingChunkHash := range deletionResult.Missing {
+		missingChunkHashesMap[missingChunkHash] = true
 	}
 
 	f.Chunks = make(DataChunks, 0)
 
-	for len(chunks) > 0 {
-		chunk := chunks[0]
+	for i := 0; i < len(chunks); i++ {
+		chunk := chunks[i]
 
-		_, has := absentChunkHashesMap[chunk.Hash]
+		_, has := untouchedChunkHashesMap[chunk.Hash]
+		if has {
+			f.Chunks = append(f.Chunks, chunk)
+			chunks = append(chunks[:i], chunks[i+1:]...)
+			i--
+
+			continue
+		}
+
+		_, has = missingChunkHashesMap[chunk.Hash]
 		if has {
 			f.Missing = append(f.Missing, chunk)
-		} else {
-			f.Chunks = append(f.Chunks, chunk)
+			chunks = append(chunks[:i], chunks[i+1:]...)
+			i--
+
+			continue
 		}
-		chunks = chunks[1:]
+
+		_, has = deletedChunkHashesMap[chunk.Hash]
+		if !has {
+			f.Missing = append(f.Missing, chunk)
+		}
 	}
 
-	f.Zombie = len(missingChunkHashes) > 0 || len(deletedChunkHashes) > 0 && len(f.Chunks) > 0
+	f.Zombie = len(f.Missing) > 0
+	f.Missing = append(f.Missing, chunks...)
 }
 
 func (f *File) CanDie() bool {

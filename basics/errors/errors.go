@@ -29,4 +29,5 @@ var (
 
 	ErrShowUsage  = errors.New("show usage")
 	ErrProcessing = errors.New("another operation in progress")
+	ErrRemote     = errors.New("remote call execution is failed")
 )

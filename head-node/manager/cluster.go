@@ -24,8 +24,8 @@ const managerEndPoint = "/client/manager"
 type Cluster interface {
 	Create(size uint64, reader io.Reader) (common.DataChunks, error)
 	CreateShadow(chunks common.DataChunks) error
-	Read(chunks common.DataChunks, writer io.Writer, begins int64, ends int64) error
-	Delete(chunks common.DataChunks) ([]string, []string, error)
+	Read(chunks common.DataChunks) (func(w io.Writer, begins int64, ends int64) error, error)
+	Delete(chunks common.DataChunks) (*common.DeletionResult, error)
 }
 
 type cluster struct {
@@ -74,8 +74,8 @@ func (c *cluster) Create(size uint64, reader io.Reader) (common.DataChunks, erro
 		return nil, err
 	}
 
-	create := NewCreate(reservation, c.logger, c.getDataNode)
-	chunks, clusterUsageMap, err := create.process(reader, c.findCluster)
+	create := NewCreate(reservation, c.getDataNode, c.findCluster, c.logger)
+	chunks, clusterUsageMap, err := create.process(reader)
 	if err != nil {
 		if err := c.discardReservation(reservation.Id); err != nil {
 			c.logger.Error(
@@ -101,6 +101,9 @@ func (c *cluster) Create(size uint64, reader io.Reader) (common.DataChunks, erro
 func (c *cluster) CreateShadow(chunks common.DataChunks) error {
 	m, err := c.createClusterMap(chunks, common.MT_Create)
 	if err != nil {
+		if err == errors.ErrNotFound {
+			return errors.ErrZombie
+		}
 		return err
 	}
 
@@ -120,92 +123,106 @@ func (c *cluster) CreateShadow(chunks common.DataChunks) error {
 	return nil
 }
 
-func (c *cluster) Read(chunks common.DataChunks, w io.Writer, begins int64, ends int64) error {
+func (c *cluster) Read(chunks common.DataChunks) (func(w io.Writer, begins int64, ends int64) error, error) {
 	sort.Sort(chunks)
 
 	m, err := c.createClusterMap(chunks, common.MT_Read)
 	if err != nil {
-		return err
+		if err == errors.ErrNotFound {
+			return nil, errors.ErrZombie
+		}
+		return nil, err
 	}
 
-	total := int64(0)
-	for _, chunk := range chunks {
-		chunkSize := int64(chunk.Size)
+	return func(w io.Writer, begins int64, ends int64) error {
+		total := int64(0)
+		for _, chunk := range chunks {
+			chunkSize := int64(chunk.Size)
 
-		total += chunkSize
-		if total < begins {
-			continue
-		}
-		if ends > -1 && ends < total-chunkSize {
-			break
-		}
+			total += chunkSize
+			if total < begins {
+				continue
+			}
+			if ends > -1 && ends < total-chunkSize {
+				break
+			}
 
-		startPoint := total - chunkSize
-		startPoint = begins - startPoint
-		if startPoint < 0 {
-			startPoint = 0
-		}
+			startPoint := total - chunkSize
+			startPoint = begins - startPoint
+			if startPoint < 0 {
+				startPoint = 0
+			}
 
-		endPoint := chunkSize
-		if ends > -1 {
-			endsCal := (total - 1) - ends
-			if endsCal > 0 && endsCal < chunkSize {
-				endPoint -= endsCal
+			endPoint := chunkSize
+			if ends > -1 {
+				endsCal := (total - 1) - ends
+				if endsCal > 0 && endsCal < chunkSize {
+					endPoint -= endsCal
+				}
+			}
+
+			address, has := m[chunk.Hash]
+			if !has {
+				continue
+			}
+
+			dn, err := c.getDataNode(address)
+			if err != nil {
+				return err
+			}
+
+			if err := dn.Read(chunk.Hash, func(buffer []byte) error {
+				_, err := w.Write(buffer[startPoint:endPoint])
+				if errors2.Is(err, syscall.EPIPE) {
+					return nil
+				}
+				return err
+			}); err != nil {
+				return err
 			}
 		}
 
-		address, has := m[chunk.Hash]
-		if !has {
-			continue
-		}
-
-		dn, err := c.getDataNode(address)
-		if err != nil {
-			return err
-		}
-
-		if err := dn.Read(chunk.Hash, func(buffer []byte) error {
-			_, err := w.Write(buffer[startPoint:endPoint])
-			if errors2.Is(err, syscall.EPIPE) {
-				return nil
-			}
-			return err
-		}); err != nil {
-			return err
-		}
-	}
-
-	return nil
+		return nil
+	}, nil
 }
 
-func (c *cluster) Delete(chunks common.DataChunks) ([]string, []string, error) {
-	deletedHashes := make([]string, 0)
-	missingHashes := make([]string, 0)
+func (c *cluster) Delete(chunks common.DataChunks) (*common.DeletionResult, error) {
+	if len(chunks) == 0 {
+		return nil, os.ErrInvalid
+	}
 
 	m, err := c.createClusterMap(chunks, common.MT_Delete)
 	if err != nil {
-		return deletedHashes, missingHashes, err
+		if err == errors.ErrNotFound {
+			return nil, errors.ErrZombie
+		}
+		return nil, err
 	}
+
+	deletionResult := common.NewDeletionResult()
 
 	for _, chunk := range chunks {
 		address, has := m[chunk.Hash]
 		if !has {
-			missingHashes = append(missingHashes, chunk.Hash)
+			deletionResult.Missing = append(deletionResult.Missing, chunk.Hash)
 			continue
 		}
 
 		dn, err := c.getDataNode(address)
 		if err != nil {
-			return deletedHashes, missingHashes, err
+			deletionResult.Untouched = append(deletionResult.Untouched, chunk.Hash)
+			continue
 		}
 
 		if err := dn.Delete(chunk.Hash); err != nil {
-			return deletedHashes, missingHashes, err
+			deletionResult.Untouched = append(deletionResult.Untouched, chunk.Hash)
+			continue
 		}
-		deletedHashes = append(deletedHashes, chunk.Hash)
+
+		deletionResult.Deleted = append(deletionResult.Deleted, chunk.Hash)
 	}
 
-	return deletedHashes, missingHashes, nil
+	return &deletionResult, nil
 }
 
 func (c *cluster) makeReservation(size uint64) (*common.ReservationMap, error) {
@@ -295,18 +312,31 @@ func (c *cluster) findCluster(sha512Hex string) (string, string, error) {
 
 	res, err := c.client.Do(req)
 	if err != nil {
-		return "", "", err
+		c.logger.Error(
+			"cluster manager request is failed (findCluster)",
+			zap.Error(err),
+		)
+		return "", "", errors.ErrRemote
 	}
 	defer res.Body.Close()
 
-	if res.StatusCode != 200 {
-		if res.StatusCode == 404 || res.StatusCode == 503 {
-			return "", "", errors.ErrNoAvailableActionNode
-		}
-		return "", "", fmt.Errorf("cluster manager request is failed (findCluster): %d - %s", res.StatusCode, common.NewErrorFromReader(res.Body).Message)
+	if res.StatusCode == 200 {
+		return res.Header.Get("X-Cluster-Id"), res.Header.Get("X-Address"), nil
 	}
 
-	return res.Header.Get("X-Cluster-Id"), res.Header.Get("X-Address"), nil
+	if res.StatusCode == 404 {
+		return "", "", errors.ErrNotFound
+	} else if res.StatusCode == 503 {
+		return "", "", errors.ErrNoAvailableClusterNode
+	}
+
+	c.logger.Sugar().Errorf(
+		"cluster manager request is failed (findCluster): %d - %s",
+		res.StatusCode,
+		common.NewErrorFromReader(res.Body).Message,
+	)
+
+	return "", "", errors.ErrRemote
 }
 
 func (c *cluster) createClusterMap(chunks common.DataChunks, mapType common.MapType) (map[string]string, error) {
@@ -346,6 +376,9 @@ func (c *cluster) requestClusterMap(sha512HexList []string, mapType common.MapTy
 	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
+		if res.StatusCode == 404 {
+			return nil, errors.ErrNotFound
+		}
 		if res.StatusCode == 503 {
 			return nil, errors.ErrNoAvailableActionNode
 		}

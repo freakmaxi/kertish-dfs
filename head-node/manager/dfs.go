@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -8,15 +9,14 @@ import (
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
 	"github.com/freakmaxi/kertish-dfs/head-node/data"
+	"go.uber.org/zap"
 )
 
 type Dfs interface {
 	CreateFolder(folderPath string) error
-	CreateFile(path string, mime string, size uint64, contentReader io.Reader, overwrite bool) error
+	CreateFile(path string, mime string, size uint64, overwrite bool, contentReader io.Reader) error
 
-	Read(paths []string, join bool,
-		folderHandler func(folder *common.Folder) error,
-		fileHandler func(file *common.File, streamHandler func(writer io.Writer, begins int64, ends int64) error) error) error
+	Read(paths []string, join bool) (Read, error)
 	Size(folderPath string) (uint64, error)
 
 	Move(sources []string, target string, join bool, overwrite bool) error
@@ -27,12 +27,14 @@ type Dfs interface {
 type dfs struct {
 	metadata data.Metadata
 	cluster  Cluster
+	logger   *zap.Logger
 }
 
-func NewDfs(metadata data.Metadata, cluster Cluster) Dfs {
+func NewDfs(metadata data.Metadata, cluster Cluster, logger *zap.Logger) Dfs {
 	return &dfs{
 		metadata: metadata,
 		cluster:  cluster,
+		logger:   logger,
 	}
 }
 
@@ -60,7 +62,7 @@ func (d *dfs) CreateFolder(folderPath string) error {
 }
 
 // this func is modified to prevent the locking whole folder path tree.
-func (d *dfs) CreateFile(path string, mime string, size uint64, contentReader io.Reader, overwrite bool) error {
+func (d *dfs) CreateFile(path string, mime string, size uint64, overwrite bool, contentReader io.Reader) error {
 	path = common.CorrectPath(path) // It is required in here
 
 	folderPath, filename := common.Split(path)
@@ -90,37 +92,54 @@ func (d *dfs) CreateFile(path string, mime string, size uint64, contentReader io
 		}
 
 		file = folder.File(filename)
-		if file != nil {
-			if !overwrite {
-				return os.ErrExist
-			}
-			file.Lock = common.NewFileLockForSize(size)
-			return nil
+		if file == nil {
+			file, err = folder.NewFile(filename)
+			return err
 		}
 
-		file, err = folder.NewFile(filename)
-		return err
+		if !overwrite {
+			return os.ErrExist
+		}
+
+		if file.Locked() {
+			return errors.ErrLock
+		}
+		file.Lock = common.NewFileLockForSize(size)
+
+		return nil
 	}); err != nil {
 		return err
 	}
 
-	if overwrite && len(file.Chunks) > 0 {
-		deletedChunkHashes, missingChunkHashes, err := d.cluster.Delete(file.Chunks)
-		file.Ingest(deletedChunkHashes, missingChunkHashes)
-
+	if overwrite {
+		deletionResult, err := d.cluster.Delete(file.Chunks)
 		if err != nil {
 			file.Lock.Cancel()
-			if err := d.update(path, file); err != nil {
-				return err
+
+			if errUpdate := d.update(path, file); errUpdate != nil {
+				d.logger.Warn(
+					fmt.Sprintf(
+						"Reverting deletion failure for file creation is failed, file will stay locked until %s",
+						file.Lock.Till.Format(common.FriendlyTimeFormat),
+					),
+					zap.String("path", path),
+					zap.Error(errUpdate),
+				)
 			}
+
 			return err
 		}
+		file.IngestDeletion(*deletionResult)
 	}
 
 	chunks, err := d.cluster.Create(size, contentReader)
 	if err != nil {
-		if err := d.update(path, nil); err != nil {
-			return err
+		if errUpdate := d.update(path, nil); errUpdate != nil {
+			d.logger.Error(
+				"Dropping file entry due to file creation failure is failed, file is now zombie, repair is required!",
+				zap.String("path", path),
+				zap.Error(errUpdate),
+			)
 		}
 		return err
 	}
@@ -129,29 +148,39 @@ func (d *dfs) CreateFile(path string, mime string, size uint64, contentReader io
 	file.Chunks = append(file.Chunks, chunks...)
 	file.Lock.Cancel()
 
-	return d.update(path, file)
+	err = d.update(path, file)
+	if err != nil {
+		d.logger.Error(
+			"Saving file creation is failed. File is now zombie with orphan chunks. Repair is required!",
+			zap.String("path", path),
+			zap.Error(err),
+		)
+	}
+	return err
 }
 
-func (d *dfs) Read(paths []string, join bool,
-	folderHandler func(folder *common.Folder) error,
-	fileHandler func(file *common.File, streamHandler func(writer io.Writer, begins int64, ends int64) error) error) error {
+func (d *dfs) Read(paths []string, join bool) (Read, error) {
+	if len(paths) == 1 && join || len(paths) > 1 && !join {
+		return nil, os.ErrInvalid
+	}
 
 	if len(paths) == 1 {
-		if join {
-			return os.ErrInvalid
+		folder, err := d.folder(paths[0])
+		if err == nil {
+			return newReadForFolder(folder), nil
 		}
-		if err := d.folder(paths[0], folderHandler); err != nil {
-			if err != os.ErrNotExist {
-				return err
-			}
-			return d.file(paths, fileHandler)
+
+		if err != os.ErrNotExist {
+			return nil, err
 		}
-		return nil
 	}
-	if !join {
-		return os.ErrInvalid
+
+	file, streamHandler, err := d.file(paths)
+	if err != nil {
+		return nil, err
 	}
-	return d.file(paths, fileHandler)
+
+	return newReadForFile(file, streamHandler), nil
 }
 
 func (d *dfs) Size(folderPath string) (uint64, error) {
@@ -174,50 +203,60 @@ func (d *dfs) Size(folderPath string) (uint64, error) {
 	return size, nil
 }
 
-func (d *dfs) folder(folderPath string, folderHandler func(folder *common.Folder) error) error {
+func (d *dfs) folder(folderPath string) (*common.Folder, error) {
 	folderPath = common.CorrectPath(folderPath)
 
 	folders, err := d.metadata.Get([]string{folderPath})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return folderHandler(folders[0])
+	return folders[0], nil
 }
 
-func (d *dfs) file(paths []string, fileHandler func(file *common.File, streamHandler func(writer io.Writer, begins int64, ends int64) error) error) error {
+func (d *dfs) file(paths []string) (*common.File, func(w io.Writer, begins int64, ends int64) error, error) {
 	files := make(common.Files, 0)
 	for _, path := range paths {
 		folderPath, filename := common.Split(path)
 		if len(filename) == 0 {
-			return os.ErrInvalid
+			return nil, nil, os.ErrInvalid
 		}
 
 		folders, err := d.metadata.Get([]string{folderPath})
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 
 		file := folders[0].File(filename)
 		if file == nil {
-			return os.ErrNotExist
+			return nil, nil, os.ErrNotExist
 		}
+
+		if file.Locked() {
+			return nil, nil, errors.ErrLock
+		}
+
+		if file.Zombie {
+			return nil, nil, errors.ErrZombie
+		}
+
 		files = append(files, file)
 	}
 
-	if len(files) == 1 {
-		return fileHandler(files[0], func(writer io.Writer, begins int64, ends int64) error {
-			return d.cluster.Read(files[0].Chunks, writer, begins, ends)
-		})
+	requestedFile := files[0]
+
+	if len(files) > 1 {
+		var err error
+		requestedFile, err = common.CreateJoinedFile(files)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
-	joinedFile, err := common.CreateJoinedFile(files)
+	streamHandler, err := d.cluster.Read(requestedFile.Chunks)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-
-	return fileHandler(joinedFile, func(writer io.Writer, begins int64, ends int64) error {
-		return d.cluster.Read(joinedFile.Chunks, writer, begins, ends)
-	})
+	return requestedFile, streamHandler, nil
 }
 
 func (d *dfs) Move(sources []string, target string, join bool, overwrite bool) error {
@@ -346,6 +385,10 @@ func (d *dfs) moveFile(sources []string, target string, overwrite bool) error {
 				return errors.ErrLock
 			}
 
+			if sourceFile.Zombie {
+				return errors.ErrZombie
+			}
+
 			sourceFiles = append(sourceFiles, sourceFile)
 		}
 
@@ -451,6 +494,9 @@ func (d *dfs) copyFolder(sources []string, target string, overwrite bool) error 
 			if file.Locked() {
 				continue
 			}
+			if file.Zombie {
+				continue
+			}
 			if err := d.cluster.CreateShadow(file.Chunks); err != nil {
 				return err
 			}
@@ -466,6 +512,9 @@ func (d *dfs) copyFolder(sources []string, target string, overwrite bool) error 
 				sourceChild.Full = strings.Replace(sourceChild.Full, sourceFolder.Full, targetFolder.Full, 1)
 				for _, file := range sourceChild.Files {
 					if file.Locked() {
+						continue
+					}
+					if file.Zombie {
 						continue
 					}
 					if err := d.cluster.CreateShadow(file.Chunks); err != nil {
@@ -518,6 +567,10 @@ func (d *dfs) copyFile(sources []string, target string, overwrite bool) error {
 
 			if sourceFile.Locked() {
 				return errors.ErrLock
+			}
+
+			if sourceFile.Zombie {
+				return errors.ErrZombie
 			}
 
 			sourceFiles = append(sourceFiles, sourceFile)
@@ -661,8 +714,10 @@ func (d *dfs) deleteFolder(folderPath string, killZombies bool) error {
 					file := folder.Files[0]
 
 					if err := folder.DeleteFile(file.Name, func(file *common.File) error {
-						deletedChunkHashes, missingChunkHashes, err := d.cluster.Delete(file.Chunks)
-						file.Ingest(deletedChunkHashes, missingChunkHashes)
+						deletionResult, err := d.cluster.Delete(file.Chunks)
+						if deletionResult != nil {
+							file.IngestDeletion(*deletionResult)
+						}
 
 						if file.Zombie {
 							if killZombies {
@@ -673,6 +728,7 @@ func (d *dfs) deleteFolder(folderPath string, killZombies bool) error {
 							}
 							return errors.ErrZombie
 						}
+
 						return err
 					}); err != nil {
 						return err
@@ -710,8 +766,10 @@ func (d *dfs) deleteFile(path string, killZombies bool) error {
 				return errors.ErrLock
 			}
 
-			deletedChunkHashes, missingChunkHashes, err := d.cluster.Delete(file.Chunks)
-			file.Ingest(deletedChunkHashes, missingChunkHashes)
+			deletionResult, err := d.cluster.Delete(file.Chunks)
+			if deletionResult != nil {
+				file.IngestDeletion(*deletionResult)
+			}
 
 			if file.Zombie {
 				if killZombies {
@@ -722,6 +780,7 @@ func (d *dfs) deleteFile(path string, killZombies bool) error {
 				}
 				return errors.ErrZombie
 			}
+
 			return err
 		})
 	})

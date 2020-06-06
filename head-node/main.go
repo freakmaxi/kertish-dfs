@@ -88,7 +88,7 @@ func main() {
 		logger.Error("Cluster Manager is failed", zap.Error(err))
 		os.Exit(20)
 	}
-	dfs := manager.NewDfs(metadata, cluster)
+	dfs := manager.NewDfs(metadata, cluster, logger)
 	// create root if not exists
 	if err := dfs.CreateFolder("/"); err != nil && err != os.ErrExist {
 		logger.Error("Unable to create cluster root path", zap.Error(err))

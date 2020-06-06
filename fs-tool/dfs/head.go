@@ -104,6 +104,8 @@ func Change(headAddresses []string, sources []string, target string, overwrite b
 		return fmt.Errorf("%s have conflicts between file(s)/folder(s)", sourcesErrorString(sources))
 	case 422:
 		return fmt.Errorf("%s and %s should be full and absolute paths", sourcesErrorString(sources), target)
+	case 524:
+		return fmt.Errorf("%s is zombie or has zombie", sourcesErrorString(sources))
 	case 500:
 		if strings.Compare(action, "m") == 0 {
 			action = "move"
@@ -276,6 +278,8 @@ func Pull(headAddresses []string, sources []string, target string, readRange *co
 	}
 	defer res.Body.Close()
 
+	isFile := strings.Compare(res.Header.Get("X-Type"), "file") == 0
+
 	switch res.StatusCode {
 	case 404:
 		return fmt.Errorf("%s is/are not exists", sourcesErrorString(sources))
@@ -286,9 +290,13 @@ func Pull(headAddresses []string, sources []string, target string, readRange *co
 		return fmt.Errorf("combining dfs folder(s) to local folder is not possible")
 	case 500:
 		return fmt.Errorf("unable to get %s", sourcesErrorString(sources))
+	case 523:
+		return fmt.Errorf("%s is locked or has locked file(s)", sourcesErrorString(sources))
+	case 524:
+		return fmt.Errorf("%s is zombie or has zombie", sourcesErrorString(sources))
 	}
 
-	if strings.Compare(res.Header.Get("X-Type"), "file") == 0 {
+	if isFile {
 		file, err := os.OpenFile(target, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 		if err != nil {
 			return fmt.Errorf("unable to create %s", target)

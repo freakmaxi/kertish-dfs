@@ -495,29 +495,27 @@ func (h *health) repairConsistency(repairType RepairType) error {
 				break
 			}
 
-			missingChunkHashes := make([]string, 0)
+			deletionResult := common.NewDeletionResult()
+
 			for _, chunk := range file.Chunks {
 				clusterId, fileItem, err := h.index.Find(clusterIds, chunk.Hash)
 				if err != nil {
 					if err != errors.ErrNotFound {
 						return false, err
 					}
-					missingChunkHashes = append(missingChunkHashes, chunk.Hash)
+					deletionResult.Missing = append(deletionResult.Missing, chunk.Hash)
 					continue
 				}
 
 				if uint32(fileItem.Size) != chunk.Size {
-					missingChunkHashes = append(missingChunkHashes, chunk.Hash)
+					deletionResult.Missing = append(deletionResult.Missing, chunk.Hash)
 					continue
 				}
 
+				deletionResult.Untouched = append(deletionResult.Untouched, chunk.Hash)
 				matchedFileItemListMap[clusterId] = append(matchedFileItemListMap[clusterId], *fileItem)
 			}
-			if len(missingChunkHashes) == 0 {
-				continue
-			}
-
-			file.Ingest([]string{}, missingChunkHashes)
+			file.IngestDeletion(deletionResult)
 			changed = true
 		}
 		return changed, nil

@@ -3,13 +3,14 @@ package routing
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
+	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"github.com/freakmaxi/kertish-dfs/head-node/manager"
 	"go.uber.org/zap"
 )
 
@@ -20,10 +21,54 @@ func (d *dfsRouter) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	join := strings.Compare(sourceAction, "j") == 0
+	read, err := d.dfs.Read(requestedPaths, strings.Compare(sourceAction, "j") == 0)
+	if err != nil {
+		if err == os.ErrNotExist {
+			w.WriteHeader(404)
+			return
+		} else if err == os.ErrInvalid {
+			w.WriteHeader(422)
+			return
+		} else if err == errors.ErrLock {
+			w.WriteHeader(523)
+			return
+		} else if err == errors.ErrZombie {
+			w.WriteHeader(524)
+			return
+		} else {
+			w.WriteHeader(500)
+		}
+		d.logger.Error("Read request is failed", zap.Strings("paths", requestedPaths), zap.Error(err))
+	}
 
-	calculateUsageHeader := strings.ToLower(r.Header.Get("X-Calculate-Usage"))
-	calculateUsage := len(calculateUsageHeader) > 0 && (strings.Compare(calculateUsageHeader, "1") == 0 || strings.Compare(calculateUsageHeader, "true") == 0)
+	if read.Type() == manager.RT_Folder {
+		folder := read.Folder()
+
+		calculateUsageHeader := strings.ToLower(r.Header.Get("X-Calculate-Usage"))
+		calculateUsage := len(calculateUsageHeader) > 0 && (strings.Compare(calculateUsageHeader, "1") == 0 || strings.Compare(calculateUsageHeader, "true") == 0)
+
+		if calculateUsage {
+			folder.CalculateUsage(func(shadows common.FolderShadows) {
+				for _, shadow := range shadows {
+					shadow.Size, _ = d.dfs.Size(shadow.Full)
+				}
+			})
+		}
+
+		w.Header().Set("X-Type", "folder")
+
+		if err := json.NewEncoder(w).Encode(folder); err != nil {
+			w.WriteHeader(500)
+			d.logger.Error(
+				"Response of read request is failed",
+				zap.Strings("paths", requestedPaths),
+				zap.Error(err),
+			)
+		}
+		return
+	}
+
+	w.Header().Set("X-Type", "file")
 
 	downloadHeader := strings.ToLower(r.Header.Get("X-Download"))
 	download := len(downloadHeader) > 0 && (strings.Compare(downloadHeader, "1") == 0 || strings.Compare(downloadHeader, "true") == 0)
@@ -31,39 +76,19 @@ func (d *dfsRouter) handleGet(w http.ResponseWriter, r *http.Request) {
 	requestRange := r.Header.Get("Range")
 	partialRequest := len(requestRange) > 0
 
-	if err := d.dfs.Read(
-		requestedPaths, join,
-		func(folder *common.Folder) error {
-			w.Header().Set("X-Type", "folder")
+	push, begins, ends := d.prepareResponseHeaders(w, read.File(), download, partialRequest, requestRange)
+	if !push {
+		return
+	}
 
-			if calculateUsage {
-				folder.CalculateUsage(func(shadows common.FolderShadows) {
-					for _, shadow := range shadows {
-						shadow.Size, _ = d.dfs.Size(shadow.Full)
-					}
-				})
-			}
-
-			return json.NewEncoder(w).Encode(folder)
-		},
-		func(file *common.File, streamHandler func(writer io.Writer, begins int64, ends int64) error) error {
-			w.Header().Set("X-Type", "file")
-			push, begins, ends := d.prepareResponseHeaders(w, file, download, partialRequest, requestRange)
-			if !push {
-				return nil
-			}
-			return streamHandler(w, begins, ends)
-		}); err != nil {
-		if err == os.ErrNotExist {
-			w.WriteHeader(404)
-			return
-		} else if err == os.ErrInvalid {
-			w.WriteHeader(422)
-			return
-		} else {
-			w.WriteHeader(500)
-		}
-		d.logger.Error("Read request is failed", zap.Strings("paths", requestedPaths), zap.Error(err))
+	if err := read.Read(w, begins, ends); err != nil {
+		d.logger.Error(
+			"Transferring file content is failed",
+			zap.Strings("paths", requestedPaths),
+			zap.Int64("begins", begins),
+			zap.Int64("begins", ends),
+			zap.Error(err),
+		)
 	}
 }
 

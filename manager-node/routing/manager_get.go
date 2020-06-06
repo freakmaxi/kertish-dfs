@@ -213,7 +213,7 @@ func (m *managerRouter) handleFind(w http.ResponseWriter, r *http.Request) {
 
 	if err == errors.ErrNotFound {
 		w.WriteHeader(404)
-	} else if err == errors.ErrNoAvailableClusterNode {
+	} else if err == errors.ErrNoAvailableClusterNode || err == errors.ErrNoAvailableActionNode {
 		w.WriteHeader(503)
 	} else {
 		w.WriteHeader(500)

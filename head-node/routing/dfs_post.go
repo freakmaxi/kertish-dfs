@@ -58,7 +58,7 @@ func (d *dfsRouter) handlePost(w http.ResponseWriter, r *http.Request) {
 		overwriteHeader := strings.ToLower(r.Header.Get("X-Overwrite"))
 		overwrite := len(overwriteHeader) > 0 && (strings.Compare(overwriteHeader, "1") == 0 || strings.Compare(overwriteHeader, "true") == 0)
 
-		if err := d.dfs.CreateFile(requestedPaths[0], contentType, uint64(contentLength), r.Body, overwrite); err != nil {
+		if err := d.dfs.CreateFile(requestedPaths[0], contentType, uint64(contentLength), overwrite, r.Body); err != nil {
 			if err == os.ErrExist {
 				w.WriteHeader(409)
 				return

@@ -43,6 +43,9 @@ func (d *dfsRouter) handlePut(w http.ResponseWriter, r *http.Request) {
 			} else if err == os.ErrInvalid {
 				w.WriteHeader(422)
 				return
+			} else if err == errors.ErrZombie {
+				w.WriteHeader(524)
+				return
 			} else {
 				w.WriteHeader(500)
 			}
@@ -66,6 +69,9 @@ func (d *dfsRouter) handlePut(w http.ResponseWriter, r *http.Request) {
 				return
 			} else if err == os.ErrInvalid {
 				w.WriteHeader(422)
+				return
+			} else if err == errors.ErrZombie {
+				w.WriteHeader(524)
 				return
 			} else {
 				w.WriteHeader(500)

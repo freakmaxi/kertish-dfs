@@ -467,7 +467,7 @@ func (c *cluster) Find(sha512Hex string, mapType common.MapType) (string, string
 	}
 
 	if node == nil {
-		return "", "", errors.ErrNoAvailableClusterNode
+		return "", "", errors.ErrNoAvailableActionNode
 	}
 
 	return clusterId, node.Address, nil

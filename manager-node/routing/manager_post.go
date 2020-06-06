@@ -143,7 +143,9 @@ func (m *managerRouter) handleMap(w http.ResponseWriter, r *http.Request, mapTyp
 		return
 	}
 
-	if err == errors.ErrNoAvailableClusterNode {
+	if err == errors.ErrNotFound {
+		w.WriteHeader(404)
+	} else if err == errors.ErrNoAvailableClusterNode || err == errors.ErrNoAvailableActionNode {
 		w.WriteHeader(503)
 	} else {
 		w.WriteHeader(400)

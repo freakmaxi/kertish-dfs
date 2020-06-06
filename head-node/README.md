@@ -55,6 +55,8 @@ Will be used to have the stability of metadata of the file system
 - `416`: Range dissatisfaction
 - `422`: Required Request Headers are not valid or absent
 - `500`: Operational failures
+- `523`: File or folder has lock
+- `524`: Zombie file or folder has zombie file(s)
 - `200`: Successful
 
 ##### Folder Sample Response
@@ -144,7 +146,9 @@ Will be used to have the stability of metadata of the file system
 - `404`: Not found
 - `422`: Required Request Headers are not valid or absent
 - `500`: Operational failures
+- `523`: File or folder has lock
 - `524`: Zombie file or folder has zombie file(s)
 - `525`: Zombie file or folder is still alive, try again to kill
+- `526`: Require consistency repair
 - `200`: Accepted
 
