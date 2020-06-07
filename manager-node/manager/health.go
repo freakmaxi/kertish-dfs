@@ -482,6 +482,14 @@ func (h *health) repairConsistency(repairType RepairType) error {
 		matchedFileItemListMap[cluster.Id] = make(common.SyncFileItemList, 0)
 	}
 
+	mapMutex := sync.Mutex{}
+	appendToMatchedFileItemListMapFunc := func(clusterId string, fileItem *common.SyncFileItem) {
+		mapMutex.Lock()
+		defer mapMutex.Unlock()
+
+		matchedFileItemListMap[clusterId] = append(matchedFileItemListMap[clusterId], *fileItem)
+	}
+
 	if err := h.metadata.Cursor(func(folder *common.Folder) (bool, error) {
 		changed := false
 		for _, file := range folder.Files {
@@ -513,7 +521,7 @@ func (h *health) repairConsistency(repairType RepairType) error {
 				}
 
 				deletionResult.Untouched = append(deletionResult.Untouched, chunk.Hash)
-				matchedFileItemListMap[clusterId] = append(matchedFileItemListMap[clusterId], *fileItem)
+				appendToMatchedFileItemListMapFunc(clusterId, fileItem)
 			}
 			file.IngestDeletion(deletionResult)
 			changed = true
