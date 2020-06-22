@@ -3,9 +3,10 @@ package common
 import "strings"
 
 type SyncFileItem struct {
-	Sha512Hex string
-	Usage     uint16
-	Size      int32
+	Sha512Hex string `json:"sha512Hex"`
+	Usage     uint16 `json:"usage"`
+	Size      uint32 `json:"size"`
+	Shadow    bool   `json:"shadow"`
 }
 
 type SyncFileItemList []SyncFileItem
@@ -17,6 +18,39 @@ func (s SyncFileItemMap) ToList() SyncFileItemList {
 		fileItemList = append(fileItemList, fileItem)
 	}
 	return fileItemList
+}
+
+func (s SyncFileItemList) ShadowItems() SyncFileItemList {
+	shadowFileItemList := make(SyncFileItemList, 0)
+	for _, fileItem := range s {
+		if !fileItem.Shadow {
+			continue
+		}
+		shadowFileItemList = append(shadowFileItemList, fileItem)
+	}
+	return shadowFileItemList
+}
+
+func (s SyncFileItemList) PhysicalFiles() []string {
+	glows := make([]string, 0)
+	for _, fileItem := range s {
+		if fileItem.Shadow {
+			continue
+		}
+		glows = append(glows, fileItem.Sha512Hex)
+	}
+	return glows
+}
+
+func (s SyncFileItemList) PhysicalSize() uint64 {
+	total := uint64(0)
+	for _, fileItem := range s {
+		if fileItem.Shadow {
+			continue
+		}
+		total += uint64(fileItem.Size)
+	}
+	return total
 }
 
 func CompareFileItems(fileItem1 SyncFileItem, fileItem2 SyncFileItem) bool {

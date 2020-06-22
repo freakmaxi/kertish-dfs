@@ -18,7 +18,7 @@ type Folder struct {
 	Modified time.Time     `json:"modified"`
 	Folders  FolderShadows `json:"folders"`
 	Files    Files         `json:"files"`
-	Size     uint64        `json:"size"`
+	Size     uint64        `json:"size" bson:"-"`
 }
 
 func NewFolder(folderPath string) *Folder {
@@ -35,30 +35,29 @@ func NewFolder(folderPath string) *Folder {
 	}
 }
 
-func (f *Folder) NewFolder(name string, newFolderHandler func(*FolderShadow) error) error {
+func (f *Folder) NewFolder(name string) (*Folder, error) {
 	name = CorrectPath(name)
 	name = name[1:]
 
 	if len(name) == 0 {
-		return os.ErrInvalid
+		return nil, os.ErrInvalid
 	}
 
 	if strings.Index(name, pathSeparator) > -1 {
-		return os.ErrInvalid
+		return nil, os.ErrInvalid
 	}
 
 	if f.exists(name) {
-		return os.ErrExist
+		return nil, os.ErrExist
 	}
 
 	folderShadow := NewFolderShadow(Join(f.Full, name))
-	if err := newFolderHandler(folderShadow); err != nil {
-		return err
-	}
+
 	f.Folders = append(f.Folders, folderShadow)
 	sort.Sort(f.Folders)
+	f.Modified = time.Now().UTC()
 
-	return nil
+	return NewFolder(Join(f.Full, name)), nil
 }
 
 func (f *Folder) NewFile(name string) (*File, error) {
@@ -80,6 +79,7 @@ func (f *Folder) NewFile(name string) (*File, error) {
 	nf := newFile(name)
 	f.Files = append(f.Files, nf)
 	sort.Sort(f.Files)
+	f.Modified = time.Now().UTC()
 
 	return nf, nil
 }
@@ -96,21 +96,21 @@ func CreateJoinedFolder(folders []*Folder) (*Folder, error) {
 		for _, fs := range f.Folders {
 			shadow := *fs
 
-			fp := f.Folder(shadow.Name)
+			fp := joinedFolder.Folder(shadow.Name)
 			if fp != nil {
-				return nil, errors.ErrJoinConflict
+				continue
 			}
-			f.Folders = append(f.Folders, &shadow)
+			joinedFolder.Folders = append(joinedFolder.Folders, &shadow)
 		}
 
 		for _, file := range f.Files {
 			shadow := *file
 
-			fileCheck := f.File(shadow.Name)
+			fileCheck := joinedFolder.File(shadow.Name)
 			if fileCheck != nil {
 				return nil, errors.ErrJoinConflict
 			}
-			f.Files = append(f.Files, &shadow)
+			joinedFolder.Files = append(joinedFolder.Files, &shadow)
 		}
 	}
 	joinedFolder.Name = hex.EncodeToString(hash.Sum(nil))
@@ -147,6 +147,7 @@ func (f *Folder) ReplaceFile(name string, file *File) {
 				f.Files[i] = file
 			}
 			sort.Sort(f.Files)
+			f.Modified = time.Now().UTC()
 			return
 		}
 	}
@@ -157,6 +158,7 @@ func (f *Folder) ReplaceFile(name string, file *File) {
 
 	f.Files = append(f.Files, file)
 	sort.Sort(f.Files)
+	f.Modified = time.Now().UTC()
 }
 
 func (f *Folder) DeleteFolder(name string, deleteFolderHandler func(string) error) error {
@@ -167,6 +169,7 @@ func (f *Folder) DeleteFolder(name string, deleteFolderHandler func(string) erro
 			}
 			f.Folders = append(f.Folders[:i], f.Folders[i+1:]...)
 			sort.Sort(f.Folders)
+			f.Modified = time.Now().UTC()
 			return nil
 		}
 	}
@@ -181,6 +184,7 @@ func (f *Folder) DeleteFile(name string, deleteFileHandler func(*File) error) er
 			}
 			f.Files = append(f.Files[:i], f.Files[i+1:]...)
 			sort.Sort(f.Files)
+			f.Modified = time.Now().UTC()
 			return nil
 		}
 	}

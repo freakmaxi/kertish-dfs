@@ -19,27 +19,18 @@ import (
 func TestTree_FillV1(t *testing.T) {
 	folders := make([]*Folder, 0)
 	root := NewFolder("/")
-	_ = root.NewFolder("Level11", func(shadow *FolderShadow) error {
-		return nil
-	})
+	level11, _ := root.NewFolder("Level11")
 	folders = append(folders, root)
 
-	level11 := NewFolder("/Level11")
-	_ = level11.NewFolder("Level2", func(shadow *FolderShadow) error {
-		return nil
-	})
+	_, _ = level11.NewFolder("Level2")
 	folders = append(folders, level11)
 
 	level12 := NewFolder("/Level12")
-	_ = level12.NewFolder("Level2", func(shadow *FolderShadow) error {
-		return nil
-	})
+	_, _ = level12.NewFolder("Level2")
 	folders = append(folders, level12)
 
 	level2 := NewFolder("/Level11/Level2")
-	_ = level2.NewFolder("Level4", func(shadow *FolderShadow) error {
-		return nil
-	})
+	_, _ = level2.NewFolder("Level4")
 	folders = append(folders, level2)
 
 	folders = append(folders, NewFolder("/Level11/Level2/Level3"))
@@ -77,42 +68,29 @@ func TestTree_FillV1(t *testing.T) {
 func TestTree_FillV2(t *testing.T) {
 	folders := make([]*Folder, 0)
 	root := NewFolder("/")
-	_ = root.NewFolder("Level11", func(shadow *FolderShadow) error {
-		return nil
-	})
+	level11, _ := root.NewFolder("Level11")
 	folders = append(folders, root)
 
-	level11 := NewFolder("/Level11")
-	_ = level11.NewFolder("Level2", func(shadow *FolderShadow) error {
-		return nil
-	})
+	_, _ = level11.NewFolder("Level2")
 	folders = append(folders, level11)
 
 	level12 := NewFolder("/Level12")
-	_ = level12.NewFolder("Level2", func(shadow *FolderShadow) error {
-		return nil
-	})
+	_, _ = level12.NewFolder("Level2")
 	folders = append(folders, level12)
 
 	level21 := NewFolder("/Level11/Level2")
-	_ = level21.NewFolder("Level4", func(shadow *FolderShadow) error {
-		return nil
-	})
+	_, _ = level21.NewFolder("Level4")
 	folders = append(folders, level21)
 
 	level22 := NewFolder("/Level12/Level2")
-	_ = level22.NewFolder("Level4", func(shadow *FolderShadow) error {
-		return nil
-	})
+	_, _ = level22.NewFolder("Level4")
 	folders = append(folders, level22)
 
 	folders = append(folders, NewFolder("/Level11/Level2/Level3"))
 	folders = append(folders, NewFolder("/Level11/Level2/Level4"))
 
 	orphan := NewFolder("/Orphan/Path/For/Test")
-	_ = orphan.NewFolder("REG", func(shadow *FolderShadow) error {
-		return nil
-	})
+	_, _ = orphan.NewFolder("REG")
 	folders = append(folders, orphan)
 
 	tree := NewTree()

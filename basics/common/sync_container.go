@@ -1,17 +1,16 @@
 package common
 
-import (
-	"sort"
-)
+import "sort"
 
 type SyncContainer struct {
 	FileItems SyncFileItemMap
-	Snapshots SnapshotContainers
+	Snapshots Snapshots
 }
 
 func NewSyncContainer() *SyncContainer {
 	return &SyncContainer{
-		Snapshots: make(SnapshotContainers, 0),
+		FileItems: make(SyncFileItemMap),
+		Snapshots: make(Snapshots, 0),
 	}
 }
 

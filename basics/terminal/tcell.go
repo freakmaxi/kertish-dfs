@@ -9,9 +9,12 @@ import (
 )
 
 type tCellOut struct {
-	screen    tcell.Screen
-	column    int
-	colOrigin int
+	screen tcell.Screen
+	column int
+
+	rowOrigin       int
+	colOrigin       int
+	colOriginBackup int
 
 	rows          []string
 	firstRowIndex int
@@ -65,7 +68,9 @@ func (t *tCellOut) rowLength(rowIndex int) int {
 func (t *tCellOut) LockOrigin() {
 	row := t.ActiveLine()
 	runeRow := []rune(row)
+	t.rowOrigin = len(t.rows) - 1
 	t.colOrigin = len(runeRow) + t.colOrigin
+	t.colOriginBackup = t.colOrigin
 }
 
 func (t *tCellOut) PrintlnFromOrigin(input string) {
@@ -121,9 +126,10 @@ func (t *tCellOut) Print(input string) {
 			continue
 		}
 
-		t.rows[rowIndex], _ = appendFunc(t.rows[rowIndex], t.column, runeInput[:index-1])
+		t.rows[rowIndex], _ = appendFunc(t.rows[rowIndex], t.column, runeInput[:index])
 		t.addNewRow()
 
+		t.colOrigin = 0
 		runeInput = runeInput[index:]
 		index = 0
 		rowLength = 0
@@ -133,12 +139,15 @@ func (t *tCellOut) Print(input string) {
 }
 
 func (t *tCellOut) Remove(size int) {
-	removeFunc := func(row string, index int, size int) (string, int) {
+	removeFunc := func(row string, index int, size int) (string, int, int) {
+		remain := 0
 		if index-size < 0 {
+			remain = size - index
 			size = index
 		}
 		if index-size < t.colOrigin {
-			return row, index
+			remain = size - index
+			return row, index, remain
 		}
 		index -= size
 
@@ -146,11 +155,31 @@ func (t *tCellOut) Remove(size int) {
 		newRuneRow := make([]rune, 0)
 		newRuneRow = append(newRuneRow, runeRow[:index]...)
 		newRuneRow = append(newRuneRow, runeRow[index+size:]...)
-		return string(newRuneRow), index
+		return string(newRuneRow), index, remain
 	}
 
-	rowIndex := t.activeRowIndex()
-	t.rows[rowIndex], t.column = removeFunc(t.rows[rowIndex], t.column, size)
+	for len(t.rows) > 0 {
+		rowIndex := t.activeRowIndex()
+		t.rows[rowIndex], t.column, size = removeFunc(t.rows[rowIndex], t.column, size)
+
+		if size == 0 {
+			break
+		}
+
+		if rowIndex == t.rowOrigin {
+			break
+		}
+
+		t.Refresh()
+		t.rows = t.rows[0 : len(t.rows)-1]
+		runeRow := []rune(t.rows[rowIndex-1])
+
+		t.column = len(runeRow)
+		if len(t.rows)-1 == t.rowOrigin {
+			t.colOrigin = t.colOriginBackup
+		}
+		t.ScrollBottom()
+	}
 }
 
 func (t *tCellOut) Refresh() {
@@ -166,6 +195,21 @@ func (t *tCellOut) ActiveLine() string {
 	row := t.rows[rowIndex]
 	runeRow := []rune(row)
 	return string(runeRow[t.colOrigin:])
+}
+
+func (t *tCellOut) ActiveCommand() string {
+	commandLine := ""
+	for i := t.rowOrigin; i < len(t.rows); i++ {
+		row := t.rows[i]
+
+		if i == t.rowOrigin {
+			runeRow := []rune(row)
+			commandLine = string(runeRow[t.colOriginBackup:])
+			continue
+		}
+		commandLine = fmt.Sprintf("%s%s", commandLine, row)
+	}
+	return commandLine
 }
 
 func (t *tCellOut) MoveCursorHead() {

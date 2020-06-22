@@ -38,7 +38,7 @@ func CreateJoinedFile(files Files) (*File, error) {
 		if f.Locked() {
 			return nil, errors.ErrLock
 		}
-		if f.Zombie {
+		if f.ZombieCheck() {
 			return nil, errors.ErrZombie
 		}
 		if _, err := hash.Write([]byte(f.Name)); err != nil {
@@ -82,7 +82,7 @@ func newFile(name string) *File {
 		Chunks:   make(DataChunks, 0),
 		Missing:  make(DataChunks, 0),
 		Lock:     NewFileLock(0),
-		Zombie:   false,
+		Zombie:   true,
 	}
 }
 
@@ -138,8 +138,13 @@ func (f *File) IngestDeletion(deletionResult DeletionResult) {
 		}
 	}
 
-	f.Zombie = len(f.Missing) > 0
+	f.Zombie = len(f.Chunks)+len(deletionResult.Deleted) == 0 || len(f.Missing) > 0
 	f.Missing = append(f.Missing, chunks...)
+}
+
+func (f *File) ZombieCheck() bool {
+	f.Zombie = f.Zombie || len(f.Chunks) == 0
+	return f.Zombie
 }
 
 func (f *File) CanDie() bool {

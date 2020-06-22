@@ -32,6 +32,9 @@ func CorrectPath(folderPath string) string {
 
 func PathTree(folderPath string) []string {
 	folderPath = CorrectPath(folderPath)
+	if strings.Compare(folderPath, pathSeparator) == 0 {
+		return []string{pathSeparator}
+	}
 
 	folderTree := make([]string, 0)
 	split := strings.Split(folderPath, pathSeparator)

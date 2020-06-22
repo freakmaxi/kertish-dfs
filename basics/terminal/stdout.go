@@ -61,6 +61,10 @@ func (s *stdout) ActiveLine() string {
 	return ""
 }
 
+func (s *stdout) ActiveCommand() string {
+	return ""
+}
+
 func (s *stdout) MoveCursorHead() {
 }
 

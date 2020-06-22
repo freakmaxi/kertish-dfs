@@ -8,6 +8,7 @@ var (
 	ErrNoSpace               = errors.New("no space on clusters")
 	ErrNoAvailableActionNode = errors.New("no available node for clusters")
 	ErrCreate                = errors.New("not possible to create shadow on data node")
+	ErrNotEmpty              = errors.New("path is not empty")
 	ErrLock                  = errors.New("path/file is locked")
 	ErrRepair                = errors.New("inconsistency detected, require repairing")
 	ErrZombie                = errors.New("path/file is zombie")
@@ -29,5 +30,6 @@ var (
 
 	ErrShowUsage  = errors.New("show usage")
 	ErrProcessing = errors.New("another operation in progress")
+	ErrFrozen     = errors.New("cluster is frozen")
 	ErrRemote     = errors.New("remote call execution is failed")
 )

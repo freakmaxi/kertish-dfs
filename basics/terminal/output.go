@@ -10,6 +10,7 @@ type Output interface {
 	Refresh()
 
 	ActiveLine() string
+	ActiveCommand() string
 	MoveCursorHead()
 	MoveCursorLeft(size int)
 	MoveCursorRight(size int)

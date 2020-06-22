@@ -74,10 +74,8 @@ func (t *Tree) Fill(folders []*Folder) error {
 
 		if strings.Compare(currentTree.folder.Full, parentPath) == 0 {
 			if _, has := currentTree.folderCache[folderFull]; !has {
-				_ = currentTree.folder.NewFolder(name, func(shadow *FolderShadow) error {
-					currentTree.folderCache[shadow.Full] = shadow
-					return nil
-				})
+				_, _ = currentTree.folder.NewFolder(name)
+				currentTree.folderCache[folderFull] = NewFolderShadow(folderFull)
 			}
 
 			nt := newTree(folder)
@@ -157,12 +155,11 @@ func (t *Tree) fix(parent *Tree, folder *Folder) error {
 
 		_, name := Split(p)
 
-		if err := tree.folder.NewFolder(name, func(shadow *FolderShadow) error {
-			tree.folderCache[shadow.Full] = shadow
-			return nil
-		}); err != nil && err != os.ErrExist {
+		_, err := tree.folder.NewFolder(name)
+		if err != nil && err != os.ErrExist {
 			return err
 		}
+		tree.folderCache[p] = NewFolderShadow(p)
 
 		if strings.Compare(folder.Full, p) == 0 {
 			childTree = newTree(folder)

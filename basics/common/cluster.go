@@ -128,10 +128,14 @@ func (c *Cluster) Slaves() NodeList {
 	return slaves
 }
 
-func (c *Cluster) HighQualityNode() *Node {
+func (c *Cluster) HighQualityNode(nodeIdsMap CacheFileItemLocationMap) *Node {
 	quality := int64(^uint(0) >> 1) // MaxIntNumber
 	nodeIndex := -1
 	for i, n := range c.Nodes {
+		if exists, has := nodeIdsMap[n.Id]; !has || !exists {
+			continue
+		}
+
 		if n.Quality < quality {
 			quality = n.Quality
 			nodeIndex = i
