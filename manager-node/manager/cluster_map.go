@@ -18,11 +18,14 @@ func (c *cluster) createReservationMap(size uint64, clusters common.Clusters) (*
 	for len(chunks) > 0 {
 		chunk := chunks[0]
 
+		if len(clusters) == 0 {
+			return nil, errors.ErrNoAvailableClusterNode
+		}
 		sort.Sort(clusters)
 		cluster := clusters[0]
 
 		if cluster.Paralyzed {
-			chunks = chunks[1:]
+			clusters = clusters[1:]
 			continue
 		}
 

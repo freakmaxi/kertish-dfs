@@ -16,56 +16,70 @@ const balanceThreshold = 0.05
 const semaphoreLimit = 10
 
 type balance struct {
-	clusters data.Clusters
-	index    data.Index
-	logger   *zap.Logger
-	health   Health
+	clusters    data.Clusters
+	index       data.Index
+	logger      *zap.Logger
+	synchronize Synchronize
 
 	mapMutex    sync.Mutex
-	indexingMap map[string]common.SyncFileItemList
+	indexingMap map[string]map[string]string
 
 	semaphoreMutex sync.Mutex
 	semaphoreChan  map[string]chan bool
 }
 
-func newBalance(clusters data.Clusters, index data.Index, logger *zap.Logger, health Health) *balance {
+func newBalance(clusters data.Clusters, index data.Index, synchronize Synchronize, logger *zap.Logger) *balance {
 	return &balance{
 		clusters:       clusters,
 		index:          index,
+		synchronize:    synchronize,
 		logger:         logger,
-		health:         health,
 		mapMutex:       sync.Mutex{},
-		indexingMap:    make(map[string]common.SyncFileItemList),
+		indexingMap:    make(map[string]map[string]string),
 		semaphoreMutex: sync.Mutex{},
 		semaphoreChan:  make(map[string]chan bool),
 	}
 }
 
-func (b *balance) nextChunk(sourceCluster *common.Cluster) (*common.SyncFileItem, error) {
+func (b *balance) nextChunk(sourceCluster *common.Cluster) (*common.CacheFileItem, error) {
 	b.mapMutex.Lock()
 	defer b.mapMutex.Unlock()
 
-	fileItemList := b.indexingMap[sourceCluster.Id]
-	if len(fileItemList) == 0 {
+	fileItemMap := b.indexingMap[sourceCluster.Id]
+	if len(fileItemMap) == 0 {
 		return nil, os.ErrNotExist
 	}
-	sourceFileItem := fileItemList[0]
 
-	if err := b.index.Remove(sourceCluster.Id, sourceFileItem.Sha512Hex); err != nil {
-		return nil, err
+	for sha512Hex := range fileItemMap {
+		c, err := b.index.Get(sha512Hex)
+		if err != nil {
+			if err == os.ErrNotExist {
+				continue
+			}
+			return nil, err
+		}
+
+		if err := b.index.Drop(sourceCluster.Id, sha512Hex); err != nil {
+			return nil, err
+		}
+
+		delete(fileItemMap, sha512Hex)
+
+		return c, nil
 	}
-	b.indexingMap[sourceCluster.Id] = fileItemList[1:]
 
-	return &sourceFileItem, nil
+	return nil, os.ErrNotExist
 }
 
-func (b *balance) moved(targetClusterId string, movedFileItem common.SyncFileItem) {
+func (b *balance) moved(targetClusterId string, masterNodeId string, movedFileItem common.SyncFileItem) {
 	b.mapMutex.Lock()
 	defer b.mapMutex.Unlock()
 
-	b.indexingMap[targetClusterId] = append(b.indexingMap[targetClusterId], movedFileItem)
+	cacheFileItem := common.NewCacheFileItem(targetClusterId, masterNodeId, movedFileItem)
+
+	b.indexingMap[targetClusterId][movedFileItem.Sha512Hex] = "moved"
 	// if it fails, let the cluster sync fix it. till that moment, file will be zombie
-	_ = b.index.Add(targetClusterId, movedFileItem)
+	_ = b.index.Replace(*cacheFileItem)
 }
 
 func (b *balance) move(sha512Hex string, sourceAddress string, targetAddress string) int {
@@ -82,16 +96,9 @@ func (b *balance) move(sha512Hex string, sourceAddress string, targetAddress str
 }
 
 func (b *balance) complete(balancingClusters common.Clusters) {
-	syncClustersFunc := func(wg *sync.WaitGroup, cluster *common.Cluster) {
-		defer wg.Done()
-		_ = b.health.SyncCluster(cluster, false)
-	}
-	wg := &sync.WaitGroup{}
 	for _, cluster := range balancingClusters {
-		wg.Add(1)
-		go syncClustersFunc(wg, cluster)
+		b.synchronize.QueueCluster(cluster.Id, true)
 	}
-	wg.Wait()
 }
 
 func (b *balance) Balance(clusterIds []string) error {
@@ -127,7 +134,7 @@ func (b *balance) Balance(clusterIds []string) error {
 			return errors.ErrNotAvailableForClusterAction
 		}
 
-		fileItemList, err := b.index.List(cluster.Id)
+		fileItemList, err := b.index.PullMap(cluster.Id)
 		if err != nil {
 			return err
 		}
@@ -172,7 +179,7 @@ func (b *balance) Balance(clusterIds []string) error {
 			break
 		}
 
-		sourceFileItem, err := b.nextChunk(fullestCluster)
+		sourceCacheFileItem, err := b.nextChunk(fullestCluster)
 		if err != nil {
 			if err == os.ErrNotExist {
 				break
@@ -181,29 +188,29 @@ func (b *balance) Balance(clusterIds []string) error {
 			continue
 		}
 
-		atomicSizeFunc(emptiestCluster.Id, uint64(sourceFileItem.Size), true)
-		atomicSizeFunc(fullestCluster.Id, uint64(sourceFileItem.Size), false)
+		atomicSizeFunc(emptiestCluster.Id, uint64(sourceCacheFileItem.FileItem.Size), true)
+		atomicSizeFunc(fullestCluster.Id, uint64(sourceCacheFileItem.FileItem.Size), false)
 
 		<-getSemaphoreFunc(emptiestCluster.Id)
 
 		wg.Add(1)
-		go func(wg *sync.WaitGroup, emptiestCluster common.Cluster, fullestCluster common.Cluster, sourceFileItem common.SyncFileItem) {
+		go func(wg *sync.WaitGroup, emptiestCluster common.Cluster, fullestCluster common.Cluster, cacheFileItem common.CacheFileItem) {
 			defer wg.Done()
 			defer func() { getSemaphoreFunc(emptiestCluster.Id) <- true }()
 
 			// -1 = Connectivity Problem, 0 = Unsuccessful Move Operation (Read error or Deleted file), 1 = Successful
-			if result := b.move(sourceFileItem.Sha512Hex, fullestCluster.Master().Address, emptiestCluster.Master().Address); result < 1 {
+			if result := b.move(cacheFileItem.FileItem.Sha512Hex, fullestCluster.Master().Address, emptiestCluster.Master().Address); result < 1 {
 				if result == 0 {
 					return
 				}
 
-				b.moved(fullestCluster.Id, sourceFileItem)
+				b.moved(fullestCluster.Id, fullestCluster.Master().Id, cacheFileItem.FileItem)
 
-				atomicSizeFunc(emptiestCluster.Id, uint64(sourceFileItem.Size), false)
-				atomicSizeFunc(fullestCluster.Id, uint64(sourceFileItem.Size), true)
+				atomicSizeFunc(emptiestCluster.Id, uint64(cacheFileItem.FileItem.Size), false)
+				atomicSizeFunc(fullestCluster.Id, uint64(cacheFileItem.FileItem.Size), true)
 			}
-			b.moved(emptiestCluster.Id, sourceFileItem)
-		}(wg, *emptiestCluster, *fullestCluster, *sourceFileItem)
+			b.moved(emptiestCluster.Id, emptiestCluster.Master().Id, cacheFileItem.FileItem)
+		}(wg, *emptiestCluster, *fullestCluster, *sourceCacheFileItem)
 	}
 	wg.Wait()
 

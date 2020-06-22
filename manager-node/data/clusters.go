@@ -58,7 +58,10 @@ func NewClusters(conn *Connection, database string, mutex mutex.LockingCenter) (
 	return c, nil
 }
 
-func (c *clusters) context() context.Context {
+func (c *clusters) context(sc context.Context) context.Context {
+	if sc != nil && c.conn.transaction {
+		return sc
+	}
 	ctx, _ := context.WithTimeout(context.Background(), time.Second*30)
 	return ctx
 }
@@ -68,7 +71,7 @@ func (c *clusters) setupIndices() error {
 		{Keys: bson.M{"clusterId": 1}},
 		{Keys: bson.M{"nodes.id": 1}},
 	}
-	_, err := c.col.Indexes().CreateMany(c.context(), models, nil)
+	_, err := c.col.Indexes().CreateMany(c.context(nil), models, nil)
 	return err
 }
 
@@ -78,7 +81,7 @@ func (c *clusters) RegisterCluster(cluster *common.Cluster) error {
 
 	filter := bson.M{"clusterId": cluster.Id}
 
-	if err := c.col.FindOne(c.context(), filter).Err(); err == nil {
+	if err := c.col.FindOne(c.context(nil), filter).Err(); err == nil {
 		return errors.ErrExists
 	} else {
 		if err != mongo.ErrNoDocuments {
@@ -100,7 +103,7 @@ func (c *clusters) UnRegisterCluster(clusterId string, clusterHandler func(clust
 	c.mutex.Lock(clusterLockKey)
 	defer c.mutex.Unlock(clusterLockKey)
 
-	if _, err := c.col.DeleteOne(c.context(), bson.M{"clusterId": clusterId}); err != nil {
+	if _, err := c.col.DeleteOne(c.context(nil), bson.M{"clusterId": clusterId}); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return errors.ErrNotFound
 		}
@@ -165,7 +168,7 @@ func (c *clusters) Get(clusterId string) (*common.Cluster, error) {
 	var cluster *common.Cluster
 	filter := bson.M{"clusterId": clusterId}
 
-	if err := c.col.FindOne(c.context(), filter).Decode(&cluster); err != nil {
+	if err := c.col.FindOne(c.context(nil), filter).Decode(&cluster); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, errors.ErrNotFound
 		}
@@ -176,17 +179,17 @@ func (c *clusters) Get(clusterId string) (*common.Cluster, error) {
 }
 
 func (c *clusters) GetAll() (common.Clusters, error) {
-	cur, err := c.col.Find(c.context(), bson.M{})
+	cur, err := c.col.Find(c.context(nil), bson.M{})
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, errors.ErrNotFound
 		}
 		return nil, err
 	}
-	defer cur.Close(c.context())
+	defer func() { _ = cur.Close(c.context(nil)) }()
 
 	clusters := make(common.Clusters, 0)
-	for cur.Next(c.context()) {
+	for cur.Next(c.context(nil)) {
 		var cluster *common.Cluster
 		if err := cur.Decode(&cluster); err != nil {
 			return nil, err
@@ -205,7 +208,7 @@ func (c *clusters) Save(clusterId string, saveHandler func(cluster *common.Clust
 	var cluster *common.Cluster
 	filter := bson.M{"clusterId": clusterId}
 
-	if err := c.col.FindOne(c.context(), filter).Decode(&cluster); err != nil {
+	if err := c.col.FindOne(c.context(nil), filter).Decode(&cluster); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return errors.ErrNotFound
 		}
@@ -223,17 +226,17 @@ func (c *clusters) SaveAll(saveAllHandler func(clusters common.Clusters) error) 
 	defer c.mutex.Unlock(clusterLockKey)
 
 	getClustersFunc := func() (common.Clusters, error) {
-		cur, err := c.col.Find(c.context(), bson.M{})
+		cur, err := c.col.Find(c.context(nil), bson.M{})
 		if err != nil {
 			if err == mongo.ErrNoDocuments {
 				return nil, errors.ErrNotFound
 			}
 			return nil, err
 		}
-		defer cur.Close(c.context())
+		defer func() { _ = cur.Close(c.context(nil)) }()
 
 		clusters := make(common.Clusters, 0)
-		for cur.Next(c.context()) {
+		for cur.Next(c.context(nil)) {
 			var cluster *common.Cluster
 			if err := cur.Decode(&cluster); err != nil {
 				return nil, err
@@ -275,7 +278,7 @@ func (c *clusters) UpdateNodes(cluster *common.Cluster) error {
 		},
 	}
 
-	_, err := c.col.UpdateOne(c.context(), filter, update)
+	_, err := c.col.UpdateOne(c.context(nil), filter, update)
 	return err
 }
 
@@ -292,7 +295,7 @@ func (c *clusters) ResetStats(cluster *common.Cluster) error {
 		},
 	}
 
-	_, err := c.col.UpdateOne(c.context(), filter, update)
+	_, err := c.col.UpdateOne(c.context(nil), filter, update)
 	return err
 }
 
@@ -311,8 +314,10 @@ func (c *clusters) SetFreeze(clusterId string, frozen bool) error {
 		},
 	}
 
-	_, err := c.col.UpdateOne(c.context(), filter, update)
-	return err
+	if _, err := c.col.UpdateOne(c.context(nil), filter, update); err != nil && err != mongo.ErrNoDocuments {
+		return err
+	}
+	return nil
 }
 
 func (c *clusters) ClusterIdOf(nodeId string) (string, error) {
@@ -327,7 +332,7 @@ func (c *clusters) getClusterByNodeId(nodeId string) (*common.Cluster, error) {
 	var cluster *common.Cluster
 	filter := bson.M{"nodes.id": nodeId}
 
-	if err := c.col.FindOne(c.context(), filter).Decode(&cluster); err != nil {
+	if err := c.col.FindOne(c.context(nil), filter).Decode(&cluster); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, errors.ErrNotFound
 		}
@@ -342,7 +347,7 @@ func (c *clusters) overwrite(clusters common.Clusters) error {
 		return err
 	}
 
-	if err = mongo.WithSession(c.context(), session, func(sc mongo.SessionContext) error {
+	if err = mongo.WithSession(c.context(nil), session, func(sc mongo.SessionContext) error {
 		if err = sc.StartTransaction(); err != nil {
 			return err
 		}
@@ -353,16 +358,16 @@ func (c *clusters) overwrite(clusters common.Clusters) error {
 
 			filter := bson.M{"clusterId": cluster.Id}
 			opts := (&options.UpdateOptions{}).SetUpsert(true)
-			if _, err := c.col.UpdateOne(c.context(), filter, bson.M{"$set": cluster}, opts); err != nil {
+			if _, err := c.col.UpdateOne(c.context(sc), filter, bson.M{"$set": cluster}, opts); err != nil {
 				return err
 			}
 		}
 
-		return sc.CommitTransaction(sc)
+		return sc.CommitTransaction(c.context(sc))
 	}); err != nil {
 		return err
 	}
-	session.EndSession(c.context())
+	session.EndSession(c.context(nil))
 
 	return nil
 }

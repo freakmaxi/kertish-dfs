@@ -3,6 +3,7 @@ package routing
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -115,7 +116,9 @@ func (m *managerRouter) handleReserve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err == errors.ErrNoDiskSpace {
+	if err == errors.ErrNoAvailableClusterNode {
+		w.WriteHeader(503)
+	} else if err == errors.ErrNoDiskSpace {
 		w.WriteHeader(507)
 	} else {
 		w.WriteHeader(400)
@@ -143,7 +146,7 @@ func (m *managerRouter) handleMap(w http.ResponseWriter, r *http.Request, mapTyp
 		return
 	}
 
-	if err == errors.ErrNotFound {
+	if err == os.ErrNotExist {
 		w.WriteHeader(404)
 	} else if err == errors.ErrNoAvailableClusterNode || err == errors.ErrNoAvailableActionNode {
 		w.WriteHeader(503)

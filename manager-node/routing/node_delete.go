@@ -8,6 +8,7 @@ import (
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"go.uber.org/zap"
 )
 
 func (n *nodeRouter) handleDelete(w http.ResponseWriter, r *http.Request) {
@@ -27,17 +28,18 @@ func (n *nodeRouter) handleDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (n *nodeRouter) handleSyncDelete(w http.ResponseWriter, r *http.Request) {
-	nodeId, syncDeleteList, err := n.describeDeleteOptions(r)
+	nodeId, fileItemList, err := n.describeDeleteOptions(r)
 	if err != nil {
 		w.WriteHeader(422)
 		return
 	}
 
-	if err := n.manager.Delete(nodeId, syncDeleteList); err != nil {
+	if err := n.manager.Notify(nodeId, fileItemList, false); err != nil {
 		if err == errors.ErrNotFound {
 			w.WriteHeader(404)
 		} else {
 			w.WriteHeader(500)
+			n.logger.Error("Node sync delete request is failed", zap.Error(err))
 		}
 	}
 }
@@ -50,29 +52,27 @@ func (n *nodeRouter) validateDeleteAction(action string) bool {
 	return false
 }
 
-func (n *nodeRouter) describeDeleteOptions(r *http.Request) (string, common.SyncDeleteList, error) {
+func (n *nodeRouter) describeDeleteOptions(r *http.Request) (string, common.SyncFileItemList, error) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		return "", nil, err
 	}
 
 	nodeId := r.Header.Get("X-Options")
-	syncDeleteList := make(common.SyncDeleteList, 0)
-	if err := json.Unmarshal(body, &syncDeleteList); err != nil {
+	fileItemList := make(common.SyncFileItemList, 0)
+	if err := json.Unmarshal(body, &fileItemList); err != nil {
 		return "", nil, err
 	}
 
-	if len(nodeId) == 0 || len(syncDeleteList) == 0 {
+	if len(nodeId) == 0 || len(fileItemList) == 0 {
 		return "", nil, os.ErrInvalid
 	}
 
-	for _, syncDelete := range syncDeleteList {
-		if len(syncDelete.Sha512Hex) != 64 {
+	for _, syncFileItem := range fileItemList {
+		if len(syncFileItem.Sha512Hex) != 64 {
 			return "", nil, os.ErrInvalid
 		}
 	}
 
-	return nodeId, syncDeleteList, nil
+	return nodeId, fileItemList, nil
 }
-
-var _ Router = &nodeRouter{}

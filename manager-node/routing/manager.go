@@ -8,16 +8,20 @@ import (
 )
 
 type managerRouter struct {
-	manager manager.Cluster
-	health  manager.Health
-	logger  *zap.Logger
+	manager     manager.Cluster
+	synchronize manager.Synchronize
+	repair      manager.Repair
+	health      manager.HealthCheck
+	logger      *zap.Logger
 
 	definitions []*Definition
 }
 
-func NewManagerRouter(clusterManager manager.Cluster, health manager.Health, logger *zap.Logger) Router {
+func NewManagerRouter(clusterManager manager.Cluster, synchronize manager.Synchronize, repair manager.Repair, health manager.HealthCheck, logger *zap.Logger) Router {
 	pR := &managerRouter{
 		manager:     clusterManager,
+		synchronize: synchronize,
+		repair:      repair,
 		health:      health,
 		logger:      logger,
 		definitions: make([]*Definition, 0),
@@ -42,7 +46,7 @@ func (m *managerRouter) Get() []*Definition {
 }
 
 func (m *managerRouter) manipulate(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 
 	switch r.Method {
 	case "POST":

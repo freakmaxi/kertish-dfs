@@ -34,8 +34,6 @@ const commandPing = "PING"
 const commandSize = "SIZE"
 const commandUsed = "USED"
 
-const snapshotTimeLayout = "20060102150405"
-
 type DataNode interface {
 	Create(data []byte) (string, error)
 	Read(sha512Hex string, readHandler func(data []byte) error) error
@@ -50,7 +48,7 @@ type DataNode interface {
 	SyncCreate(sha512Hex string, sourceNodeAddr string) bool
 	SyncDelete(sha512Hex string) bool
 	SyncMove(sha512Hex string, sourceNodeAddr string) bool
-	SyncList() (*common.SyncContainer, error)
+	SyncList(snapshotTime *time.Time) (*common.SyncContainer, error)
 	SyncFull(sourceNodeAddr string) bool
 
 	SnapshotCreate() bool
@@ -82,7 +80,7 @@ func (d *dataNode) connect(connectionHandler func(conn *net.TCPConn) error) erro
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	return connectionHandler(conn)
 }
@@ -440,12 +438,20 @@ func (d *dataNode) SyncMove(sha512Hex string, sourceNodeAddr string) bool {
 	}) == nil
 }
 
-func (d *dataNode) SyncList() (*common.SyncContainer, error) {
+func (d *dataNode) SyncList(snapshotTime *time.Time) (*common.SyncContainer, error) {
 	container := common.NewSyncContainer()
-	container.FileItems = make(map[string]common.SyncFileItem)
 
 	if err := d.connect(func(conn *net.TCPConn) error {
 		if _, err := conn.Write([]byte(commandSyncList)); err != nil {
+			return err
+		}
+
+		snapshotTimeUint := uint64(0)
+		if snapshotTime != nil {
+			snapshotTimeUint, _ = strconv.ParseUint(snapshotTime.Format(common.MachineTimeFormatWithSeconds), 10, 64)
+		}
+
+		if err := binary.Write(conn, binary.LittleEndian, snapshotTimeUint); err != nil {
 			return err
 		}
 
@@ -453,44 +459,8 @@ func (d *dataNode) SyncList() (*common.SyncContainer, error) {
 			return fmt.Errorf("data node refused the sync list request")
 		}
 
-		pullFileItemsFunc := func(targetFileItems map[string]common.SyncFileItem) error {
-			var rootFileItemsLength uint64
-			if err := binary.Read(conn, binary.LittleEndian, &rootFileItemsLength); err != nil {
-				return err
-			}
-
-			for i := uint64(0); i < rootFileItemsLength; i++ {
-				sha512Hex, err := d.hashAsHex(conn)
-				if err != nil {
-					return err
-				}
-
-				var usage uint16
-				if err := binary.Read(conn, binary.LittleEndian, &usage); err != nil {
-					return err
-				}
-
-				var size int32
-				if err := binary.Read(conn, binary.LittleEndian, &size); err != nil {
-					return err
-				}
-
-				targetFileItems[sha512Hex] = common.SyncFileItem{
-					Sha512Hex: sha512Hex,
-					Usage:     usage,
-					Size:      size,
-				}
-			}
-
-			return nil
-		}
-
 		var snapshotsLength uint64
 		if err := binary.Read(conn, binary.LittleEndian, &snapshotsLength); err != nil {
-			return err
-		}
-
-		if err := pullFileItemsFunc(container.FileItems); err != nil {
 			return err
 		}
 
@@ -500,21 +470,41 @@ func (d *dataNode) SyncList() (*common.SyncContainer, error) {
 				return err
 			}
 
-			snapshotTime, err := time.Parse(snapshotTimeLayout, strconv.FormatUint(snapshotTimeUint, 10))
+			snapshotTime, err := time.Parse(common.MachineTimeFormatWithSeconds, strconv.FormatUint(snapshotTimeUint, 10))
 			if err != nil {
 				return err
 			}
 
-			snapshotContainer := common.NewContainer(snapshotTime)
-			snapshotContainer.FileItems = make(map[string]common.SyncFileItem)
+			container.Snapshots = append(container.Snapshots, snapshotTime)
+		}
+		container.Sort()
 
-			if err := pullFileItemsFunc(snapshotContainer.FileItems); err != nil {
+		for {
+			sha512Hex, err := d.hashAsHex(conn)
+			if err != nil {
+				return err
+			}
+			if strings.Compare(sha512Hex, common.NullSha512Hex) == 0 {
+				break
+			}
+
+			var usage uint16
+			if err := binary.Read(conn, binary.LittleEndian, &usage); err != nil {
 				return err
 			}
 
-			container.Snapshots = append(container.Snapshots, snapshotContainer)
+			var size int32
+			if err := binary.Read(conn, binary.LittleEndian, &size); err != nil {
+				return err
+			}
+
+			container.FileItems[sha512Hex] =
+				common.SyncFileItem{
+					Sha512Hex: sha512Hex,
+					Usage:     usage,
+					Size:      uint32(size),
+				}
 		}
-		container.Sort()
 
 		if !d.result(conn) {
 			return fmt.Errorf("sync list command is failed on data node")

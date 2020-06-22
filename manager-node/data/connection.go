@@ -10,10 +10,11 @@ import (
 )
 
 type Connection struct {
-	client *mongo.Client
+	client      *mongo.Client
+	transaction bool
 }
 
-func NewConnection(connectionString string) (*Connection, error) {
+func NewConnection(connectionString string, transaction bool) (*Connection, error) {
 	client, err := mongo.NewClient(options.Client().ApplyURI(connectionString))
 	if err != nil {
 		return nil, err
@@ -31,6 +32,7 @@ func NewConnection(connectionString string) (*Connection, error) {
 	}
 
 	return &Connection{
-		client: client,
+		client:      client,
+		transaction: transaction,
 	}, nil
 }

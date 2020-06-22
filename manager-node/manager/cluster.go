@@ -2,6 +2,7 @@ package manager
 
 import (
 	"fmt"
+	"os"
 	"sync"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
@@ -17,6 +18,8 @@ type Cluster interface {
 
 	UnRegisterCluster(clusterId string) error
 	UnRegisterNode(nodeId string) error
+
+	Handshake() error
 
 	GetClusters() (common.Clusters, error)
 	GetCluster(clusterId string) (*common.Cluster, error)
@@ -38,18 +41,18 @@ type Cluster interface {
 }
 
 type cluster struct {
-	clusters data.Clusters
-	index    data.Index
-	logger   *zap.Logger
-	health   Health
+	clusters    data.Clusters
+	index       data.Index
+	synchronize Synchronize
+	logger      *zap.Logger
 }
 
-func NewCluster(clusters data.Clusters, index data.Index, logger *zap.Logger, health Health) (Cluster, error) {
+func NewCluster(clusters data.Clusters, index data.Index, synchronize Synchronize, logger *zap.Logger) (Cluster, error) {
 	return &cluster{
-		clusters: clusters,
-		index:    index,
-		logger:   logger,
-		health:   health,
+		clusters:    clusters,
+		index:       index,
+		synchronize: synchronize,
+		logger:      logger,
 	}, nil
 }
 
@@ -89,7 +92,7 @@ func (c *cluster) Register(nodeAddresses []string) (*common.Cluster, error) {
 }
 
 func (c *cluster) RegisterNodesTo(clusterId string, nodeAddresses []string) error {
-	return c.clusters.Save(clusterId, func(cluster *common.Cluster) error {
+	if err := c.clusters.Save(clusterId, func(cluster *common.Cluster) error {
 		masterNode := cluster.Master()
 
 		nodes, _, err := c.prepareNodes(nodeAddresses, cluster.Size)
@@ -110,7 +113,13 @@ func (c *cluster) RegisterNodesTo(clusterId string, nodeAddresses []string) erro
 		}
 
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+
+	c.synchronize.QueueCluster(clusterId, true)
+
+	return nil
 }
 
 func (c *cluster) prepareNodes(nodeAddresses []string, clusterSize uint64) (common.NodeList, uint64, error) {
@@ -169,9 +178,6 @@ func (c *cluster) prepareNodes(nodeAddresses []string, clusterSize uint64) (comm
 
 func (c *cluster) UnRegisterCluster(clusterId string) error {
 	return c.clusters.UnRegisterCluster(clusterId, func(cluster *common.Cluster) error {
-		if err := c.index.Replace(clusterId, nil); err != nil {
-			return err
-		}
 		for _, node := range cluster.Nodes {
 			dn, err := cluster2.NewDataNode(node.Address)
 			if err != nil {
@@ -187,13 +193,14 @@ func (c *cluster) UnRegisterNode(nodeId string) error {
 	return c.clusters.UnRegisterNode(
 		nodeId,
 		func(cluster *common.Cluster) error {
-			return c.health.SyncCluster(cluster, false)
+			return c.synchronize.Cluster(cluster.Id, true, false)
 		},
 		func(deletingNode *common.Node) error {
 			dn, err := cluster2.NewDataNode(deletingNode.Address)
 			if err != nil || !dn.Leave() {
 				return errors.ErrMode
 			}
+			dn.Wipe()
 			return nil
 		},
 		func(newMaster *common.Node) error {
@@ -203,6 +210,58 @@ func (c *cluster) UnRegisterNode(nodeId string) error {
 			}
 			return nil
 		})
+}
+
+func (c *cluster) Handshake() error {
+	clusters, err := c.clusters.GetAll()
+	if err != nil {
+		return err
+	}
+
+	hasJoinError := false
+
+	for _, cluster := range clusters {
+		masterNode := cluster.Master()
+
+		mdn, err := cluster2.NewDataNode(masterNode.Address)
+		if err != nil || !mdn.Join(cluster.Id, masterNode.Id, "") {
+			c.logger.Error(
+				"Syncing error: master node is not accessible",
+				zap.String("clusterId", cluster.Id),
+				zap.String("nodeId", masterNode.Id),
+				zap.String("nodeAddress", masterNode.Address),
+				zap.Error(errors.ErrJoin),
+			)
+			hasJoinError = true
+			continue
+		}
+
+		slaveNodes := cluster.Slaves()
+
+		if len(slaveNodes) == 0 {
+			continue
+		}
+
+		for _, slaveNode := range slaveNodes {
+			sdn, err := cluster2.NewDataNode(slaveNode.Address)
+			if err != nil || !sdn.Join(cluster.Id, slaveNode.Id, masterNode.Address) {
+				c.logger.Error(
+					"Syncing error: slave node is not accessible",
+					zap.String("clusterId", cluster.Id),
+					zap.String("nodeId", slaveNode.Id),
+					zap.String("nodeAddress", slaveNode.Address),
+					zap.Error(errors.ErrJoin),
+				)
+				hasJoinError = true
+				continue
+			}
+		}
+	}
+
+	if hasJoinError {
+		return errors.ErrJoin
+	}
+	return nil
 }
 
 func (c *cluster) GetClusters() (common.Clusters, error) {
@@ -293,7 +352,7 @@ func (c *cluster) MoveCluster(sourceClusterId string, targetClusterId string) (e
 		return err
 	}
 
-	sourceContainer, err := smdn.SyncList()
+	sourceContainer, err := smdn.SyncList(nil)
 	if err != nil {
 		c.logger.Error(
 			"Unable to get sync list from data node",
@@ -322,22 +381,28 @@ func (c *cluster) MoveCluster(sourceClusterId string, targetClusterId string) (e
 		}
 	}
 
-	syncClustersFunc := func(wg *sync.WaitGroup, cluster *common.Cluster, keepFrozen bool) {
+	syncClustersFunc := func(wg *sync.WaitGroup, clusterId string, keepFrozen bool) {
 		defer wg.Done()
-		_ = c.health.SyncCluster(cluster, keepFrozen)
+		if err := c.synchronize.Cluster(clusterId, true, keepFrozen); err != nil {
+			c.logger.Error(
+				"Cluster sync is failed after move operation",
+				zap.String("clusterId", clusterId),
+				zap.Error(err),
+			)
+		}
 	}
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
-	go syncClustersFunc(wg, sourceCluster, true)
+	go syncClustersFunc(wg, sourceCluster.Id, true)
 	wg.Add(1)
-	go syncClustersFunc(wg, targetCluster, false)
+	go syncClustersFunc(wg, targetCluster.Id, false)
 	wg.Wait()
 
 	return syncErr
 }
 
 func (c *cluster) BalanceClusters(clusterIds []string) error {
-	balance := newBalance(c.clusters, c.index, c.logger, c.health)
+	balance := newBalance(c.clusters, c.index, c.synchronize, c.logger)
 	return balance.Balance(clusterIds)
 }
 
@@ -378,7 +443,7 @@ func (c *cluster) CreateSnapshot(clusterId string) error {
 		return errors.ErrSnapshot
 	}
 
-	return c.health.SyncCluster(cluster, false)
+	return c.synchronize.Cluster(cluster.Id, true, false)
 }
 
 func (c *cluster) DeleteSnapshot(clusterId string, snapshotIndex uint64) error {
@@ -397,7 +462,7 @@ func (c *cluster) DeleteSnapshot(clusterId string, snapshotIndex uint64) error {
 		return errors.ErrSnapshot
 	}
 
-	return c.health.SyncCluster(cluster, false)
+	return c.synchronize.Cluster(cluster.Id, true, false)
 }
 
 func (c *cluster) RestoreSnapshot(clusterId string, snapshotIndex uint64) error {
@@ -416,7 +481,7 @@ func (c *cluster) RestoreSnapshot(clusterId string, snapshotIndex uint64) error 
 		return errors.ErrSnapshot
 	}
 
-	return c.health.SyncCluster(cluster, false)
+	return c.synchronize.Cluster(cluster.Id, true, false)
 }
 
 func (c *cluster) Map(sha512HexList []string, mapType common.MapType) (map[string]string, error) {
@@ -424,7 +489,7 @@ func (c *cluster) Map(sha512HexList []string, mapType common.MapType) (map[strin
 	for _, sha512Hex := range sha512HexList {
 		_, address, err := c.Find(sha512Hex, mapType)
 		if err != nil {
-			if err == errors.ErrNotFound && mapType == common.MT_Delete {
+			if err == os.ErrNotExist && mapType == common.MT_Delete {
 				continue
 			}
 			return nil, err
@@ -435,24 +500,16 @@ func (c *cluster) Map(sha512HexList []string, mapType common.MapType) (map[strin
 }
 
 func (c *cluster) Find(sha512Hex string, mapType common.MapType) (string, string, error) {
-	clusters, err := c.clusters.GetAll()
+	cacheFileItem, err := c.index.Get(sha512Hex)
 	if err != nil {
 		return "", "", err
 	}
 
-	clusterIds := make([]string, 0)
-	clustersMap := make(map[string]*common.Cluster)
-	for _, cluster := range clusters {
-		clusterIds = append(clusterIds, cluster.Id)
-		clustersMap[cluster.Id] = cluster
-	}
-
-	clusterId, _, err := c.index.Find(clusterIds, sha512Hex)
+	cluster, err := c.clusters.Get(cacheFileItem.ClusterId)
 	if err != nil {
 		return "", "", err
 	}
 
-	cluster := clustersMap[clusterId]
 	if cluster.Paralyzed {
 		return "", "", errors.ErrNoAvailableClusterNode
 	}
@@ -461,7 +518,7 @@ func (c *cluster) Find(sha512Hex string, mapType common.MapType) (string, string
 
 	switch mapType {
 	case common.MT_Read:
-		node = cluster.HighQualityNode()
+		node = cluster.HighQualityNode(cacheFileItem.ExistsIn)
 	default:
 		node = cluster.Master()
 	}
@@ -470,7 +527,7 @@ func (c *cluster) Find(sha512Hex string, mapType common.MapType) (string, string
 		return "", "", errors.ErrNoAvailableActionNode
 	}
 
-	return clusterId, node.Address, nil
+	return cluster.Id, node.Address, nil
 }
 
 var _ Cluster = &cluster{}

@@ -4,15 +4,17 @@ import (
 	"net/http"
 
 	"github.com/freakmaxi/kertish-dfs/manager-node/manager"
+	"go.uber.org/zap"
 )
 
 type nodeRouter struct {
 	manager manager.Node
+	logger  *zap.Logger
 
 	definitions []*Definition
 }
 
-func NewNodeRouter(nodeManager manager.Node) Router {
+func NewNodeRouter(nodeManager manager.Node, logger *zap.Logger) Router {
 	pR := &nodeRouter{
 		manager:     nodeManager,
 		definitions: make([]*Definition, 0),
@@ -37,7 +39,7 @@ func (n *nodeRouter) Get() []*Definition {
 }
 
 func (n *nodeRouter) manipulate(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 
 	switch r.Method {
 	case "POST":

@@ -3,6 +3,7 @@ package routing
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +27,8 @@ func (m *managerRouter) handleGet(w http.ResponseWriter, r *http.Request) {
 		m.handleSync(w, r)
 	case "repair":
 		m.handleRepairConsistency(w, r)
+	case "health":
+		m.handleHealth(w, r)
 	case "move":
 		m.handleMove(w, r)
 	case "balance":
@@ -40,18 +43,19 @@ func (m *managerRouter) handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *managerRouter) handleSync(w http.ResponseWriter, r *http.Request) {
-	clusterId := r.Header.Get("X-Options")
+	clusterId, force := m.describeSyncOptions(r.Header.Get("X-Options"))
 
 	var err error
 	if len(clusterId) == 0 {
-		if errorList := m.health.SyncClusters(); len(errorList) > 0 {
+		if errSync := m.synchronize.QueueClusters(force); errSync != nil {
 			err = errors.ErrSync
 		}
 	} else {
-		err = m.health.SyncClusterById(clusterId)
+		m.synchronize.QueueCluster(clusterId, force)
 	}
 
 	if err == nil {
+		w.WriteHeader(202)
 		return
 	}
 
@@ -59,7 +63,7 @@ func (m *managerRouter) handleSync(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(404)
 	} else {
 		w.WriteHeader(500)
-		m.logger.Error("Sync request is failed", zap.String("clusterId", clusterId), zap.Error(err))
+		m.logger.Error("Sync request is failed", zap.Error(err))
 	}
 
 	e := common.NewError(100, err.Error())
@@ -82,7 +86,7 @@ func (m *managerRouter) handleRepairConsistency(w http.ResponseWriter, r *http.R
 		repairType = manager.RT_Full
 	}
 
-	err := m.health.RepairConsistency(repairType)
+	err := m.repair.Start(repairType)
 	if err == nil {
 		w.WriteHeader(202)
 		return
@@ -100,6 +104,24 @@ func (m *managerRouter) handleRepairConsistency(w http.ResponseWriter, r *http.R
 	e := common.NewError(105, err.Error())
 	if err := json.NewEncoder(w).Encode(e); err != nil {
 		m.logger.Error("Response of repair request is failed", zap.Error(err))
+	}
+}
+
+func (m *managerRouter) handleHealth(w http.ResponseWriter, r *http.Request) {
+	report, err := m.health.Report()
+	if err == nil {
+		if err := json.NewEncoder(w).Encode(report); err != nil {
+			m.logger.Error("Response of health report request result is failed", zap.Error(err))
+		}
+		return
+	}
+
+	w.WriteHeader(500)
+	m.logger.Error("Health report request is failed", zap.Error(err))
+
+	e := common.NewError(140, err.Error())
+	if err := json.NewEncoder(w).Encode(e); err != nil {
+		m.logger.Error("Response of health report request is failed", zap.Error(err))
 	}
 }
 
@@ -174,11 +196,11 @@ func (m *managerRouter) handleClusters(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err == nil {
-		repairDetail := m.health.Operations().RepairDetail()
+		repairStatus := m.repair.Status()
 
-		w.Header().Add("X-Repairing", strconv.FormatBool(repairDetail.Processing))
-		if repairDetail.Timestamp != nil {
-			w.Header().Add("X-Repairing-Timestamp", repairDetail.Timestamp.Format(time.RFC3339))
+		w.Header().Add("X-Repairing", strconv.FormatBool(repairStatus.Processing))
+		if repairStatus.Timestamp != nil {
+			w.Header().Add("X-Repairing-Timestamp", repairStatus.Timestamp.Format(time.RFC3339))
 		}
 
 		if err := json.NewEncoder(w).Encode(clusters); err != nil {
@@ -211,7 +233,7 @@ func (m *managerRouter) handleFind(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err == errors.ErrNotFound {
+	if err == os.ErrNotExist {
 		w.WriteHeader(404)
 	} else if err == errors.ErrNoAvailableClusterNode || err == errors.ErrNoAvailableActionNode {
 		w.WriteHeader(503)
@@ -228,10 +250,24 @@ func (m *managerRouter) handleFind(w http.ResponseWriter, r *http.Request) {
 
 func (m *managerRouter) validateGetAction(action string) bool {
 	switch action {
-	case "sync", "repair", "move", "balance", "clusters", "find":
+	case "sync", "repair", "health", "move", "balance", "clusters", "find":
 		return true
 	}
 	return false
+}
+
+func (m *managerRouter) describeSyncOptions(options string) (string, bool) {
+	clusterId := ""
+
+	pipeIdx := strings.Index(options, "|")
+	if pipeIdx > -1 {
+		clusterId = options[:pipeIdx]
+		options = options[pipeIdx+1:]
+	}
+
+	force := len(options) > 0
+
+	return clusterId, force
 }
 
 func (m *managerRouter) describeMoveOptions(options string) (string, string, bool) {

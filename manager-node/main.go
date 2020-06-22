@@ -26,7 +26,7 @@ func main() {
 	}
 
 	logger, console := log.NewLogger("manager")
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
 	if console {
 		printWelcome()
@@ -40,17 +40,17 @@ func main() {
 	}
 	logger.Sugar().Infof("BIND_ADDRESS: %s", bindAddr)
 
-	healthTrackerIntervalString := os.Getenv("HEALTH_TRACKER_INTERVAL")
-	if len(healthTrackerIntervalString) == 0 {
-		healthTrackerIntervalString = "10"
+	healthCheckIntervalString := os.Getenv("HEALTH_CHECK_INTERVAL")
+	if len(healthCheckIntervalString) == 0 {
+		healthCheckIntervalString = "10"
 	}
-	healthTrackerInterval, err := strconv.ParseUint(healthTrackerIntervalString, 10, 64)
+	healthCheckInterval, err := strconv.ParseUint(healthCheckIntervalString, 10, 64)
 	if err != nil {
-		logger.Error("Health Tracker Interval is wrong", zap.Error(err))
+		logger.Error("Health Check Interval is wrong", zap.Error(err))
 		os.Exit(5)
 	}
-	if healthTrackerInterval > 0 {
-		logger.Sugar().Infof("HEALTH_TRACKER_INTERVAL: %s second(s)", healthTrackerIntervalString)
+	if healthCheckInterval > 0 {
+		logger.Sugar().Infof("HEALTH_CHECK_INTERVAL: %s second(s)", healthCheckIntervalString)
 	}
 
 	mongoConn := os.Getenv("MONGO_CONN")
@@ -65,6 +65,9 @@ func main() {
 		mongoDb = "kertish-dfs"
 	}
 	logger.Sugar().Infof("MONGO_DATABASE: %s", mongoDb)
+
+	mongoTransaction := os.Getenv("MONGO_TRANSACTION")
+	logger.Sugar().Infof("MONGO_TRANSACTION: %t", len(mongoTransaction) > 0)
 
 	redisConn := os.Getenv("REDIS_CONN")
 	if len(redisConn) == 0 {
@@ -92,7 +95,7 @@ func main() {
 		os.Exit(20)
 	}
 
-	conn, err := data.NewConnection(mongoConn)
+	conn, err := data.NewConnection(mongoConn, len(mongoTransaction) > 0)
 	if err != nil {
 		logger.Error("MongoDB Connection is failed", zap.Error(err))
 		os.Exit(21)
@@ -114,7 +117,7 @@ func main() {
 		logger.Error("Cache Client Setup is failed", zap.Error(err))
 		os.Exit(23)
 	}
-	index := data.NewIndex(cacheClient, strings.ReplaceAll(mongoDb, " ", "_"))
+	index := data.NewIndex(m, cacheClient, strings.ReplaceAll(mongoDb, " ", "_"))
 	operation := data.NewOperation(cacheClient, strings.ReplaceAll(mongoDb, " ", "_"))
 
 	metadata, err := data.NewMetadata(m, conn, mongoDb)
@@ -123,34 +126,30 @@ func main() {
 		os.Exit(24)
 	}
 
-	health := manager.NewHealthTracker(dataClusters, index, metadata, operation, logger, time.Second*time.Duration(healthTrackerInterval))
+	synchronize := manager.NewSynchronize(dataClusters, index, logger)
+	repair := manager.NewRepair(dataClusters, metadata, index, operation, synchronize, logger)
+
+	health := manager.NewHealthTracker(dataClusters, index, synchronize, repair, logger, time.Second*time.Duration(healthCheckInterval))
 	health.Start()
 
-	managerCluster, err := manager.NewCluster(dataClusters, index, logger, health)
+	managerCluster, err := manager.NewCluster(dataClusters, index, synchronize, logger)
 	if err != nil {
 		logger.Error("Cluster Manager is failed", zap.Error(err))
 		os.Exit(25)
 	}
-	managerRouter := routing.NewManagerRouter(managerCluster, health, logger)
+	managerRouter := routing.NewManagerRouter(managerCluster, synchronize, repair, health, logger)
 
-	// No need to block start up with cluster sync
-	go func() {
-		logger.Info("Syncing Clusters...")
-		errorList := health.SyncClusters()
-		if len(errorList) > 0 {
-			for _, err := range errorList {
-				logger.Error("Sync is failed", zap.Error(err))
-			}
-			return
-		}
-		logger.Info("Sync is done!")
-	}()
+	if err := managerCluster.Handshake(); err != nil {
+		logger.Error("Handshake is failed with cluster nodes", zap.Error(err))
+	} else {
+		logger.Info("Handshake is completed with cluster nodes...")
+	}
 
 	routerManager := routing.NewManager()
 	routerManager.Add(managerRouter)
 
 	managerNode := manager.NewNode(index, dataClusters, logger)
-	nodeRouter := routing.NewNodeRouter(managerNode)
+	nodeRouter := routing.NewNodeRouter(managerNode, logger)
 	routerManager.Add(nodeRouter)
 
 	proxy := services.NewProxy(bindAddr, routerManager, logger)

@@ -37,8 +37,7 @@ func (r cacheStandalone) HGet(key, field string) (*string, error) {
 	value := radix.MaybeNil{
 		Rcv: &result,
 	}
-	err := r.client.Do(radix.Cmd(&value, "HGET", key, field))
-	if err != nil {
+	if err := r.client.Do(radix.Cmd(&value, "HGET", key, field)); err != nil {
 		return nil, err
 	}
 	if value.Nil {
@@ -56,12 +55,18 @@ func (r cacheStandalone) HDel(key string, fields ...string) error {
 }
 
 func (r cacheStandalone) HGetAll(key string) (map[string]string, error) {
-	var value map[string]string
+	var result map[string]string
+	value := radix.MaybeNil{
+		Rcv: &result,
+	}
 	err := r.client.Do(radix.Cmd(&value, "HGETALL", key))
 	if err != nil {
 		return nil, err
 	}
-	return value, nil
+	if value.Nil {
+		return nil, nil
+	}
+	return result, nil
 }
 
 func (r cacheStandalone) HMSet(key string, values map[string]string) error {
@@ -86,6 +91,9 @@ func (r cacheStandalone) HMSet(key string, values map[string]string) error {
 }
 
 func (r cacheStandalone) Pipeline(commands []radix.CmdAction) error {
+	if len(commands) == 0 {
+		return nil
+	}
 	return r.client.Do(radix.Pipeline(commands...))
 }
 
@@ -105,6 +113,10 @@ func (r cacheStandalone) Get(key string) (*string, error) {
 
 func (r cacheStandalone) Set(key string, value string) error {
 	return r.client.Do(radix.Cmd(nil, "SET", key, value))
+}
+
+func (r cacheStandalone) Do(cmd radix.CmdAction) error {
+	return r.client.Do(cmd)
 }
 
 var _ CacheClient = &cacheStandalone{}

@@ -2,6 +2,8 @@ package data
 
 import "github.com/mediocregopher/radix/v3"
 
+const multiSetStepLimit = 50000
+
 type CacheClient interface {
 	Del(keys ...string) error
 	HSet(key string, field string, value string) error
@@ -13,4 +15,6 @@ type CacheClient interface {
 
 	Get(key string) (*string, error)
 	Set(key string, value string) error
+
+	Do(cmd radix.CmdAction) error
 }

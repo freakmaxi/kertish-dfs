@@ -10,6 +10,7 @@ import (
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"go.uber.org/zap"
 )
 
 func (n *nodeRouter) handlePost(w http.ResponseWriter, r *http.Request) {
@@ -44,6 +45,7 @@ func (n *nodeRouter) handleHandshake(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(404)
 		} else {
 			w.WriteHeader(500)
+			n.logger.Error("Node handshake request is failed", zap.Error(err))
 		}
 		return
 	}
@@ -60,11 +62,12 @@ func (n *nodeRouter) handleSyncCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := n.manager.Create(nodeId, fileItemList); err != nil {
+	if err := n.manager.Notify(nodeId, fileItemList, true); err != nil {
 		if err == errors.ErrNotFound {
 			w.WriteHeader(404)
 		} else {
 			w.WriteHeader(500)
+			n.logger.Error("Node sync create request is failed", zap.Error(err))
 		}
 		return
 	}

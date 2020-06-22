@@ -58,12 +58,18 @@ func (r cacheCluster) HDel(key string, fields ...string) error {
 }
 
 func (r cacheCluster) HGetAll(key string) (map[string]string, error) {
-	var value map[string]string
+	var result map[string]string
+	value := radix.MaybeNil{
+		Rcv: &result,
+	}
 	err := r.cluster.Do(radix.Cmd(&value, "HGETALL", key))
 	if err != nil {
 		return nil, err
 	}
-	return value, nil
+	if value.Nil {
+		return nil, nil
+	}
+	return result, nil
 }
 
 func (r cacheCluster) HMSet(key string, values map[string]string) error {
@@ -88,6 +94,9 @@ func (r cacheCluster) HMSet(key string, values map[string]string) error {
 }
 
 func (r cacheCluster) Pipeline(commands []radix.CmdAction) error {
+	if len(commands) == 0 {
+		return nil
+	}
 	return r.cluster.Do(radix.Pipeline(commands...))
 }
 
@@ -107,6 +116,10 @@ func (r cacheCluster) Get(key string) (*string, error) {
 
 func (r cacheCluster) Set(key string, value string) error {
 	return r.cluster.Do(radix.Cmd(nil, "SET", key, value))
+}
+
+func (r cacheCluster) Do(cmd radix.CmdAction) error {
+	return r.cluster.Do(cmd)
 }
 
 var _ CacheClient = &cacheCluster{}

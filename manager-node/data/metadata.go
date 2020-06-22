@@ -39,7 +39,10 @@ func NewMetadata(mutex mutex.LockingCenter, conn *Connection, database string) (
 	}, nil
 }
 
-func (m *metadata) context() context.Context {
+func (m *metadata) context(sc context.Context) context.Context {
+	if sc != nil && m.conn.transaction {
+		return sc
+	}
 	ctx, _ := context.WithTimeout(context.Background(), time.Second*30)
 	return ctx
 }
@@ -53,7 +56,7 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 	}
 	defer close(semaphoreChan)
 
-	total, err := m.col.CountDocuments(m.context(), bson.M{})
+	total, err := m.col.CountDocuments(m.context(nil), bson.M{})
 	if err != nil {
 		return err
 	}
@@ -63,14 +66,14 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 	opts.SetProjection(bson.M{"_id": 1, "full": 1})
 	opts.SetNoCursorTimeout(true)
 
-	cursor, err := m.col.Find(m.context(), bson.M{}, opts)
+	cursor, err := m.col.Find(m.context(nil), bson.M{}, opts)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return os.ErrNotExist
 		}
 		return err
 	}
-	defer cursor.Close(m.context())
+	defer func() { _ = cursor.Close(m.context(nil)) }()
 
 	handlerFunc := func(wg *sync.WaitGroup, id primitive.ObjectID, folderPath string, errorChan chan error) {
 		defer wg.Done()
@@ -80,7 +83,7 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 		defer m.mutex.Unlock(folderPath)
 
 		var folder *common.Folder
-		if err := m.col.FindOne(m.context(), bson.M{"_id": id}).Decode(&folder); err != nil {
+		if err := m.col.FindOne(m.context(nil), bson.M{"_id": id}).Decode(&folder); err != nil {
 			if err == mongo.ErrNoDocuments {
 				return
 			}
@@ -106,7 +109,7 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 	wg := &sync.WaitGroup{}
 	errorChan := make(chan error, parallelSize)
 
-	for cursor.Next(m.context()) {
+	for cursor.Next(m.context(nil)) {
 		id := cursor.Current.Lookup("_id").ObjectID()
 		folderPath := cursor.Current.Lookup("full").StringValue()
 
@@ -162,17 +165,17 @@ func (m *metadata) LockTree(folderHandler func(folders []*common.Folder) ([]*com
 
 	filter := bson.M{"full": bson.M{"$regex": primitive.Regex{Pattern: "^/.*"}}}
 
-	cursor, err := m.col.Find(m.context(), filter, opts)
+	cursor, err := m.col.Find(m.context(nil), filter, opts)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return os.ErrNotExist
 		}
 		return err
 	}
-	defer cursor.Close(m.context())
+	defer func() { _ = cursor.Close(m.context(nil)) }()
 
 	folders := make([]*common.Folder, 0)
-	for cursor.Next(m.context()) {
+	for cursor.Next(m.context(nil)) {
 		var folder *common.Folder
 		if err := cursor.Decode(&folder); err != nil {
 			return err
@@ -198,7 +201,7 @@ func (m *metadata) save(folders []*common.Folder, upsert bool) error {
 		return err
 	}
 
-	if err = mongo.WithSession(m.context(), session, func(sc mongo.SessionContext) error {
+	if err = mongo.WithSession(m.context(nil), session, func(sc mongo.SessionContext) error {
 		if err = sc.StartTransaction(); err != nil {
 			return err
 		}
@@ -207,17 +210,17 @@ func (m *metadata) save(folders []*common.Folder, upsert bool) error {
 			filter := bson.M{"full": folder.Full}
 
 			opts := (&options.UpdateOptions{}).SetUpsert(upsert)
-			if _, err := m.col.UpdateOne(m.context(), filter, bson.M{"$set": folder}, opts); err != nil {
+			if _, err := m.col.UpdateOne(m.context(sc), filter, bson.M{"$set": folder}, opts); err != nil {
 				return err
 			}
 		}
 
-		return sc.CommitTransaction(m.context())
+		return sc.CommitTransaction(m.context(sc))
 	}); err != nil {
 		return err
 	}
 
-	session.EndSession(m.context())
+	session.EndSession(m.context(nil))
 
 	return nil
 }

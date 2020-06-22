@@ -9,245 +9,424 @@ import (
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"github.com/freakmaxi/locking-center-client-go/mutex"
 	"github.com/mediocregopher/radix/v3"
 )
 
-const multiSetStepLimit = 50000
+const bulkOperationLimit = 50000
+const semaphoreLimit = 10
 
 type Index interface {
-	Add(clusterId string, fileItem common.SyncFileItem) error
-	AddBulk(clusterId string, fileItemList common.SyncFileItemList) error
-	Find(clusterIds []string, sha512Hex string) (string, *common.SyncFileItem, error)
-	List(clusterId string) (common.SyncFileItemList, error)
-	Remove(clusterId string, sha512Hex string) error
-	RemoveBulk(clusterId string, sha512HexList []string) error
-	Replace(clusterId string, fileItemList common.SyncFileItemList) error
-	Compare(clusterId string, fileItemList common.SyncFileItemList) (uint64, error)
-	Extract(clusterId string, fileItemList common.SyncFileItemList) (common.SyncFileItemList, error)
+	ReplaceBulk(items common.CacheFileItemMap) error
+	UpdateChunkNodeBulk(sha512HexList []string, nodeId string, exists bool) error
+	DropBulk(clusterId string, sha512HexList []string) error
+
+	Get(sha512Hex string) (*common.CacheFileItem, error)
+	Replace(item common.CacheFileItem) error
+	UpdateChunkNode(sha512Hex string, nodeId string, exists bool) error
+	Drop(clusterId string, sha512Hex string) error
+
+	PutMap(clusterId string, items common.SyncFileItemMap) error
+	UpdateUsageInMap(clusterId string, items common.SyncFileItemList) error
+	PullMap(clusterId string) (map[string]string, error)
+	CompareMap(clusterId string, items common.SyncFileItemMap) bool
+	DropMap(clusterId string) error
 }
 
 type index struct {
-	mutex *sync.Mutex
-
+	mutex     mutex.LockingCenter
 	client    CacheClient
 	keyPrefix string
 }
 
-func NewIndex(client CacheClient, keyPrefix string) Index {
+type keySuffix string
+
+var (
+	ksEmpty      keySuffix = ""
+	ksChunk      keySuffix = "chunk"
+	ksChunkNodes keySuffix = "chunk_nodes"
+	ksCluster    keySuffix = "cluster"
+)
+
+func NewIndex(mutex mutex.LockingCenter, client CacheClient, keyPrefix string) Index {
 	return &index{
+		mutex:     mutex,
 		client:    client,
 		keyPrefix: keyPrefix,
-		mutex:     &sync.Mutex{},
 	}
 }
 
-func (i *index) key(name string) string {
-	return fmt.Sprintf("%s_index_%s", i.keyPrefix, name)
-}
-
-func (i *index) Add(clusterId string, fileItem common.SyncFileItem) error {
-	i.mutex.Lock()
-	defer i.mutex.Unlock()
-
-	return i.client.HSet(i.key(clusterId), fileItem.Sha512Hex, fmt.Sprintf("%s|%d", clusterId, fileItem.Size))
-}
-
-func (i *index) AddBulk(clusterId string, fileItemList common.SyncFileItemList) error {
-	if len(fileItemList) == 0 {
-		return nil
+func (i *index) key(name string, suffix keySuffix) string {
+	key := fmt.Sprintf("%s_index_%s", i.keyPrefix, name)
+	if len(suffix) == 0 {
+		return key
 	}
+	return fmt.Sprintf("%s_%s", key, suffix)
+}
 
-	i.mutex.Lock()
-	defer i.mutex.Unlock()
+func (i *index) replaceCommand(item *common.CacheFileItem) []radix.CmdAction {
+	chunkKey := i.key(item.FileItem.Sha512Hex, ksChunk)
+	chunkNodesKey := i.key(item.FileItem.Sha512Hex, ksChunkNodes)
+	clusterKey := i.key(item.ClusterId, ksCluster)
 
 	commands := make([]radix.CmdAction, 0)
-	for _, fileItem := range fileItemList {
-		commands = append(commands,
-			radix.Cmd(nil, "HSET", i.key(clusterId),
-				fileItem.Sha512Hex, fmt.Sprintf("%s|%d", clusterId, fileItem.Size)))
-	}
 
-	return i.client.Pipeline(commands)
+	chunkArgs := make([]string, 0)
+	chunkArgs = append(chunkArgs, chunkKey)
+	chunkArgs = append(chunkArgs, item.KeyValues()...)
+
+	commands = append(commands, radix.Cmd(nil, "HMSET", chunkArgs...))
+	commands = append(commands,
+		radix.Cmd(nil, "EXPIREAT", chunkKey, strconv.FormatInt(item.ExpiresAt.Unix(), 10)))
+
+	chunkNodeArgs := make([]string, 0)
+	chunkNodeArgs = append(chunkNodeArgs, chunkNodesKey)
+	chunkNodeArgs = append(chunkNodeArgs, item.NodesKeyValues()...)
+
+	commands = append(commands, radix.Cmd(nil, "HMSET", chunkNodeArgs...))
+	commands = append(commands,
+		radix.Cmd(nil, "EXPIREAT", chunkNodesKey, strconv.FormatInt(item.ExpiresAt.Unix(), 10)))
+
+	commands = append(commands,
+		radix.Cmd(nil, "HSET", clusterKey, item.FileItem.Sha512Hex, fmt.Sprintf("%s|%d", item.ClusterId, item.FileItem.Usage)))
+
+	return commands
 }
 
-func (i *index) Find(clusterIds []string, sha512Hex string) (string, *common.SyncFileItem, error) {
-	i.mutex.Lock()
-	defer i.mutex.Unlock()
+func (i *index) dropCommand(clusterId string, sha512Hex string) []radix.CmdAction {
+	commands := make([]radix.CmdAction, 0)
+	commands = append(commands,
+		radix.Cmd(nil, "DEL", i.key(sha512Hex, ksChunk)))
+	commands = append(commands,
+		radix.Cmd(nil, "DEL", i.key(sha512Hex, ksChunkNodes)))
+	commands = append(commands,
+		radix.Cmd(nil, "HDEL", i.key(clusterId, ksCluster), sha512Hex))
 
-	for _, clusterId := range clusterIds {
-		chunkInfo, err := i.client.HGet(i.key(clusterId), sha512Hex)
-		if err != nil {
-			return "", nil, err
-		}
-		if chunkInfo == nil {
-			continue
-		}
-
-		parts := strings.Split(*chunkInfo, "|")
-		if len(parts) != 2 {
-			return "", nil, errors.ErrNotFound
-		}
-
-		size, err := strconv.ParseUint(parts[1], 10, 64)
-		if err != nil {
-			return "", nil, err
-		}
-
-		return parts[0], &common.SyncFileItem{Sha512Hex: sha512Hex, Size: int32(size)}, nil
-	}
-	return "", nil, errors.ErrNotFound
+	return commands
 }
 
-func (i *index) List(clusterId string) (common.SyncFileItemList, error) {
-	fileItemList := make(common.SyncFileItemList, 0)
+func (i *index) mapToSlots(commands []radix.CmdAction, commandSlotsMap map[uint16][]radix.CmdAction) int {
+	count := 0
 
-	if err := i.lock(clusterId, func(index map[string]string) error {
-		for k, v := range index {
-			parts := strings.Split(v, "|")
-			if len(parts) != 2 {
-				continue
+	for _, command := range commands {
+		for _, key := range command.Keys() {
+			slot := radix.ClusterSlot([]byte(key))
+
+			if _, has := commandSlotsMap[slot]; !has {
+				commandSlotsMap[slot] = make([]radix.CmdAction, 0)
 			}
 
-			size, err := strconv.ParseUint(parts[1], 10, 64)
-			if err != nil {
-				continue
-			}
-
-			fileItemList = append(fileItemList, common.SyncFileItem{
-				Sha512Hex: k,
-				Size:      int32(size),
-			})
+			commandSlotsMap[slot] = append(commandSlotsMap[slot], command)
+			count++
 		}
-
-		return os.ErrInvalid
-	}); err != nil && err != os.ErrInvalid {
-		return nil, err
 	}
 
-	return fileItemList, nil
+	return count
 }
 
-func (i *index) Remove(clusterId string, sha512Hex string) error {
-	i.mutex.Lock()
-	defer i.mutex.Unlock()
+func (i *index) executeCommandSlots(commandSlotsMap map[uint16][]radix.CmdAction) (resultErr error) {
+	errorsMutex := sync.Mutex{}
+	appendToErrorsFunc := func(err error) {
+		errorsMutex.Lock()
+		defer errorsMutex.Unlock()
 
-	return i.client.HDel(i.key(clusterId), sha512Hex)
+		if resultErr == nil {
+			resultErr = errors.NewBulkError()
+		}
+		resultErr.(*errors.BulkError).Add(err)
+	}
+
+	semaphoreChan := make(chan bool, semaphoreLimit)
+	for i := 0; i < cap(semaphoreChan); i++ {
+		semaphoreChan <- true
+	}
+	defer close(semaphoreChan)
+
+	executionFunc := func(wg *sync.WaitGroup, slotCommands []radix.CmdAction) {
+		defer wg.Done()
+		defer func() { semaphoreChan <- true }()
+
+		if err := i.client.Pipeline(slotCommands); err != nil {
+			appendToErrorsFunc(err)
+		}
+	}
+
+	wg := &sync.WaitGroup{}
+	for _, slotCommands := range commandSlotsMap {
+		wg.Add(1)
+		go executionFunc(wg, slotCommands)
+
+		<-semaphoreChan
+	}
+	wg.Wait()
+
+	return
 }
 
-func (i *index) RemoveBulk(clusterId string, sha512HexList []string) error {
+func (i *index) DropBulk(clusterId string, sha512HexList []string) error {
 	if len(sha512HexList) == 0 {
 		return nil
 	}
 
-	i.mutex.Lock()
-	defer i.mutex.Unlock()
+	key := i.key("bulk", ksEmpty)
 
-	commands := make([]radix.CmdAction, 0)
+	i.mutex.Lock(key)
+	defer i.mutex.Unlock(key)
+
+	count := 0
+	commandSlotsMap := make(map[uint16][]radix.CmdAction)
+
 	for _, sha512Hex := range sha512HexList {
-		commands = append(commands,
-			radix.Cmd(nil, "HDEL", i.key(clusterId), sha512Hex))
-	}
+		dropCommands := i.dropCommand(clusterId, sha512Hex)
+		count += i.mapToSlots(dropCommands, commandSlotsMap)
 
-	return i.client.Pipeline(commands)
-}
-
-func (i *index) Replace(clusterId string, fileItemList common.SyncFileItemList) error {
-	if fileItemList == nil {
-		fileItemList = make(common.SyncFileItemList, 0)
-	}
-
-	return i.lock(clusterId, func(index map[string]string) error {
-		for k := range index {
-			delete(index, k)
-		}
-
-		for _, fileItem := range fileItemList {
-			index[fileItem.Sha512Hex] = fmt.Sprintf("%s|%d", clusterId, fileItem.Size)
-		}
-		return nil
-	})
-}
-
-func (i *index) Compare(clusterId string, fileItemList common.SyncFileItemList) (uint64, error) {
-	failed := uint64(0)
-	err := i.lock(clusterId, func(index map[string]string) error {
-		indexShadow := make(map[string]string)
-		for k, v := range index {
-			indexShadow[k] = v
-		}
-
-		for _, fileItem := range fileItemList {
-			delete(indexShadow, fileItem.Sha512Hex)
-		}
-		failed = uint64(len(indexShadow))
-
-		return nil
-	})
-
-	return failed, err
-}
-
-func (i *index) Extract(clusterId string, fileItemList common.SyncFileItemList) (common.SyncFileItemList, error) {
-	var extractedList common.SyncFileItemList
-	err := i.lock(clusterId, func(index map[string]string) error {
-		indexShadow := make(map[string]string)
-		for k, v := range index {
-			indexShadow[k] = v
-		}
-
-		for _, fileItem := range fileItemList {
-			delete(indexShadow, fileItem.Sha512Hex)
-		}
-
-		extractedList = make(common.SyncFileItemList, 0)
-		for k, v := range indexShadow {
-			parts := strings.Split(v, "|")
-			if len(parts) != 2 {
-				continue
+		if count >= bulkOperationLimit {
+			if err := i.executeCommandSlots(commandSlotsMap); err != nil {
+				return err
 			}
 
-			size, err := strconv.ParseUint(parts[1], 10, 64)
-			if err != nil {
-				continue
-			}
-
-			extractedList = append(extractedList, common.SyncFileItem{
-				Sha512Hex: k,
-				Size:      int32(size),
-			})
+			count = 0
+			commandSlotsMap = make(map[uint16][]radix.CmdAction)
 		}
+	}
 
-		return nil
-	})
-	return extractedList, err
+	return i.executeCommandSlots(commandSlotsMap)
 }
 
-func (i index) lock(clusterId string, lockHandler func(index map[string]string) error) error {
-	i.mutex.Lock()
-	defer i.mutex.Unlock()
+func (i *index) Replace(item common.CacheFileItem) error {
+	i.mutex.Wait(i.key("bulk", ksEmpty))
 
-	indexKey := i.key(clusterId)
-	index, err := i.client.HGetAll(indexKey)
+	key := i.key(item.FileItem.Sha512Hex, ksEmpty)
+
+	i.mutex.Lock(key)
+	defer i.mutex.Unlock(key)
+
+	commandSlotsMap := make(map[uint16][]radix.CmdAction)
+
+	replaceCommands := i.replaceCommand(&item)
+	_ = i.mapToSlots(replaceCommands, commandSlotsMap)
+
+	return i.executeCommandSlots(commandSlotsMap)
+}
+
+func (i *index) ReplaceBulk(items common.CacheFileItemMap) error {
+	if len(items) == 0 {
+		return nil
+	}
+
+	key := i.key("bulk", ksEmpty)
+
+	i.mutex.Lock(key)
+	defer i.mutex.Unlock(key)
+
+	count := 0
+	commandSlotMap := make(map[uint16][]radix.CmdAction)
+
+	for _, item := range items {
+		commands := i.replaceCommand(item)
+		count += i.mapToSlots(commands, commandSlotMap)
+
+		if count >= bulkOperationLimit {
+			if err := i.executeCommandSlots(commandSlotMap); err != nil {
+				return err
+			}
+
+			count = 0
+			commandSlotMap = make(map[uint16][]radix.CmdAction)
+		}
+	}
+
+	return i.executeCommandSlots(commandSlotMap)
+}
+
+func (i *index) UpdateChunkNode(sha512Hex string, nodeId string, exists bool) error {
+	i.mutex.Wait(i.key("bulk", ksEmpty))
+
+	key := i.key(sha512Hex, ksEmpty)
+
+	i.mutex.Lock(key)
+	defer i.mutex.Unlock(key)
+
+	return i.client.Do(
+		radix.Cmd(nil, "HSET",
+			i.key(sha512Hex, ksChunkNodes),
+			nodeId,
+			strconv.FormatBool(exists),
+		),
+	)
+}
+
+func (i *index) UpdateChunkNodeBulk(sha512HexList []string, nodeId string, exists bool) error {
+	if len(sha512HexList) == 0 {
+		return nil
+	}
+
+	key := i.key("bulk", ksEmpty)
+
+	i.mutex.Lock(key)
+	defer i.mutex.Unlock(key)
+
+	count := 0
+	commandSlotMap := make(map[uint16][]radix.CmdAction)
+
+	for _, sha512Hex := range sha512HexList {
+		count += i.mapToSlots(
+			[]radix.CmdAction{
+				radix.Cmd(nil, "HSET",
+					i.key(sha512Hex, ksChunkNodes),
+					nodeId,
+					strconv.FormatBool(exists),
+				),
+			},
+			commandSlotMap,
+		)
+
+		if count >= bulkOperationLimit {
+			if err := i.executeCommandSlots(commandSlotMap); err != nil {
+				return err
+			}
+
+			count = 0
+			commandSlotMap = make(map[uint16][]radix.CmdAction)
+		}
+	}
+
+	return i.executeCommandSlots(commandSlotMap)
+}
+
+func (i *index) Get(sha512Hex string) (*common.CacheFileItem, error) {
+	chunkKey := i.key(sha512Hex, ksChunk)
+
+	c, err := i.client.HGetAll(chunkKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if index == nil {
-		index = make(map[string]string, 0)
-	}
-
-	if err := lockHandler(index); err != nil {
-		return err
+	if c == nil {
+		return nil, os.ErrNotExist
 	}
 
-	if err := i.client.Del(indexKey); err != nil {
-		return err
+	item := common.NewCacheFileItemFromMap(c)
+	if item.Expired() {
+		return nil, os.ErrNotExist
 	}
 
-	if len(index) > 0 {
-		return i.client.HMSet(indexKey, index)
+	chunkNodeKey := i.key(sha512Hex, ksChunkNodes)
+	cn, err := i.client.HGetAll(chunkNodeKey)
+	if err != nil {
+		return nil, err
+	}
+	if cn != nil {
+		for k, v := range cn {
+			nodeState, err := strconv.ParseBool(v)
+			if err != nil {
+				nodeState = false
+			}
+			item.ExistsIn[k] = nodeState
+		}
 	}
 
-	return nil
+	return item, nil
+}
+
+func (i *index) Drop(clusterId string, sha512Hex string) error {
+	i.mutex.Wait(i.key("bulk", ksEmpty))
+
+	key := i.key(sha512Hex, ksEmpty)
+
+	i.mutex.Lock(key)
+	defer i.mutex.Unlock(key)
+
+	commandSlotsMap := make(map[uint16][]radix.CmdAction)
+
+	dropCommands := i.dropCommand(clusterId, sha512Hex)
+	_ = i.mapToSlots(dropCommands, commandSlotsMap)
+
+	return i.executeCommandSlots(commandSlotsMap)
+}
+
+func (i *index) PutMap(clusterId string, items common.SyncFileItemMap) error {
+	sha512HexMap := make(map[string]string)
+
+	for _, item := range items {
+		sha512HexMap[item.Sha512Hex] = fmt.Sprintf("%s|%d", clusterId, item.Usage)
+	}
+
+	return i.client.HMSet(i.key(clusterId, ksCluster), sha512HexMap)
+}
+
+func (i *index) UpdateUsageInMap(clusterId string, fileItemList common.SyncFileItemList) error {
+	if len(fileItemList) == 0 {
+		return nil
+	}
+
+	key := i.key("bulk", ksEmpty)
+
+	i.mutex.Lock(key)
+	defer i.mutex.Unlock(key)
+
+	clusterKey := i.key(clusterId, ksCluster)
+
+	count := 0
+	commandSlotMap := make(map[uint16][]radix.CmdAction)
+
+	for _, fileItem := range fileItemList {
+		chunkKey := i.key(fileItem.Sha512Hex, ksChunk)
+
+		count += i.mapToSlots(
+			[]radix.CmdAction{
+				radix.Cmd(nil, "HSET",
+					chunkKey,
+					"usage",
+					strconv.FormatUint(uint64(fileItem.Usage), 10),
+				),
+				radix.Cmd(nil, "HSET",
+					clusterKey,
+					fileItem.Sha512Hex,
+					fmt.Sprintf("%s|%d", clusterId, fileItem.Usage),
+				),
+			},
+			commandSlotMap,
+		)
+
+		if count >= bulkOperationLimit {
+			if err := i.executeCommandSlots(commandSlotMap); err != nil {
+				return err
+			}
+
+			count = 0
+			commandSlotMap = make(map[uint16][]radix.CmdAction)
+		}
+	}
+
+	return i.executeCommandSlots(commandSlotMap)
+}
+
+func (i *index) PullMap(clusterId string) (map[string]string, error) {
+	return i.client.HGetAll(i.key(clusterId, ksCluster))
+}
+
+func (i *index) CompareMap(clusterId string, items common.SyncFileItemMap) bool {
+	cachedMap, err := i.PullMap(clusterId)
+	if err != nil {
+		return false
+	}
+
+	for sha512Hex, itemValue := range cachedMap {
+		fileItem, has := items[sha512Hex]
+		if !has {
+			return false
+		}
+		compareValue := fmt.Sprintf("%s|%d", clusterId, fileItem.Usage)
+		if strings.Compare(itemValue, compareValue) != 0 {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (i *index) DropMap(clusterId string) error {
+	return i.client.Del(i.key(clusterId, ksCluster))
 }
 
 var _ Index = &index{}

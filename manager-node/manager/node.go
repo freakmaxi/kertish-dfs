@@ -2,7 +2,6 @@ package manager
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
@@ -14,15 +13,14 @@ const retryLimit = 10
 
 type Node interface {
 	Handshake(nodeHardwareAddr string, nodeAddress string, size uint64) (string, string, string, error)
-	Create(nodeId string, fileItemList common.SyncFileItemList) error
-	Delete(nodeId string, syncDeleteList common.SyncDeleteList) error
+	Notify(nodeId string, fileItemList common.SyncFileItemList, create bool) error
 }
 
 type node struct {
 	index    data.Index
 	clusters data.Clusters
 
-	syncManager *syncManager
+	nodeSyncManager *nodeSyncManager
 }
 
 type targetContainer struct {
@@ -43,9 +41,9 @@ type nodeSync struct {
 
 func NewNode(index data.Index, clusters data.Clusters, logger *zap.Logger) Node {
 	return &node{
-		index:       index,
-		clusters:    clusters,
-		syncManager: newWorkerManager(logger),
+		index:           index,
+		clusters:        clusters,
+		nodeSyncManager: newNodeSyncManager(index, logger),
 	}
 }
 
@@ -83,75 +81,93 @@ func (n *node) Handshake(nodeHardwareAddr string, nodeAddress string, size uint6
 	return cluster.Id, node.Id, syncSourceAddrBind, nil
 }
 
-func (n *node) Create(nodeId string, fileItemList common.SyncFileItemList) error {
+func (n *node) Notify(nodeId string, fileItemList common.SyncFileItemList, create bool) error {
+	if create {
+		return n.create(nodeId, fileItemList)
+	}
+	return n.delete(nodeId, fileItemList)
+}
+
+func (n *node) create(nodeId string, fileItemList common.SyncFileItemList) error {
 	clusterId, err := n.clusters.ClusterIdOf(nodeId)
 	if err != nil {
 		return err
 	}
 
-	if err := n.index.AddBulk(clusterId, fileItemList); err != nil {
-		return fmt.Errorf("adding to index failed: \n        error: %s\n    clusterId: %s\n%s\n", clusterId, fileItemList, err.Error())
-	}
-
 	cluster, err := n.clusters.Get(clusterId)
 	if err != nil {
-		return fmt.Errorf("getting cluster is failed: \n        error: %s\n    clusterId: %s\n%s\n", clusterId, fileItemList, err.Error())
+		return fmt.Errorf("getting cluster is failed. clusterId: %s, error: %s", clusterId, err)
 	}
 
 	sourceNode := cluster.Node(nodeId)
 	targetNodes := cluster.Others(nodeId)
 	if targetNodes == nil {
-		return fmt.Errorf("node id didn't match to get others: %s\n", nodeId)
-	}
-	if len(targetNodes) == 0 {
-		return nil // nothing to sync
+		return fmt.Errorf("node id didn't match to get others: %s", nodeId)
 	}
 
+	cacheFileItems := make(common.CacheFileItemMap, 0)
+	nodeSyncItems := make([]*nodeSync, 0)
+
 	for _, fileItem := range fileItemList {
-		n.syncManager.Queue(
-			&nodeSync{
-				create:     true,
-				date:       time.Now().UTC(),
-				clusterId:  cluster.Id,
-				sourceAddr: sourceNode.Address,
-				sha512Hex:  fileItem.Sha512Hex,
-				targets:    n.makeTargetContainerList(targetNodes),
-			})
+		cacheFileItems[fileItem.Sha512Hex] = common.NewCacheFileItem(clusterId, nodeId, fileItem)
+
+		if len(targetNodes) == 0 {
+			continue
+		}
+
+		nodeSyncItems = append(nodeSyncItems, &nodeSync{
+			create:     true,
+			date:       time.Now().UTC(),
+			clusterId:  cluster.Id,
+			sourceAddr: sourceNode.Address,
+			sha512Hex:  fileItem.Sha512Hex,
+			targets:    n.makeTargetContainerList(targetNodes),
+		})
 	}
+
+	if err := n.index.ReplaceBulk(cacheFileItems); err != nil {
+		return fmt.Errorf("adding to index failed. clusterId: %s, error: %s", clusterId, err)
+	}
+
+	n.nodeSyncManager.QueueMany(nodeSyncItems)
 
 	return nil
 }
 
-func (n *node) Delete(nodeId string, syncDeleteList common.SyncDeleteList) error {
+func (n *node) delete(nodeId string, fileItemList common.SyncFileItemList) error {
 	clusterId, err := n.clusters.ClusterIdOf(nodeId)
 	if err != nil {
 		return err
 	}
 
 	return n.clusters.Save(clusterId, func(cluster *common.Cluster) error {
-		wiped := syncDeleteList.Wiped()
-		if err := n.index.RemoveBulk(cluster.Id, wiped); err != nil {
-			return fmt.Errorf("removing from index failed: \n    clusterId: %s\n    sha512Hex: %s\n        error: %s\n", clusterId, strings.Join(wiped, ","), err.Error())
-		}
-		cluster.Used -= syncDeleteList.Size()
-
 		sourceNode := cluster.Node(nodeId)
 		targetNodes := cluster.Others(nodeId)
 		if targetNodes == nil {
 			return fmt.Errorf("node id didn't match to get others: %s\n", nodeId)
 		}
+
+		if err := n.index.UpdateUsageInMap(cluster.Id, fileItemList.ShadowItems()); err != nil {
+			return fmt.Errorf("updating index failed: error: %s", err)
+		}
+
+		if err := n.index.DropBulk(cluster.Id, fileItemList.PhysicalFiles()); err != nil {
+			return fmt.Errorf("removing from index failed: error: %s", err)
+		}
+		cluster.Used -= fileItemList.PhysicalSize()
+
 		if len(targetNodes) == 0 {
 			return nil // nothing to sync
 		}
 
-		for _, syncDelete := range syncDeleteList {
-			n.syncManager.Queue(
+		for _, fileItem := range fileItemList {
+			n.nodeSyncManager.QueueOne(
 				&nodeSync{
 					create:     false,
 					date:       time.Now().UTC(),
 					clusterId:  cluster.Id,
 					sourceAddr: sourceNode.Address,
-					sha512Hex:  syncDelete.Sha512Hex,
+					sha512Hex:  fileItem.Sha512Hex,
 					targets:    n.makeTargetContainerList(targetNodes),
 				})
 		}
