@@ -26,7 +26,7 @@ func CreateCluster(managerAddr []string, addresses []string) error {
 	if err != nil {
 		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode != 200 {
 		var e common.Error
@@ -64,7 +64,7 @@ func DeleteCluster(managerAddr []string, clusterId string) error {
 	if err != nil {
 		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode != 200 {
 		var e common.Error
@@ -91,7 +91,7 @@ func MoveCluster(managerAddr []string, clusterIds []string) error {
 	if err != nil {
 		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode != 200 {
 		if res.StatusCode == 422 {
@@ -120,7 +120,7 @@ func BalanceClusters(managerAddr []string, clusterIds []string) error {
 	if err != nil {
 		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode != 200 {
 		if res.StatusCode == 422 {
@@ -149,7 +149,7 @@ func AddNode(managerAddr []string, clusterId string, addresses []string) error {
 	if err != nil {
 		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode != 200 {
 		var e common.Error
@@ -187,7 +187,7 @@ func RemoveNode(managerAddr []string, nodeId string) error {
 	if err != nil {
 		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode != 200 {
 		var e common.Error
@@ -214,7 +214,7 @@ func Unfreeze(managerAddr []string, clusterIds []string) error {
 	if err != nil {
 		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode != 200 {
 		var e common.Error
@@ -241,7 +241,7 @@ func CreateSnapshot(managerAddr []string, clusterId string) error {
 	if err != nil {
 		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode != 200 {
 		if res.StatusCode == 422 {
@@ -270,7 +270,7 @@ func DeleteSnapshot(managerAddr []string, clusterId string, snapshotIndex uint64
 	if err != nil {
 		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode != 200 {
 		if res.StatusCode == 422 {
@@ -299,7 +299,7 @@ func RestoreSnapshot(managerAddr []string, clusterId string, snapshotIndex uint6
 	if err != nil {
 		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode != 200 {
 		if res.StatusCode == 422 {
@@ -316,20 +316,21 @@ func RestoreSnapshot(managerAddr []string, clusterId string, snapshotIndex uint6
 	return nil
 }
 
-func SyncClusters(managerAddr []string) error {
+func SyncClusters(managerAddr []string, clusterId string, force bool) error {
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("X-Action", "sync")
+	req.Header.Set("X-Options", fmt.Sprintf("%s|%t", clusterId, force))
 
 	res, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
-	if res.StatusCode != 200 {
+	if res.StatusCode != 202 {
 		var e common.Error
 		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
 			return err
@@ -352,7 +353,7 @@ func RepairConsistency(managerAddr []string, repairModel string) error {
 	if err != nil {
 		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode != 202 {
 		var e common.Error
@@ -377,7 +378,7 @@ func GetClusters(managerAddr []string, clusterId string) error {
 	if err != nil {
 		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode != 200 {
 		var e common.Error
@@ -449,6 +450,62 @@ func GetClusters(managerAddr []string, clusterId string) error {
 					fmt.Printf("      Repairing:       Completed at %s\n", repairCompletedTime.Local().Format(common.FriendlyTimeFormatWithSeconds))
 				}
 			}
+		}
+		fmt.Println()
+	}
+
+	return nil
+}
+
+func GetReport(managerAddr []string) error {
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Action", "health")
+
+	res, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("%s: manager node is not reachable", managerAddr[0])
+	}
+	defer func() { _ = res.Body.Close() }()
+
+	if res.StatusCode != 200 {
+		var e common.Error
+		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
+			return err
+		}
+		return fmt.Errorf(e.Message)
+	}
+
+	var r map[string]common.NodeList
+	if err := json.NewDecoder(res.Body).Decode(&r); err != nil {
+		return err
+	}
+
+	for clusterId, nodeList := range r {
+		fmt.Printf("Cluster Details: %s\n", clusterId)
+		for i, n := range nodeList {
+			mode := "(SLAVE) "
+			if n.Master {
+				mode = "(MASTER)"
+			}
+
+			status := "Online"
+			switch n.Quality {
+			case -2:
+				status = "Dns Error"
+			case -1:
+				status = "Paralysed"
+			default:
+				status = fmt.Sprintf("%s (%d ms)", status, n.Quality)
+			}
+
+			if i == 0 {
+				fmt.Printf("      Data Node: %s %s %s -> %s\n", n.Id, n.Address, mode, status)
+				continue
+			}
+			fmt.Printf("                 %s %s %s -> %s\n", n.Id, n.Address, mode, status)
 		}
 		fmt.Println()
 	}

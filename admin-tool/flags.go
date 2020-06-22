@@ -52,9 +52,12 @@ type flagContainer struct {
 	createSnapshot     string
 	deleteSnapshot     string
 	restoreSnapshot    string
+	syncCluster        string
 	syncClusters       bool
+	clustersReport     bool
 	getCluster         string
 	getClusters        bool
+	force              bool
 	help               bool
 	version            bool
 
@@ -186,9 +189,19 @@ func (f *flagContainer) Define(v string) int {
 		f.active = "restoreSnapshot"
 	}
 
+	if len(f.syncCluster) > 0 {
+		activeCount++
+		f.active = "syncClusters"
+	}
+
 	if f.syncClusters {
 		activeCount++
 		f.active = "syncClusters"
+	}
+
+	if f.clustersReport {
+		activeCount++
+		f.active = "clustersReport"
 	}
 
 	if len(f.getCluster) > 0 {
@@ -267,7 +280,12 @@ Ex: clusterId=snapshotIndex`)
 	set.StringVar(&restoreSnapshot, `restore-snapshot`, "", `Restores a snapshot in the cluster. Provide cluster id with snapshot index to be restored.
 Ex: clusterId=snapshotIndex`)
 
-	set.Bool(`sync-clusters`, false, `Synchronise all clusters and their nodes for data consistency`)
+	var syncCluster string
+	set.StringVar(&syncCluster, `sync-cluster`, "", `Synchronise selected cluster and their nodes for data consistency. Use --force flag to force synchronization for frozen cluster`)
+
+	set.Bool(`sync-clusters`, false, `Synchronise all clusters and their nodes for data consistency. Use --force flag to force synchronization for frozen clusters`)
+	set.Bool(`clusters-report`, false, `Gets clusters health report.`)
+	set.Bool(`force`, false, `Force to apply the given command`)
 	set.Bool(`help`, false, `Print this usage documentation`)
 	set.Bool(`version`, false, `Print release version`)
 
@@ -307,7 +325,7 @@ Ex: clusterId=snapshotIndex`)
 		args = append(append(args[:i+1], "full"), args[i+1:]...)
 		break
 	}
-	set.Parse(args)
+	_ = set.Parse(args)
 
 	cc := strings.Split(createCluster, ",")
 	if len(cc) > 0 && len(cc[0]) == 0 {
@@ -348,9 +366,12 @@ Ex: clusterId=snapshotIndex`)
 		createSnapshot:     createSnapshot,
 		deleteSnapshot:     deleteSnapshot,
 		restoreSnapshot:    restoreSnapshot,
+		syncCluster:        syncCluster,
 		syncClusters:       strings.Index(strings.Join(os.Args, " "), "sync-clusters") > -1,
+		clustersReport:     strings.Index(strings.Join(os.Args, " "), "clusters-report") > -1,
 		getCluster:         getCluster,
 		getClusters:        strings.Index(strings.Join(os.Args, " "), "get-clusters") > -1,
+		force:              strings.Index(strings.Join(os.Args, " "), "-force") > -1,
 		help:               strings.Index(strings.Join(os.Args, " "), "-help") > -1,
 		version:            strings.Index(strings.Join(os.Args, " "), "-version") > -1,
 	}

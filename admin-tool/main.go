@@ -181,8 +181,12 @@ func main() {
 			fmt.Println("snapshot restoration is canceled")
 		}
 	case "syncClusters":
-		fmt.Println("CAUTION: The sync of clusters will be started simultaneously on each cluster and it will " +
-			"prevent the access to the syncing cluster for read, write and delete operations!")
+		if fc.syncClusters {
+			fmt.Println("CAUTION: The sync of clusters will be started simultaneously on each cluster and it will " +
+				"prevent the access to the syncing cluster for read, write and delete operations!")
+		} else {
+			fmt.Println("CAUTION: The sync of cluster will prevent the access to the syncing cluster for read, write and delete operations!")
+		}
 		fmt.Print("Do you want to continue? (y/N) ")
 		reader := bufio.NewReader(os.Stdin)
 		char, _, err := reader.ReadRune()
@@ -192,19 +196,20 @@ func main() {
 
 		switch char {
 		case 'Y', 'y':
-			anim := common.NewAnimation(terminal.NewStdOut(), "clusters are in sync process...")
-			anim.Start()
-
-			if err := manager.SyncClusters([]string{fc.managerAddress}); err != nil {
-				anim.Cancel()
-
+			if err := manager.SyncClusters([]string{fc.managerAddress}, fc.syncCluster, fc.force); err != nil {
 				fmt.Printf("%s\n", err.Error())
 				os.Exit(50)
 			}
-			anim.Stop()
+			fmt.Println("cluster sync is started, you can check the state with --get-clusters option")
 		default:
 			fmt.Println("cluster sync is canceled")
 		}
+	case "clustersReport":
+		if err := manager.GetReport([]string{fc.managerAddress}); err != nil {
+			fmt.Printf("%s\n", err.Error())
+			os.Exit(80)
+		}
+		fmt.Println("ok.")
 	case "repairConsistency":
 		fmt.Println("CAUTION: Repair consistency is a long running process that may take hours/days to complete " +
 			"depending on your DFS setup and will create partial action prevention on cluster data nodes.")
@@ -221,7 +226,7 @@ func main() {
 				fmt.Printf("%s\n", err.Error())
 				os.Exit(55)
 			}
-			fmt.Println("Consistency repair is started, you can check the state with -get-clusters option")
+			fmt.Println("consistency repair is started, you can check the state with --get-clusters option")
 		default:
 			fmt.Println("cluster chunk consistency repair is canceled")
 		}
