@@ -10,9 +10,8 @@ mkdir releases/macosx
 mkdir releases/windows
 
 major=$(date +%y)
-buildNo=$(($(date +%s)/345600))
-
-export RELEASE_VERSION="$major.1.$buildNo"
+buildNo=`printf %04d $(expr $(expr $(date +%s) - $(gdate -d "Jun 13 2020" +%s)) / 345600)`
+export RELEASE_VERSION="$major.2.$buildNo"
 
 echo ""
 echo "Building FileSystem command-line tool (v$RELEASE_VERSION)"
