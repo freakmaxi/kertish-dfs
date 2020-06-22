@@ -1,0 +1,170 @@
+version: '3'
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    restart: always
+    ports:
+      - 27017:27017
+    volumes:
+      - ./Volumes/mongodb:/data/db
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=dfs-test-123
+    networks:
+      static-network:
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    restart: always
+    ports:
+      - 6379:6379
+    volumes:
+      - ./Volumes/redis:/data
+    networks:
+      static-network:
+
+  lockingcenter:
+    image: freakmaxi/locking-center:latest
+    container_name: lockingcenter
+    restart: always
+    ports:
+      - 22119:22119
+      - 22120:22120
+    networks:
+      static-network:
+        ipv4_address: 172.20.1.10
+
+  kdfsc1n1:
+    image: freakmaxi/kertish-dfs:data-dev
+    container_name: kdfsc1n1
+    restart: always
+    volumes:
+      - ./Volumes/kertish-dfs/c1n1/:/opt/
+    environment:
+      - MANAGER_ADDRESS=http://kdfsmanager:9400
+      - SIZE=1073741824
+      - ROOT_PATH=/opt
+      - CACHE_LIMIT=1073741824
+    networks:
+      static-network:
+        ipv4_address: 172.20.1.20
+
+  kdfsc1n2:
+    image: freakmaxi/kertish-dfs:data-dev
+    container_name: kdfsc1n2
+    restart: always
+    volumes:
+      - ./Volumes/kertish-dfs/c1n2/:/opt/
+    environment:
+      - MANAGER_ADDRESS=http://kdfsmanager:9400
+      - SIZE=1073741824
+      - ROOT_PATH=/opt
+      - CACHE_LIMIT=1073741824
+    networks:
+      static-network:
+        ipv4_address: 172.20.1.21
+
+  kdfsc2n1:
+    image: freakmaxi/kertish-dfs:data-dev
+    container_name: kdfsc2n1
+    restart: always
+    volumes:
+      - ./Volumes/kertish-dfs/c2n1/:/opt/
+    environment:
+      - MANAGER_ADDRESS=http://kdfsmanager:9400
+      - SIZE=1073741824
+      - ROOT_PATH=/opt
+      - CACHE_LIMIT=1073741824
+    networks:
+      static-network:
+        ipv4_address: 172.20.1.30
+
+  kdfsc2n2:
+    image: freakmaxi/kertish-dfs:data-dev
+    container_name: kdfsc2n2
+    restart: always
+    volumes:
+      - ./Volumes/kertish-dfs/c2n2/:/opt/
+    environment:
+      - MANAGER_ADDRESS=http://kdfsmanager:9400
+      - SIZE=1073741824
+      - ROOT_PATH=/opt
+      - CACHE_LIMIT=1073741824
+    networks:
+      static-network:
+        ipv4_address: 172.20.1.31
+
+  kdfsc3n1:
+    image: freakmaxi/kertish-dfs:data-dev
+    container_name: kdfsc3n1
+    restart: always
+    volumes:
+      - ./Volumes/kertish-dfs/c3n1/:/opt/
+    environment:
+      - MANAGER_ADDRESS=http://kdfsmanager:9400
+      - SIZE=1073741824
+      - ROOT_PATH=/opt
+      - CACHE_LIMIT=1073741824
+    networks:
+      static-network:
+        ipv4_address: 172.20.1.40
+
+  kdfsc3n2:
+    image: freakmaxi/kertish-dfs:data-dev
+    container_name: kdfsc3n2
+    restart: always
+    volumes:
+      - ./Volumes/kertish-dfs/c3n2/:/opt/
+    environment:
+      - MANAGER_ADDRESS=http://kdfsmanager:9400
+      - SIZE=1073741824
+      - ROOT_PATH=/opt
+      - CACHE_LIMIT=1073741824
+    networks:
+      static-network:
+        ipv4_address: 172.20.1.41
+
+  kdfsmanager:
+    image: freakmaxi/kertish-dfs:manager-dev
+    container_name: kdfsmanager
+    restart: always
+    environment:
+      - MONGO_CONN=mongodb://root:dfs-test-123@mongodb:27017
+      - MONGO_DATABASE=dfs
+      - REDIS_CONN=redis:6379
+      - LOCKING_CENTER=lockingcenter:22119
+    ports:
+      - 9400:9400
+    depends_on:
+      - lockingcenter
+      - redis
+      - mongodb
+    networks:
+      static-network:
+
+  kdfshead:
+    image: freakmaxi/kertish-dfs:head-dev
+    container_name: kdfshead
+    restart: always
+    environment:
+      - MANAGER_ADDRESS=http://kdfsmanager:9400
+      - MONGO_CONN=mongodb://root:dfs-test-123@mongodb:27017
+      - MONGO_DATABASE=dfs
+      - LOCKING_CENTER=lockingcenter:22119
+    ports:
+      - 4000:4000
+    depends_on:
+      - lockingcenter
+      - mongodb
+    networks:
+      static-network:
+
+networks:
+  static-network:
+    ipam:
+      config:
+        - subnet: 172.20.1.0/16
+
+
