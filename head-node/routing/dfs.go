@@ -44,7 +44,7 @@ func (d *dfsRouter) Get() []*Definition {
 }
 
 func (d *dfsRouter) manipulate(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
+	defer func() { _ = r.Body.Close() }()
 
 	switch r.Method {
 	case "GET":

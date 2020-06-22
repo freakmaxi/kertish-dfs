@@ -1,6 +1,7 @@
 package routing
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -28,61 +29,39 @@ func (d *dfsRouter) handlePut(w http.ResponseWriter, r *http.Request) {
 	overwrite := len(overwriteHeader) > 0 && (strings.Compare(overwriteHeader, "1") == 0 || strings.Compare(overwriteHeader, "true") == 0)
 	join := strings.Compare(sourceAction, "j") == 0
 
-	switch targetAction {
-	case "m":
-		if err := d.dfs.Move(requestedPaths, targetPath, join, overwrite); err != nil {
-			if err == os.ErrNotExist {
-				w.WriteHeader(404)
-				return
-			} else if err == os.ErrExist {
-				w.WriteHeader(409)
-				return
-			} else if err == errors.ErrJoinConflict {
-				w.WriteHeader(412)
-				return
-			} else if err == os.ErrInvalid {
-				w.WriteHeader(422)
-				return
-			} else if err == errors.ErrZombie {
-				w.WriteHeader(524)
-				return
-			} else {
-				w.WriteHeader(500)
-			}
-			d.logger.Error(
-				"Move request is failed",
-				zap.Strings("sources", requestedPaths),
-				zap.String("target", targetPath),
-				zap.Error(err),
-			)
+	operation := "Copy"
+	if strings.Compare(targetAction, "m") == 0 {
+		operation = "Move"
+	}
+
+	if err := d.dfs.Change(requestedPaths, targetPath, join, overwrite, strings.Compare(targetAction, "m") == 0); err != nil {
+		if err == os.ErrNotExist {
+			w.WriteHeader(404)
+			return
+		} else if err == errors.ErrNotEmpty {
+			w.WriteHeader(406)
+			return
+		} else if err == os.ErrExist {
+			w.WriteHeader(409)
+			return
+		} else if err == errors.ErrJoinConflict {
+			w.WriteHeader(412)
+			return
+		} else if err == os.ErrInvalid {
+			w.WriteHeader(422)
+			return
+		} else if err == errors.ErrZombie {
+			w.WriteHeader(524)
+			return
+		} else {
+			w.WriteHeader(500)
 		}
-	case "c":
-		if err := d.dfs.Copy(requestedPaths, targetPath, join, overwrite); err != nil {
-			if err == os.ErrNotExist {
-				w.WriteHeader(404)
-				return
-			} else if err == os.ErrExist {
-				w.WriteHeader(409)
-				return
-			} else if err == errors.ErrJoinConflict {
-				w.WriteHeader(412)
-				return
-			} else if err == os.ErrInvalid {
-				w.WriteHeader(422)
-				return
-			} else if err == errors.ErrZombie {
-				w.WriteHeader(524)
-				return
-			} else {
-				w.WriteHeader(500)
-			}
-			d.logger.Error(
-				"Copy request is failed",
-				zap.Strings("sources", requestedPaths),
-				zap.String("target", targetPath),
-				zap.Error(err),
-			)
-		}
+		d.logger.Error(
+			fmt.Sprintf("%s request is failed", operation),
+			zap.Strings("sources", requestedPaths),
+			zap.String("target", targetPath),
+			zap.Error(err),
+		)
 	}
 }
 

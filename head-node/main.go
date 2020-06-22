@@ -24,7 +24,7 @@ func main() {
 	}
 
 	logger, console := log.NewLogger("head")
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
 	if console {
 		printWelcome()
@@ -58,6 +58,9 @@ func main() {
 	}
 	logger.Sugar().Infof("MONGO_DATABASE: %s", mongoDb)
 
+	mongoTransaction := os.Getenv("MONGO_TRANSACTION")
+	logger.Sugar().Infof("MONGO_TRANSACTION: %t", len(mongoTransaction) > 0)
+
 	mutexConn := os.Getenv("LOCKING_CENTER")
 	if len(mutexConn) == 0 {
 		logger.Error("LOCKING_CENTER have to be specified")
@@ -71,7 +74,7 @@ func main() {
 		os.Exit(14)
 	}
 
-	conn, err := data.NewConnection(mongoConn)
+	conn, err := data.NewConnection(mongoConn, len(mongoTransaction) > 0)
 	if err != nil {
 		logger.Error("MongoDB Connection is failed", zap.Error(err))
 		os.Exit(15)

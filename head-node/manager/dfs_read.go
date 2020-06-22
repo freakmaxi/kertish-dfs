@@ -2,65 +2,108 @@ package manager
 
 import (
 	"io"
+	"os"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
+	"github.com/freakmaxi/kertish-dfs/basics/errors"
 )
 
-type ReadType int
-
-const (
-	RT_Folder ReadType = 1
-	RT_File   ReadType = 2
-)
-
-type Read interface {
-	Type() ReadType
-
-	Folder() *common.Folder
-	File() *common.File
-
-	Read(w io.Writer, begins int64, ends int64) error
-}
-
-type read struct {
-	folder *common.Folder
-
-	file          *common.File
-	streamHandler func(w io.Writer, begins int64, ends int64) error
-}
-
-func newReadForFolder(folder *common.Folder) Read {
-	return &read{
-		folder: folder,
+func (d *dfs) Read(paths []string, join bool) (ReadContainer, error) {
+	if len(paths) == 1 && join || len(paths) > 1 && !join {
+		return nil, os.ErrInvalid
 	}
-}
 
-//
-//streamHandler func(writer io.Writer, begins int64, ends int64) error
-func newReadForFile(file *common.File, streamHandler func(w io.Writer, begins int64, ends int64) error) Read {
-	return &read{
-		file:          file,
-		streamHandler: streamHandler,
+	if len(paths) == 1 {
+		folder, err := d.folder(paths[0])
+		if err == nil {
+			return newReadContainerForFolder(folder), nil
+		}
+
+		if err != os.ErrNotExist {
+			return nil, err
+		}
 	}
-}
 
-func (r *read) Type() ReadType {
-	if r.file != nil {
-		return RT_File
+	file, streamHandler, err := d.file(paths)
+	if err != nil {
+		return nil, err
 	}
-	return RT_Folder
+
+	return newReadContainerForFile(file, streamHandler), nil
 }
 
-func (r *read) Folder() *common.Folder {
-	return r.folder
+func (d *dfs) folder(folderPath string) (*common.Folder, error) {
+	folderPath = common.CorrectPath(folderPath)
+
+	folders, err := d.metadata.Get([]string{folderPath})
+	if err != nil {
+		return nil, err
+	}
+	return folders[0], nil
 }
 
-func (r *read) File() *common.File {
-	return r.file
+func (d *dfs) file(paths []string) (*common.File, func(w io.Writer, begins int64, ends int64) error, error) {
+	files := make(common.Files, 0)
+	for _, path := range paths {
+		folderPath, filename := common.Split(path)
+		if len(filename) == 0 {
+			return nil, nil, os.ErrInvalid
+		}
+
+		folders, err := d.metadata.Get([]string{folderPath})
+		if err != nil {
+			return nil, nil, err
+		}
+
+		file := folders[0].File(filename)
+		if file == nil {
+			return nil, nil, os.ErrNotExist
+		}
+
+		if file.Locked() {
+			return nil, nil, errors.ErrLock
+		}
+
+		if file.ZombieCheck() {
+			return nil, nil, errors.ErrZombie
+		}
+
+		files = append(files, file)
+	}
+
+	requestedFile := files[0]
+
+	if len(files) > 1 {
+		var err error
+		requestedFile, err = common.CreateJoinedFile(files)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	streamHandler, err := d.cluster.Read(requestedFile.Chunks)
+	if err != nil {
+		return nil, nil, err
+	}
+	return requestedFile, streamHandler, nil
 }
 
-func (r *read) Read(w io.Writer, begins int64, ends int64) error {
-	return r.streamHandler(w, begins, ends)
-}
+func (d *dfs) Size(folderPath string) (uint64, error) {
+	folderPath = common.CorrectPath(folderPath)
 
-var _ Read = &read{}
+	folders, err := d.metadata.Tree(folderPath, true, false)
+	if err != nil {
+		return 0, err
+	}
+
+	size := uint64(0)
+	for _, folder := range folders {
+		for _, file := range folder.Files {
+			if file.Locked() {
+				continue
+			}
+			size += file.Size
+		}
+	}
+	return size, nil
+}

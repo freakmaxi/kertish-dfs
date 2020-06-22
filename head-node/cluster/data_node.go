@@ -43,7 +43,7 @@ func (d *dataNode) connect(connectionHandler func(conn *net.TCPConn) error) erro
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	return connectionHandler(conn)
 }

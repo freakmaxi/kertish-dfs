@@ -188,7 +188,7 @@ func (c *cluster) Read(chunks common.DataChunks) (func(w io.Writer, begins int64
 
 func (c *cluster) Delete(chunks common.DataChunks) (*common.DeletionResult, error) {
 	if len(chunks) == 0 {
-		return nil, os.ErrInvalid
+		return nil, errors.ErrZombie
 	}
 
 	m, err := c.createClusterMap(chunks, common.MT_Delete)
@@ -237,9 +237,12 @@ func (c *cluster) makeReservation(size uint64) (*common.ReservationMap, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode != 200 {
+		if res.StatusCode == 503 {
+			return nil, errors.ErrNoAvailableClusterNode
+		}
 		if res.StatusCode == 507 {
 			return nil, errors.ErrNoSpace
 		}
@@ -266,7 +269,7 @@ func (c *cluster) discardReservation(reservationId string) error {
 	if err != nil {
 		return err
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode != 200 {
 		return fmt.Errorf("cluster manager request is failed (discardReservation): %d - %s", res.StatusCode, common.NewErrorFromReader(res.Body).Message)
@@ -293,7 +296,7 @@ func (c *cluster) commitReservation(reservationId string, clusterUsageMap map[st
 	if err != nil {
 		return err
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode != 200 {
 		return fmt.Errorf("cluster manager request is failed (commitReservation): %d - %s", res.StatusCode, common.NewErrorFromReader(res.Body).Message)
@@ -318,7 +321,7 @@ func (c *cluster) findCluster(sha512Hex string) (string, string, error) {
 		)
 		return "", "", errors.ErrRemote
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode == 200 {
 		return res.Header.Get("X-Cluster-Id"), res.Header.Get("X-Address"), nil
@@ -373,7 +376,7 @@ func (c *cluster) requestClusterMap(sha512HexList []string, mapType common.MapTy
 	if err != nil {
 		return nil, err
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode != 200 {
 		if res.StatusCode == 404 {

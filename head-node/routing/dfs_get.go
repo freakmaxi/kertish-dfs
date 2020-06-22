@@ -39,6 +39,7 @@ func (d *dfsRouter) handleGet(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(500)
 		}
 		d.logger.Error("Read request is failed", zap.Strings("paths", requestedPaths), zap.Error(err))
+		return
 	}
 
 	if read.Type() == manager.RT_Folder {

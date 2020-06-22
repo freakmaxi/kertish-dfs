@@ -133,13 +133,13 @@ func (c *create) upload(wg *sync.WaitGroup, clusterMap common.ClusterMap, data [
 		return
 	}
 
-	dataLength := uint32(len(data))
+	clusterUsage := uint32(len(data))
 	if exists {
-		dataLength = 0
+		clusterUsage = 0
 	}
-	c.updateClusterUsage(clusterId, uint64(dataLength))
+	c.updateClusterUsage(clusterId, uint64(clusterUsage))
 
-	successChan <- common.NewDataChunk(clusterMap.Chunk.Sequence, dataLength, sha512Hex)
+	successChan <- common.NewDataChunk(clusterMap.Chunk.Sequence, uint32(len(data)), sha512Hex)
 }
 
 func (c *create) updateClusterUsage(clusterId string, size uint64) {
