@@ -27,7 +27,7 @@ type moveCommand struct {
 	target    string
 }
 
-func NewMove(headAddresses []string, output terminal.Output, basePath string, args []string) execution {
+func NewMove(headAddresses []string, output terminal.Output, basePath string, args []string) Execution {
 	return &moveCommand{
 		headAddresses: headAddresses,
 		output:        output,
@@ -57,7 +57,9 @@ func (m *moveCommand) Parse() error {
 		}
 		break
 	}
-	cleanEmptyArguments(m.args)
+
+	m.args = sourceTargetArguments(m.args)
+	m.args = cleanEmptyArguments(m.args)
 
 	if len(m.args) < 2 {
 		return fmt.Errorf("mv command needs source and target parameters")
@@ -243,7 +245,7 @@ func (m *moveCommand) localToRemote() error {
 	sourceTemp := m.sources[0]
 	if len(m.sources) > 1 {
 		sourceTemp := path.Join(os.TempDir(), uuid.New().String())
-		defer os.Remove(sourceTemp)
+		defer func() { _ = os.Remove(sourceTemp) }()
 		if err := createTemporary(m.sources, sourceTemp); err != nil {
 			anim.Cancel()
 			return err
@@ -268,3 +270,5 @@ func (m *moveCommand) localToRemote() error {
 	anim.Stop()
 	return nil
 }
+
+var _ Execution = &moveCommand{}

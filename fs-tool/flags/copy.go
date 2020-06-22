@@ -28,7 +28,7 @@ type copyCommand struct {
 	target    string
 }
 
-func NewCopy(headAddresses []string, output terminal.Output, basePath string, args []string) execution {
+func NewCopy(headAddresses []string, output terminal.Output, basePath string, args []string) Execution {
 	return &copyCommand{
 		headAddresses: headAddresses,
 		output:        output,
@@ -70,7 +70,9 @@ func (c *copyCommand) Parse() error {
 		}
 		break
 	}
-	cleanEmptyArguments(c.args)
+
+	c.args = sourceTargetArguments(c.args)
+	c.args = cleanEmptyArguments(c.args)
 
 	if len(c.args) < 2 {
 		return fmt.Errorf("cp command needs source and target parameters")
@@ -253,7 +255,7 @@ func (c *copyCommand) localToRemote() error {
 	sourceTemp := c.sources[0]
 	if len(c.sources) > 1 {
 		sourceTemp = path.Join(os.TempDir(), uuid.New().String())
-		defer os.Remove(sourceTemp)
+		defer func() { _ = os.Remove(sourceTemp) }()
 		if err := createTemporary(c.sources, sourceTemp); err != nil {
 			anim.Cancel()
 			return err
@@ -271,3 +273,5 @@ func (c *copyCommand) localToRemote() error {
 	anim.Stop()
 	return nil
 }
+
+var _ Execution = &copyCommand{}

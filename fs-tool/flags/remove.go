@@ -22,7 +22,7 @@ type removeCommand struct {
 	targets     []string
 }
 
-func NewRemove(headAddresses []string, output terminal.Output, basePath string, args []string) execution {
+func NewRemove(headAddresses []string, output terminal.Output, basePath string, args []string) Execution {
 	return &removeCommand{
 		headAddresses: headAddresses,
 		output:        output,
@@ -55,14 +55,13 @@ func (r *removeCommand) Parse() error {
 		}
 		break
 	}
-	cleanEmptyArguments(r.args)
 
-	if len(r.args) == 0 {
+	r.targets = sourceTargetArguments(r.args)
+	r.targets = cleanEmptyArguments(r.targets)
+
+	if len(r.targets) == 0 {
 		return fmt.Errorf("rm command needs target parameters")
 	}
-
-	r.targets = make([]string, len(r.args))
-	copy(r.targets, r.args)
 
 	return nil
 }
@@ -127,3 +126,5 @@ func (r *removeCommand) Execute() error {
 	anim.Stop()
 	return nil
 }
+
+var _ Execution = &removeCommand{}

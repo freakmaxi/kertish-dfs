@@ -12,29 +12,23 @@ import (
 type changeDirectoryCommand struct {
 	headAddresses []string
 	output        terminal.Output
-	args          []string
-
-	target string
+	target        string
 
 	CurrentFolder *common.Folder
 }
 
-func NewChangeDirectory(headAddresses []string, output terminal.Output, args []string) execution {
+func NewChangeDirectory(headAddresses []string, output terminal.Output, target string) Execution {
 	return &changeDirectoryCommand{
 		headAddresses: headAddresses,
 		output:        output,
-		args:          args,
+		target:        target,
 	}
 }
 
 func (c *changeDirectoryCommand) Parse() error {
-	cleanEmptyArguments(c.args)
-
-	if len(c.args) != 1 {
+	if len(c.target) == 0 {
 		return fmt.Errorf("cd command needs only target parameter")
 	}
-
-	c.target = c.args[0]
 
 	return nil
 }
@@ -69,3 +63,5 @@ func (c *changeDirectoryCommand) Execute() error {
 
 	return nil
 }
+
+var _ Execution = &changeDirectoryCommand{}

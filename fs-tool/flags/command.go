@@ -17,7 +17,7 @@ type Command struct {
 	filename    string
 	args        []string
 	headAddress string
-	command     execution
+	command     Execution
 }
 
 func NewCommand(version string, args []string) *Command {

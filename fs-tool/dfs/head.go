@@ -31,7 +31,7 @@ func List(headAddresses []string, source string, usage bool) (*common.Folder, er
 	if err != nil {
 		return nil, fmt.Errorf("%s: head node is not reachable", headAddresses[0])
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	switch res.StatusCode {
 	case 404:
@@ -62,7 +62,7 @@ func MakeFolder(headAddresses []string, target string) error {
 	if err != nil {
 		return fmt.Errorf("%s: head node is not reachable", headAddresses[0])
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	switch res.StatusCode {
 	case 409:
@@ -93,11 +93,13 @@ func Change(headAddresses []string, sources []string, target string, overwrite b
 	if err != nil {
 		return fmt.Errorf("%s: head node is not reachable", headAddresses[0])
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	switch res.StatusCode {
 	case 404:
 		return fmt.Errorf("%s is/are not exists", sourcesErrorString(sources))
+	case 406:
+		return fmt.Errorf("%s is not empty", target)
 	case 409:
 		return fmt.Errorf("%s is already exists", target)
 	case 412:
@@ -133,7 +135,7 @@ func Delete(headAddresses []string, target string, killZombies bool) error {
 	if err != nil {
 		return fmt.Errorf("%s: head node is not reachable", headAddresses[0])
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	switch res.StatusCode {
 	case 404:
@@ -200,7 +202,7 @@ func PutFile(headAddresses []string, source string, target string, overwrite boo
 	if err != nil {
 		return fmt.Errorf("unable to read %s", source)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	req, err := http.NewRequest("POST", fmt.Sprintf("http://%s%s", headAddresses[0], headEndPoint), file)
 	if err != nil {
@@ -218,7 +220,7 @@ func PutFile(headAddresses []string, source string, target string, overwrite boo
 	if err != nil {
 		return fmt.Errorf("%s: head node is not reachable", headAddresses[0])
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	switch res.StatusCode {
 	case 409:
@@ -241,7 +243,7 @@ func contentDetails(source string) (string, int64, error) {
 	if err != nil {
 		return "", 0, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	info, err := file.Stat()
 	if err != nil {
@@ -276,7 +278,7 @@ func Pull(headAddresses []string, sources []string, target string, readRange *co
 	if err != nil {
 		return fmt.Errorf("%s: head node is not reachable", headAddresses[0])
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	isFile := strings.Compare(res.Header.Get("X-Type"), "file") == 0
 
@@ -301,7 +303,7 @@ func Pull(headAddresses []string, sources []string, target string, readRange *co
 		if err != nil {
 			return fmt.Errorf("unable to create %s", target)
 		}
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 
 		if _, err := io.Copy(file, res.Body); err != nil {
 			return fmt.Errorf("unsuccessful operation")

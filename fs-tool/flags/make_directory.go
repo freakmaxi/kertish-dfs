@@ -19,7 +19,7 @@ type makeDirectoryCommand struct {
 	target string
 }
 
-func NewMakeDirectory(headAddresses []string, output terminal.Output, basePath string, args []string) execution {
+func NewMakeDirectory(headAddresses []string, output terminal.Output, basePath string, args []string) Execution {
 	return &makeDirectoryCommand{
 		headAddresses: headAddresses,
 		output:        output,
@@ -29,10 +29,15 @@ func NewMakeDirectory(headAddresses []string, output terminal.Output, basePath s
 }
 
 func (m *makeDirectoryCommand) Parse() error {
-	cleanEmptyArguments(m.args)
+	m.args = sourceTargetArguments(m.args)
+	m.args = cleanEmptyArguments(m.args)
 
-	if len(m.args) != 1 {
-		return fmt.Errorf("mkdir command needs only target parameter")
+	if len(m.args) == 0 {
+		return fmt.Errorf("mkdir command needs target parameter")
+	}
+
+	if len(m.args) > 1 {
+		return fmt.Errorf("mkdir command needs only one target parameter")
 	}
 
 	m.target = m.args[0]
@@ -69,3 +74,5 @@ func (m *makeDirectoryCommand) Execute() error {
 	anim.Stop()
 	return nil
 }
+
+var _ Execution = &makeDirectoryCommand{}

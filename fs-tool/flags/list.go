@@ -24,7 +24,7 @@ type listCommand struct {
 	source  string
 }
 
-func NewList(headAddresses []string, output terminal.Output, basePath string, args []string) execution {
+func NewList(headAddresses []string, output terminal.Output, basePath string, args []string) Execution {
 	return &listCommand{
 		headAddresses: headAddresses,
 		output:        output,
@@ -54,14 +54,12 @@ func (l *listCommand) Parse() error {
 		}
 		break
 	}
-	cleanEmptyArguments(l.args)
 
-	if len(l.args) > 1 {
-		return fmt.Errorf("ls command needs optionally source parameter")
-	}
+	l.args = sourceTargetArguments(l.args)
+	l.args = cleanEmptyArguments(l.args)
 
 	l.source = l.basePath
-	if len(l.args) == 1 {
+	if len(l.args) > 0 {
 		if !filepath.IsAbs(l.args[0]) {
 			l.source = path.Join(l.basePath, l.args[0])
 		} else {
@@ -146,14 +144,14 @@ func (l *listCommand) printAsList(folder *common.Folder) {
 
 	for _, f := range folder.Files {
 		name := f.Name
-		lockChar := "-"
-		if f.Zombie {
-			lockChar = "↯"
-		} else if f.Locked() {
-			lockChar = "•"
+		fileChar := "-"
+		if f.Locked() {
+			fileChar = "•"
 			name = fmt.Sprintf("%s (locked till %s)", name, f.Lock.Till.Local().Format(common.FriendlyTimeFormat))
+		} else if f.ZombieCheck() {
+			fileChar = "↯"
 		}
-		l.output.Printf("%s %7v %s %s\n", lockChar, l.sizeToString(f.Size), f.Modified.Local().Format(common.FriendlyTimeFormat), name)
+		l.output.Printf("%s %7v %s %s\n", fileChar, l.sizeToString(f.Size), f.Modified.Local().Format(common.FriendlyTimeFormat), name)
 	}
 
 	l.output.Refresh()
@@ -186,3 +184,5 @@ func (l *listCommand) sizeToString(size uint64) string {
 
 	return "N/A"
 }
+
+var _ Execution = &listCommand{}

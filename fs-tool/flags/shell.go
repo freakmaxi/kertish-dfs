@@ -31,7 +31,7 @@ type shellCommand struct {
 	foldersCache map[string]*common.Folder
 }
 
-func NewShell(headAddresses []string, version string) execution {
+func NewShell(headAddresses []string, version string) Execution {
 	return &shellCommand{
 		headAddresses: headAddresses,
 		version:       version,
@@ -176,18 +176,18 @@ func (s *shellCommand) Execute() error {
 				}
 
 				if strings.Compare(name, "Ctrl+W") == 0 {
-					activeLine := s.output.ActiveLine()
+					activeCommand := s.output.ActiveCommand()
 
-					bufferParts := strings.Split(activeLine, " ")
+					bufferParts := strings.Split(activeCommand, " ")
 					bpLength := len(bufferParts)
 
 					if bpLength == 1 {
-						lineLength :=
-							runewidth.StringWidth(activeLine)
-						s.output.Remove(lineLength)
+						commandLength :=
+							runewidth.StringWidth(activeCommand)
+						s.output.Remove(commandLength)
 						s.output.Refresh()
 
-						s.buffer = s.output.ActiveLine()
+						s.buffer = s.output.ActiveCommand()
 
 						continue
 					}
@@ -200,7 +200,7 @@ func (s *shellCommand) Execute() error {
 					s.output.Remove(lpLength)
 					s.output.Refresh()
 
-					s.buffer = s.output.ActiveLine()
+					s.buffer = s.output.ActiveCommand()
 
 					continue
 				}
@@ -214,12 +214,12 @@ func (s *shellCommand) Execute() error {
 			default:
 				switch ev.Key() {
 				case tcell.KeyEscape:
-					activeLine := s.output.ActiveLine()
+					activeCommand := s.output.ActiveCommand()
 
-					s.output.Remove(runewidth.StringWidth(activeLine))
+					s.output.Remove(runewidth.StringWidth(activeCommand))
 					s.output.Refresh()
 
-					s.buffer = s.output.ActiveLine()
+					s.buffer = s.output.ActiveCommand()
 				case tcell.KeyUp:
 					s.printHistory(&historyBack, 1)
 				case tcell.KeyDown:
@@ -245,8 +245,8 @@ func (s *shellCommand) Execute() error {
 				case tcell.KeyBackspace2:
 					s.handleBackspace()
 				case tcell.KeyTab:
-					activeLine := s.output.ActiveLine()
-					bufferParts := strings.Split(activeLine, " ")
+					activeCommand := s.output.ActiveCommand()
+					bufferParts := strings.Split(activeCommand, " ")
 
 					s.handleTab(strings.Compare(bufferParts[0], "cd") == 0)
 				default:
@@ -255,7 +255,7 @@ func (s *shellCommand) Execute() error {
 					s.output.Print(string(r))
 					s.output.Refresh()
 
-					s.buffer = s.output.ActiveLine()
+					s.buffer = s.output.ActiveCommand()
 				}
 			}
 		case *tcell.EventResize:
@@ -278,6 +278,8 @@ func (s *shellCommand) printHistory(historyBack *int, direction int) {
 		return
 	}
 
+	s.output.ScrollBottom()
+
 	if direction == 1 {
 		*historyBack++
 		if len(s.history) <= *historyBack {
@@ -292,21 +294,21 @@ func (s *shellCommand) printHistory(historyBack *int, direction int) {
 			s.output.Remove(len(prev))
 			s.output.Refresh()
 
-			s.buffer = s.output.ActiveLine()
+			s.buffer = s.output.ActiveCommand()
 			return
 		}
 	} else {
 		return
 	}
 
-	lineLength := runewidth.StringWidth(s.buffer)
-	s.output.Remove(lineLength)
+	commandLength := runewidth.StringWidth(s.buffer)
+	s.output.Remove(commandLength)
 
 	now := s.history[*historyBack]
 	s.output.Print(now)
 	s.output.Refresh()
 
-	s.buffer = s.output.ActiveLine()
+	s.buffer = s.output.ActiveCommand()
 }
 
 func (s *shellCommand) processCommand() bool {
@@ -351,7 +353,7 @@ func (s *shellCommand) processCommand() bool {
 	return true
 }
 
-func (s *shellCommand) parse(args []string) (bool, bool, execution) {
+func (s *shellCommand) parse(args []string) (bool, bool, Execution) {
 	if len(args) == 0 {
 		return true, false, nil
 	}
@@ -363,7 +365,11 @@ func (s *shellCommand) parse(args []string) (bool, bool, execution) {
 			return true, false, nil
 		}
 
-		target := args[1]
+		cdArgs := args[1:]
+		cdArgs = sourceTargetArguments(cdArgs)
+		cdArgs = cleanEmptyArguments(cdArgs)
+
+		target := cdArgs[0]
 
 		if strings.Index(target, local) == 0 {
 			s.output.Println("cd command can only be used for dfs folders")
@@ -377,7 +383,7 @@ func (s *shellCommand) parse(args []string) (bool, bool, execution) {
 			return true, false, nil
 		}
 
-		command := NewChangeDirectory(s.headAddresses, s.output, []string{target})
+		command := NewChangeDirectory(s.headAddresses, s.output, target)
 		if err := command.Parse(); err != nil {
 			s.output.Println(err.Error())
 			return true, false, nil
@@ -402,7 +408,7 @@ func (s *shellCommand) parse(args []string) (bool, bool, execution) {
 		}
 
 		if strings.Compare(args[1], "cd") == 0 {
-			command := NewChangeDirectory(s.headAddresses, s.output, nil)
+			command := NewChangeDirectory(s.headAddresses, s.output, "")
 			s.output.Println("")
 			s.output.Println("Usage:")
 			command.PrintUsage()
@@ -474,7 +480,7 @@ func (s *shellCommand) rebuildActiveFolderAndCaches() {
 }
 
 func (s *shellCommand) queryFolder(folderPath string) *common.Folder {
-	command := NewChangeDirectory(s.headAddresses, s.output, []string{folderPath})
+	command := NewChangeDirectory(s.headAddresses, s.output, folderPath)
 	if err := command.Parse(); err != nil {
 		s.output.Println(err.Error())
 		return nil
@@ -490,12 +496,18 @@ func (s *shellCommand) handleBackspace() {
 	s.output.Remove(1)
 	s.output.Refresh()
 
-	s.buffer = s.output.ActiveLine()
+	s.buffer = s.output.ActiveCommand()
 }
 
 func (s *shellCommand) handleTab(cdRequest bool) {
 	bufParts := strings.Split(s.buffer, " ")
 	if len(bufParts) == 1 {
+		return
+	}
+
+	command := bufParts[0]
+	bufParts = s.joinQuoteLive(bufParts[1:])
+	if len(bufParts) == 0 {
 		return
 	}
 	lastPart := bufParts[len(bufParts)-1]
@@ -527,23 +539,79 @@ func (s *shellCommand) handleTab(cdRequest bool) {
 		parent = common.Absolute(s.activeFolder.Full, parent)
 	}
 
-	v := s.searchInFolder(parent, searching, localSearch, cdRequest)
-	if len(v) > 0 {
-		s.output.Print(v)
-		s.output.Refresh()
+	v, hasMore := s.searchInFolder(parent, searching, localSearch, cdRequest)
 
-		s.buffer = s.output.ActiveLine()
+	bufParts[len(bufParts)-1] = fmt.Sprintf("%s%s", bufParts[len(bufParts)-1], v)
+
+	bufPartsCopy := make([]string, len(bufParts))
+	copy(bufPartsCopy, bufParts)
+
+	s.output.Remove(len(s.buffer))
+	s.output.Print(command)
+	for len(bufPartsCopy) > 0 {
+		spaceIdx := strings.Index(bufPartsCopy[0], " ")
+		if spaceIdx > -1 {
+			bufPartsCopy[0] = fmt.Sprintf("\"%s", bufPartsCopy[0])
+			if len(bufPartsCopy) == 1 && !hasMore || len(bufPartsCopy) > 1 {
+				bufPartsCopy[0] = fmt.Sprintf("%s\"", bufPartsCopy[0])
+			}
+		}
+		s.output.Print(fmt.Sprintf(" %s", bufPartsCopy[0]))
+
+		bufPartsCopy = bufPartsCopy[1:]
 	}
+	s.output.Refresh()
+
+	s.buffer = s.output.ActiveCommand()
 }
 
-func (s *shellCommand) searchInFolder(basePath string, v string, local bool, cdRequest bool) string {
+func (s *shellCommand) joinQuoteLive(args []string) []string {
+	output := make([]string, 0)
+	combinedArg := ""
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if strings.HasPrefix(arg, "\"") {
+			if len(combinedArg) > 0 {
+				output = append(output, combinedArg)
+				continue
+			}
+			combinedArg = arg[1:]
+			continue
+		}
+
+		if len(combinedArg) > 0 {
+			add := false
+			if strings.HasSuffix(arg, "\"") {
+				arg = arg[:len(arg)-1]
+				add = true
+			}
+			combinedArg = fmt.Sprintf("%s %s", combinedArg, arg)
+			if add {
+				output = append(output, combinedArg)
+				combinedArg = ""
+			}
+			continue
+		}
+
+		output = append(output, arg)
+	}
+
+	if len(combinedArg) > 0 {
+		output = append(output, combinedArg)
+	}
+
+	return output
+}
+
+func (s *shellCommand) searchInFolder(basePath string, v string, local bool, cdRequest bool) (string, bool) {
 	if local {
 		return s.searchInLocalFolder(basePath, v, cdRequest)
 	}
 	return s.searchInDfsFolder(basePath, v, cdRequest)
 }
 
-func (s *shellCommand) searchInDfsFolder(basePath string, v string, onlyFolders bool) string {
+func (s *shellCommand) searchInDfsFolder(basePath string, v string, onlyFolders bool) (string, bool) {
 	printSummaryFunc := func(matches [][]string) {
 		s.output.Println("")
 		for _, m := range matches {
@@ -567,7 +635,7 @@ func (s *shellCommand) searchInDfsFolder(basePath string, v string, onlyFolders 
 			workingFolder = s.queryFolder(basePath)
 			s.readyLine()
 			if workingFolder == nil {
-				return ""
+				return "", false
 			}
 			s.foldersCache[workingFolder.Full] = workingFolder
 		}
@@ -591,20 +659,20 @@ func (s *shellCommand) searchInDfsFolder(basePath string, v string, onlyFolders 
 	}
 
 	if len(matches) == 0 {
-		return ""
+		return "", false
 	}
 
 	if len(matches) == 1 {
-		return matches[0][1][len(v):]
+		return matches[0][1][len(v):], false
 	}
 
 	match, matches := s.matchReduce(matches)
 
 	printSummaryFunc(matches)
-	return match[len(v):]
+	return match[len(v):], true
 }
 
-func (s *shellCommand) searchInLocalFolder(basePath string, v string, onlyFolders bool) string {
+func (s *shellCommand) searchInLocalFolder(basePath string, v string, onlyFolders bool) (string, bool) {
 	printSummaryFunc := func(matches [][]string) {
 		s.output.Println("")
 		for _, m := range matches {
@@ -654,21 +722,21 @@ func (s *shellCommand) searchInLocalFolder(basePath string, v string, onlyFolder
 		}
 		return nil
 	}); err != nil {
-		return ""
+		return "", false
 	}
 
 	if len(matches) == 0 {
-		return ""
+		return "", false
 	}
 
 	if len(matches) == 1 {
-		return matches[0][1][len(v):]
+		return matches[0][1][len(v):], false
 	}
 
 	match, matches := s.matchReduce(matches)
 
 	printSummaryFunc(matches)
-	return match[len(v):]
+	return match[len(v):], true
 }
 
 func (s *shellCommand) matchReduce(matches [][]string) (string, [][]string) {
@@ -702,3 +770,5 @@ func (s *shellCommand) matchReduce(matches [][]string) (string, [][]string) {
 		index++
 	}
 }
+
+var _ Execution = &shellCommand{}
