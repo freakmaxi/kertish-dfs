@@ -1,12 +1,13 @@
 # Kertish-DFS
 
-Kertish-dfs is a distributed file system with basic functionality. It is developed to cover the expectation for
-mass file storage requirement in isolated networks. **It does not have security implementation.**
+Kertish-dfs is a simple and highly scalable distributed file system to store and serve billions of files. It is
+developed to cover the expectation for mass file storage requirement in isolated networks.
+**It does not have security implementation.**
 
 #### What is it for?
 Kertish-dfs is developed to cover the traditional file system requirements in a scalable way. Software will use the same
-path-tree structure virtually to keep the files but will not stuck in hard-drive limits of the machine. It is possible to create
-a fail-safe, highly available fast and scalable file storage.
+path-tree structure virtually to keep the files but will not stuck in hard-drive limits of the machine. It is possible
+to create a fail-safe, highly available fast and scalable file storage.
 
 #### Where can it be used?
 Systems where they need huge storage space requirements to keep all the files logically together. For example; 
@@ -19,6 +20,28 @@ network. Also it does not have file/folder permission integration, so user base 
 #### How is the best usage?
 Kertish-dfs is suitable to use as a back service of front services. It means, it is better not to allow users directly 
 to the file manipulation.
+
+#### Architecture
+Kertish-dfs has 3 vital parts for a working system. Manager-Node, Head-Node, Data-Node.
+- Manager-Node is responsible to handle data-node synchronisation and harmony for each cluster. It is handling the
+space reservation, indexing data-node contents for fast search and find operations, health tracking of each data-node
+and optimize for the best performance every second, cluster balancing, check/repair/fix operations and synchronisation.
+- Head-Node(s) are responsible to handle read, write, delete, copy, move and merge operations. So, when you want to put
+a file to Kertish-dfs, you will push the file to this node and it will handle the rest.
+- Data-Node(s) are responsible to hold the file chunks and serve it when it is requested as fast as possible.
+
+Manager-Node and Data-Node must not accept direct request(s) coming from the outside of the Kertish-dfs farm. For 
+file/folder manipulation, only the access point should be Head-Node.
+
+**Here is a sample scenario;**
+1. User wants to upload a file (demo.mov - 125Mb) to /Foo/Bar as demo.mov
+2. Uses the Head-Node to upload file with /Foo/Bar/demo.mov header and the file content as binary
+3. Head-Node accepts the whole file and asks to Manager-Node where and how to put this file in data-node cluster(s)
+4. Manager-Node creates the best possible chunk map for Head-Node and reserve the spaces for those chunks in data-node(s)
+5. Head-Node divides the file into chunks and push the chunks to related data-node(s) and at the end commit the provided
+map reservation if it has successful placement or discard the reservation to save the space.
+6. User gets success or error response with http status header.
+7. User can hold the file location in a database (/Foo/Bar/demo.mov)
 
 #### Terminology
 - Farm: Whole Kertish-dfs with multi clusters. A farm can have one or more clusters with different sizes.
@@ -45,10 +68,11 @@ the real size
 - Fast traditional move/copy operations. It can take up to 5 seconds to move/copy a 1tb sized file in the dfs. 
 - Multi tasking. Different request can work on the same folder.
 - Automated sync. Data nodes are smart enough to sync the data in the cluster.
+- Possible to take "snapshot" for marking the state of data-node and revert that if it requires.
 - REST architecture for file/folder manipulation.
 - Command-line `Admin` and `File System` tools
 
-#### Architecture
+#### Setup Description
 
 Kertish-dfs farm consist of minimum
 - 1 Manager Node
@@ -71,7 +95,7 @@ different clusters.
 
 **CAUTION: Deletion of a data node from cluster may cause the data lost and inconsistency.**
 ---
-#### Setup
+#### Sample Setup
 
 I'll setup a farm using
 - 1 Manager Node
@@ -91,30 +115,70 @@ sites.
 - [Redis DSS](https://redis.io)
 - [Locking-Center Server](https://github.com/freakmaxi/locking-center)
 
-#### Preperation
+### Setup Using Docker
+
+The docker hub page is [https://hub.docker.com/r/freakmaxi/kertish-dfs]
+
+You can use the sample docker-compose file to kickstart the Kertish-dfs farm in docker container with 6 Data-Nodes 
+working in 3 Clusters as Master/Slave
+
+[https://github.com/freakmaxi/kertish-dfs/blob/master/docker-compose.yml]
+
+`docker-compose up` will make everything ready for you.
+
+Download setup script from [https://github.com/freakmaxi/kertish-dfs/blob/master/kertish-docker-setup.sh]
+
+- Download Client-Tools for Kertish-dfs from [https://github.com/freakmaxi/kertish-dfs/releases] according to your OS
+- Give execution permission to the file `sudo chmod +x kertish-docker-setup`
+- Execute setup script.
+- type `y` and press `enter`
+
+Your Kertish-dfs farm is ready to go.
+
+Put any file using `kertish-dfs` file system tool. Ex:
+
+`./kertish-dfs cp local:~/Downloads/demo.mov /demo.mov`
+
+Just change the path and file after `local:` according to the file in your system. Try to choose a file more than 70 Mb
+to see file chunk distribution between clusters. If file size is smaller than 32 Mb, it will be placed only a cluster.
+
+`./kertish-dfs ls -l` will give you an output similar like below
+
+```
+processing... ok.
+total 1
+- 87701kb 2020 Jun 22 22:07 demo.mov
+```
+
+---
+
+### Setup Using Release/Source
+
+#### Preparation
 
 - Download the latest release of Kertish-dfs or compile it using the `create_release.sh` shell script file located under
 the `-build-` folder.
 
 ##### Setting Up Manager Node
 
-- Copy `kertish-dfs-manager` executable to `/usr/local/bin` folder on the system.
-- Give execution permission to the file `sudo chmod +x /usr/local/bin/kertish-dfs-manager`
+- Copy `kertish-manager` executable to `/usr/local/bin` folder on the system.
+- Give execution permission to the file `sudo chmod +x /usr/local/bin/kertish-manager`
 - Create an empty file in your user path, copy-paste the following and save the file
 ```shell script
 #!/bin/sh
 
 export MONGO_CONN="mongodb://root:pass@127.0.0.1:27017" # Modify the values according to your setup
 export REDIS_CONN="127.0.0.1:6379"                      # Modify the values according to your setup
-/usr/local/bin/kertish-dfs-manager
+export LOCKING_CENTER="127.0.0.1:22119"                 # Modify the values according to your setup
+/usr/local/bin/kertish-manager
 ```
 - Give execution permission to the file `sudo chmod +x [Saved File Location]`
 - Execute the saved file.
 ---
 ##### Setting Up Head Node
 
-- Copy `kertish-dfs-head` executable to `/usr/local/bin` folder on the system.
-- Give execution permission to the file `sudo chmod +x /usr/local/bin/kertish-dfs-head`
+- Copy `kertish-head` executable to `/usr/local/bin` folder on the system.
+- Give execution permission to the file `sudo chmod +x /usr/local/bin/kertish-head`
 - Create an empty file in your user path, copy-paste the following and save the file
 ```shell script
 #!/bin/sh
@@ -122,15 +186,15 @@ export REDIS_CONN="127.0.0.1:6379"                      # Modify the values acco
 export MANAGER_ADDRESS="http://127.0.0.1:9400" 
 export MONGO_CONN="mongodb://root:pass@127.0.0.1:27017" # Modify the values according to your setup
 export LOCKING_CENTER="127.0.0.1:22119"                 # Modify the values according to your setup
-/usr/local/bin/kertish-dfs-head
+/usr/local/bin/kertish-head
 ```
 - Give execution permission to the file `sudo chmod +x [Saved File Location]`
 - Execute the saved file.
 ---
 ##### Setting Up Data Node(s)
 
-- Copy `kertish-dfs-data` executable to `/usr/local/bin` folder on the system.
-- Give execution permission to the file `sudo chmod +x /usr/local/bin/kertish-dfs-data`
+- Copy `kertish-data` executable to `/usr/local/bin` folder on the system.
+- Give execution permission to the file `sudo chmod +x /usr/local/bin/kertish-data`
 - Create following folders - /opt/c1n1 - /opt/c1n2 - /opt/c2n1 - /opt/c2n2
 - Create an empty file on your user path named `dn-c1n1.sh`, copy-paste the following and save the file
 ```shell script
@@ -139,8 +203,8 @@ export LOCKING_CENTER="127.0.0.1:22119"                 # Modify the values acco
 export BIND_ADDRESS="127.0.0.1:9430"
 export MANAGER_ADDRESS="http://127.0.0.1:9400"
 export SIZE="1073741824" # 1gb
-export ROOT_PATH=""/opt/c1n1"
-/usr/local/bin/kertish-dfs-data
+export ROOT_PATH="/opt/c1n1"
+/usr/local/bin/kertish-data
 ```
 - Give execution permission to the file `sudo chmod +x [Saved File Location]`
 - Execute the saved file.
@@ -154,8 +218,8 @@ export ROOT_PATH=""/opt/c1n1"
 export BIND_ADDRESS="127.0.0.1:9431"
 export MANAGER_ADDRESS="http://127.0.0.1:9400"
 export SIZE="1073741824" # 1gb
-export ROOT_PATH=""/opt/c1n2"
-/usr/local/bin/kertish-dfs-data
+export ROOT_PATH="/opt/c1n2"
+/usr/local/bin/kertish-data
 ```
 - Give execution permission to the file `sudo chmod +x [Saved File Location]`
 - Execute the saved file.
@@ -169,8 +233,8 @@ export ROOT_PATH=""/opt/c1n2"
 export BIND_ADDRESS="127.0.0.1:9432"
 export MANAGER_ADDRESS="http://127.0.0.1:9400"
 export SIZE="1073741824" # 1gb
-export ROOT_PATH=""/opt/c2n1"
-/usr/local/bin/kertish-dfs-data
+export ROOT_PATH="/opt/c2n1"
+/usr/local/bin/kertish-data
 ```
 - Give execution permission to the file `sudo chmod +x [Saved File Location]`
 - Execute the saved file.
@@ -184,8 +248,8 @@ export ROOT_PATH=""/opt/c2n1"
 export BIND_ADDRESS="127.0.0.1:9433"
 export MANAGER_ADDRESS="http://127.0.0.1:9400"
 export SIZE="1073741824" # 1gb
-export ROOT_PATH=""/opt/c2n2"
-/usr/local/bin/kertish-dfs-data
+export ROOT_PATH="/opt/c2n2"
+/usr/local/bin/kertish-data
 ```
 - Give execution permission to the file `sudo chmod 777 [Saved File Location]`
 - Execute the saved file.
@@ -197,10 +261,10 @@ different sized hard-drives. You should use the `SIZE` environment variable to a
 the server that has the smallest hard-drive size
 
  
-- Copy `kertish-dfs-admin` executable to `/usr/local/bin` folder on the system.
-- Give execution permission to the file `sudo chmod +x /usr/local/bin/kertish-dfs-admin`
+- Copy `kertish-admin` executable to `/usr/local/bin` folder on the system.
+- Give execution permission to the file `sudo chmod +x /usr/local/bin/kertish-admin`
 - Enter the following command
-`kertish-dfs-admin -create-cluster 127.0.0.1:9430,127.0.0.1:9431`
+`kertish-admin -create-cluster 127.0.0.1:9430,127.0.0.1:9431`
 - If everything went right, you should see an output like
 ```
 Cluster Details: eddd204e4cd23a14cb2f20c84299ee81
@@ -210,7 +274,7 @@ Cluster Details: eddd204e4cd23a14cb2f20c84299ee81
 ok.
 ```
 - Enter the following command to create the one another cluster
-`kertish-dfs-admin -create-cluster 127.0.0.1:9432,127.0.0.1:9433`
+`kertish-admin -create-cluster 127.0.0.1:9432,127.0.0.1:9433`
 - If everything went right, you should see something like this
 ```
 Cluster Details: 8f0e2bc02811f346d6cbb542c92d118d
