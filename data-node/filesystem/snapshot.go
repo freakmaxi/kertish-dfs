@@ -21,7 +21,6 @@ import (
 )
 
 const snapshotPrefix = "snapshot."
-const snapshotTimeLayout = "20060102150405"
 const snapshotHeaderBackupFile = "headers.backup"
 
 type Snapshot interface {
@@ -75,7 +74,7 @@ func (s *snapshot) ReadHeaderBackup(snapshot time.Time) (HeaderMap, error) {
 		}
 		return nil, err
 	}
-	defer headerFile.Close()
+	defer func() { _ = headerFile.Close() }()
 
 	sha512HexBytes := make([]byte, 32)
 	var usage uint16
@@ -108,7 +107,7 @@ func (s *snapshot) ReplaceHeaderBackup(snapshot time.Time, headerMap HeaderMap) 
 	if err != nil {
 		return err
 	}
-	defer headerFile.Close()
+	defer func() { _ = headerFile.Close() }()
 
 	for sha512Hex, usage := range headerMap {
 		sha512HexBytes, err := hex.DecodeString(sha512Hex)
@@ -159,7 +158,7 @@ func (s *snapshot) Create(targetSnapshot *time.Time) (snapshotTime *time.Time, s
 	if err != nil {
 		return nil, err
 	}
-	defer headerFile.Close()
+	defer func() { _ = headerFile.Close() }()
 
 	if err := dnc.Traverse(s.rootPath, func(info os.FileInfo) error {
 		sha512Hex := info.Name()
@@ -303,7 +302,7 @@ func (s *snapshot) Dates() (common.Snapshots, error) {
 		}
 
 		snapshot := name[len(snapshotPrefix):]
-		snapshotTime, err := time.Parse(snapshotTimeLayout, snapshot)
+		snapshotTime, err := time.Parse(common.MachineTimeFormatWithSeconds, snapshot)
 		if err == nil {
 			snapshots = append(snapshots, snapshotTime)
 		}
@@ -314,11 +313,11 @@ func (s *snapshot) Dates() (common.Snapshots, error) {
 }
 
 func (s *snapshot) PathName(snapshot time.Time) string {
-	return fmt.Sprintf("%s%s", snapshotPrefix, snapshot.Format(snapshotTimeLayout))
+	return fmt.Sprintf("%s%s", snapshotPrefix, snapshot.Format(common.MachineTimeFormatWithSeconds))
 }
 
 func (s *snapshot) FromUint(snapshotUint uint64) (*time.Time, error) {
-	snapshotTime, err := time.Parse(snapshotTimeLayout, strconv.FormatUint(snapshotUint, 10))
+	snapshotTime, err := time.Parse(common.MachineTimeFormatWithSeconds, strconv.FormatUint(snapshotUint, 10))
 	if err != nil {
 		return nil, err
 	}
@@ -326,6 +325,6 @@ func (s *snapshot) FromUint(snapshotUint uint64) (*time.Time, error) {
 }
 
 func (s *snapshot) ToUint(snapshot time.Time) uint64 {
-	snapshotUint, _ := strconv.ParseUint(snapshot.Format(snapshotTimeLayout), 10, 64)
+	snapshotUint, _ := strconv.ParseUint(snapshot.Format(common.MachineTimeFormatWithSeconds), 10, 64)
 	return snapshotUint
 }

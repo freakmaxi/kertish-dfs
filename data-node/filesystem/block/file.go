@@ -209,19 +209,19 @@ func (f *file) Close() {
 }
 
 func (f *file) move(source string, target string) error {
-	defer os.Remove(source)
+	defer func() { _ = os.Remove(source) }()
 
 	sourceFile, err := os.OpenFile(source, os.O_RDONLY, 0666)
 	if err != nil {
 		return err
 	}
-	defer sourceFile.Close()
+	defer func() { _ = sourceFile.Close() }()
 
 	targetFile, err := os.OpenFile(target, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
 		return err
 	}
-	defer targetFile.Close()
+	defer func() { _ = targetFile.Close() }()
 
 	if _, err = io.Copy(targetFile, sourceFile); err != nil {
 		return err

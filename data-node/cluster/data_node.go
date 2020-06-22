@@ -16,14 +16,12 @@ import (
 const commandSyncRead = "SYRD"
 const commandSyncList = "SYLS"
 const chunkSize = 1024 * 1024 // 1mb
-const snapshotTimeLayout = "20060102150405"
 
 type DataNode interface {
-	SyncList() (*common.SyncContainer, error)
-	SyncRead(snapshotTimeUint64 uint64, sha512Hex string, drop bool,
-		usageCountHandler func(blockSize uint32, usageCount uint16) bool,
+	SyncList(snapshotTime *time.Time) (*common.SyncContainer, error)
+	SyncRead(snapshotTime *time.Time, sha512Hex string, drop bool,
 		dataHandler func(data []byte) error,
-		verifyHandler func() bool,
+		verifyHandler func(usage uint16) bool,
 	) error
 }
 
@@ -47,7 +45,7 @@ func (d *dataNode) connect(connectionHandler func(conn *net.TCPConn) error) erro
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	return connectionHandler(conn)
 }
@@ -73,12 +71,20 @@ func (d *dataNode) hashAsHex(conn *net.TCPConn) (string, error) {
 	return hex.EncodeToString(h), nil
 }
 
-func (d *dataNode) SyncList() (*common.SyncContainer, error) {
+func (d *dataNode) SyncList(snapshotTime *time.Time) (*common.SyncContainer, error) {
 	container := common.NewSyncContainer()
-	container.FileItems = make(map[string]common.SyncFileItem)
 
 	if err := d.connect(func(conn *net.TCPConn) error {
 		if _, err := conn.Write([]byte(commandSyncList)); err != nil {
+			return err
+		}
+
+		snapshotTimeUint := uint64(0)
+		if snapshotTime != nil {
+			snapshotTimeUint, _ = strconv.ParseUint(snapshotTime.Format(common.MachineTimeFormatWithSeconds), 10, 64)
+		}
+
+		if err := binary.Write(conn, binary.LittleEndian, snapshotTimeUint); err != nil {
 			return err
 		}
 
@@ -86,44 +92,8 @@ func (d *dataNode) SyncList() (*common.SyncContainer, error) {
 			return fmt.Errorf("data node refused the sync list request")
 		}
 
-		pullFileItemsFunc := func(targetFileItems map[string]common.SyncFileItem) error {
-			var rootFileItemsLength uint64
-			if err := binary.Read(conn, binary.LittleEndian, &rootFileItemsLength); err != nil {
-				return err
-			}
-
-			for i := uint64(0); i < rootFileItemsLength; i++ {
-				sha512Hex, err := d.hashAsHex(conn)
-				if err != nil {
-					return err
-				}
-
-				var usage uint16
-				if err := binary.Read(conn, binary.LittleEndian, &usage); err != nil {
-					return err
-				}
-
-				var size int32
-				if err := binary.Read(conn, binary.LittleEndian, &size); err != nil {
-					return err
-				}
-
-				targetFileItems[sha512Hex] = common.SyncFileItem{
-					Sha512Hex: sha512Hex,
-					Usage:     usage,
-					Size:      size,
-				}
-			}
-
-			return nil
-		}
-
 		var snapshotsLength uint64
 		if err := binary.Read(conn, binary.LittleEndian, &snapshotsLength); err != nil {
-			return err
-		}
-
-		if err := pullFileItemsFunc(container.FileItems); err != nil {
 			return err
 		}
 
@@ -133,21 +103,41 @@ func (d *dataNode) SyncList() (*common.SyncContainer, error) {
 				return err
 			}
 
-			snapshotTime, err := time.Parse(snapshotTimeLayout, strconv.FormatUint(snapshotTimeUint, 10))
+			snapshotTime, err := time.Parse(common.MachineTimeFormatWithSeconds, strconv.FormatUint(snapshotTimeUint, 10))
 			if err != nil {
 				return err
 			}
 
-			snapshotContainer := common.NewContainer(snapshotTime)
-			snapshotContainer.FileItems = make(map[string]common.SyncFileItem)
+			container.Snapshots = append(container.Snapshots, snapshotTime)
+		}
+		container.Sort()
 
-			if err := pullFileItemsFunc(snapshotContainer.FileItems); err != nil {
+		for {
+			sha512Hex, err := d.hashAsHex(conn)
+			if err != nil {
+				return err
+			}
+			if strings.Compare(sha512Hex, common.NullSha512Hex) == 0 {
+				break
+			}
+
+			var usage uint16
+			if err := binary.Read(conn, binary.LittleEndian, &usage); err != nil {
 				return err
 			}
 
-			container.Snapshots = append(container.Snapshots, snapshotContainer)
+			var size int32
+			if err := binary.Read(conn, binary.LittleEndian, &size); err != nil {
+				return err
+			}
+
+			container.FileItems[sha512Hex] =
+				common.SyncFileItem{
+					Sha512Hex: sha512Hex,
+					Usage:     usage,
+					Size:      uint32(size),
+				}
 		}
-		container.Sort()
 
 		if !d.result(conn) {
 			return fmt.Errorf("sync list command is failed on data node")
@@ -161,7 +151,7 @@ func (d *dataNode) SyncList() (*common.SyncContainer, error) {
 	return container, nil
 }
 
-func (d *dataNode) SyncRead(snapshotTimeUint64 uint64, sha512Hex string, drop bool, compareHandler func(blockSize uint32, usageCount uint16) bool, dataHandler func([]byte) error, verifyHandler func() bool) error {
+func (d *dataNode) SyncRead(snapshotTime *time.Time, sha512Hex string, drop bool, dataHandler func([]byte) error, verifyHandler func(usage uint16) bool) error {
 	return d.connect(func(conn *net.TCPConn) error {
 		if _, err := conn.Write([]byte(commandSyncRead)); err != nil {
 			return err
@@ -179,7 +169,12 @@ func (d *dataNode) SyncRead(snapshotTimeUint64 uint64, sha512Hex string, drop bo
 			return err
 		}
 
-		if err := binary.Write(conn, binary.LittleEndian, snapshotTimeUint64); err != nil {
+		snapshotTimeUint := uint64(0)
+		if snapshotTime != nil {
+			snapshotTimeUint, _ = strconv.ParseUint(snapshotTime.Format(common.MachineTimeFormatWithSeconds), 10, 64)
+		}
+
+		if err := binary.Write(conn, binary.LittleEndian, snapshotTimeUint); err != nil {
 			return err
 		}
 
@@ -192,14 +187,11 @@ func (d *dataNode) SyncRead(snapshotTimeUint64 uint64, sha512Hex string, drop bo
 			return err
 		}
 
-		var usageCount uint16
-		if err := binary.Read(conn, binary.LittleEndian, &usageCount); err != nil {
+		var usage uint16
+		if err := binary.Read(conn, binary.LittleEndian, &usage); err != nil {
 			return err
 		}
-		if !compareHandler(blockSize, usageCount) {
-			_, err := conn.Write([]byte{'-'})
-			return err
-		}
+
 		if _, err := conn.Write([]byte{'+'}); err != nil {
 			return err
 		}
@@ -231,7 +223,7 @@ func (d *dataNode) SyncRead(snapshotTimeUint64 uint64, sha512Hex string, drop bo
 			return fmt.Errorf("sync read command is failed on data node")
 		}
 
-		if !verifyHandler() {
+		if !verifyHandler(usage) {
 			return fmt.Errorf("sync read result is not verified")
 		}
 

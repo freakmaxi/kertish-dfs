@@ -27,7 +27,7 @@ func main() {
 	}
 
 	logger, console := log.NewLogger("data")
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
 	if console {
 		printWelcome()

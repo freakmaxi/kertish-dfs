@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -88,7 +87,7 @@ func (c *commander) writeBinaryWithTimeout(conn net.Conn, data interface{}) erro
 }
 
 func (c *commander) Handler(conn net.Conn) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	buffer := make([]byte, commandBuffer)
 
@@ -132,7 +131,7 @@ func (c *commander) process(command string, conn net.Conn) error {
 	case "MODE":
 		return c.mode(conn)
 	case "LEAV":
-		return c.leav(conn)
+		return c.leav()
 	case "SYCR":
 		return c.sycr(conn)
 	case "SYRD":
@@ -146,13 +145,13 @@ func (c *commander) process(command string, conn net.Conn) error {
 	case "SYFL":
 		return c.syfl(conn)
 	case "SSCR":
-		return c.sscr(conn)
+		return c.sscr()
 	case "SSDE":
 		return c.ssde(conn)
 	case "SSRS":
 		return c.ssrs(conn)
 	case "WIPE":
-		return c.wipe(conn)
+		return c.wipe()
 	case "SIZE":
 		return c.size(conn)
 	case "USED":
@@ -188,12 +187,22 @@ func (c *commander) crea(conn net.Conn) error {
 		return err
 	}
 
+	var blockUsage uint16 = 1
 	var blockSize uint32
+
 	err = c.fs.Block().LockFile(sha512Hex, func(blockFile block.File) error {
 		if !blockFile.Temporary() {
 			if err := blockFile.IncreaseUsage(); err != nil {
 				return err
 			}
+			blockUsage = blockFile.Usage()
+
+			var err error
+			blockSize, err = blockFile.Size()
+			if err != nil {
+				return err
+			}
+
 			return errors.ErrQuit
 		}
 		if err := c.writeWithTimeout(conn, []byte{'+'}); err != nil {
@@ -226,7 +235,8 @@ func (c *commander) crea(conn net.Conn) error {
 		return err
 	}
 
-	c.node.Create(sha512Hex, blockSize)
+	c.node.Notify(sha512Hex, blockUsage, blockSize, err == errors.ErrQuit, true)
+
 	return err
 }
 
@@ -296,32 +306,26 @@ func (c *commander) dele(conn net.Conn) error {
 		return err
 	}
 
-	deleteShadow := false
-	deleteSize := uint32(0)
+	var blockUsage uint16
+	var blockSize uint32
 
 	if err := c.fs.Block().LockFile(sha512Hex, func(blockFile block.File) error {
 		if blockFile.Temporary() {
 			return errors.ErrQuit
 		}
 
-		usageCount := blockFile.Usage()
-
-		size := uint32(0)
-		if usageCount == 1 {
-			size, err = blockFile.Size()
-			if err != nil {
-				return err
-			}
+		blockUsage = blockFile.Usage()
+		blockSize, err = blockFile.Size()
+		if err != nil {
+			return err
 		}
 
 		if err := blockFile.Delete(); err != nil {
 			return err
 		}
+		blockUsage--
 
-		deleteShadow = usageCount > 1
-		deleteSize = size
-
-		if !deleteShadow {
+		if blockUsage == 0 {
 			c.cache.Remove(sha512Hex)
 		}
 
@@ -333,7 +337,8 @@ func (c *commander) dele(conn net.Conn) error {
 		return err
 	}
 
-	c.node.Delete(sha512Hex, deleteShadow, deleteSize)
+	c.node.Notify(sha512Hex, blockUsage, blockSize, blockUsage > 0, false)
+
 	return nil
 }
 
@@ -401,7 +406,7 @@ func (c *commander) mode(conn net.Conn) error {
 	return nil
 }
 
-func (c *commander) leav(conn net.Conn) error {
+func (c *commander) leav() error {
 	c.node.Leave()
 	return nil
 }
@@ -424,7 +429,9 @@ func (c *commander) sycr(conn net.Conn) error {
 	sourceAddr := string(sourceAddrBuf)
 
 	return c.fs.Block().LockFile(sha512Hex, func(blockFile block.File) error {
-		usageCountBackup := uint16(1)
+		if !blockFile.Temporary() && blockFile.VerifyForce() {
+			return blockFile.IncreaseUsage()
+		}
 
 		dn, err := cluster.NewDataNode(sourceAddr)
 		if err != nil {
@@ -432,36 +439,14 @@ func (c *commander) sycr(conn net.Conn) error {
 		}
 
 		return dn.SyncRead(
-			0,
+			nil,
 			sha512Hex,
 			false,
-			func(blockSize uint32, usageCount uint16) bool {
-				usageCountBackup = usageCount
-
-				if blockFile.Temporary() {
-					return true
-				}
-
-				size, _ := blockFile.Size()
-				if size != blockSize {
-					return true
-				}
-
-				if !blockFile.VerifyForce() {
-					return blockFile.Truncate(blockSize) == nil
-				}
-
-				return blockFile.ResetUsage(usageCount) != nil
-			},
 			func(data []byte) error {
 				return blockFile.Write(data)
 			},
-			func() bool {
-				if usageCountBackup == 1 {
-					return blockFile.Verify()
-				}
-
-				if err := blockFile.ResetUsage(usageCountBackup); err != nil {
+			func(usage uint16) bool {
+				if err := blockFile.ResetUsage(usage); err != nil {
 					return false
 				}
 				return blockFile.Verify()
@@ -515,8 +500,8 @@ func (c *commander) syrd(conn net.Conn) error {
 			return err
 		}
 
-		usageCount := blockFile.Usage()
-		if err := c.writeBinaryWithTimeout(conn, usageCount); err != nil {
+		usage := blockFile.Usage()
+		if err := c.writeBinaryWithTimeout(conn, usage); err != nil {
 			return err
 		}
 
@@ -578,44 +563,20 @@ func (c *commander) symv(conn net.Conn) error {
 	sourceAddr := string(sourceAddrBuf)
 
 	return c.fs.Block().LockFile(sha512Hex, func(blockFile block.File) error {
-		usageCountBackup := uint16(1)
-
 		dn, err := cluster.NewDataNode(sourceAddr)
 		if err != nil {
 			return err
 		}
 
 		return dn.SyncRead(
-			0,
+			nil,
 			sha512Hex,
 			true,
-			func(blockSize uint32, usageCount uint16) bool {
-				usageCountBackup = usageCount
-
-				if blockFile.Temporary() {
-					return true
-				}
-
-				size, _ := blockFile.Size()
-				if size != blockSize {
-					return true
-				}
-
-				if !blockFile.VerifyForce() {
-					return blockFile.Truncate(blockSize) == nil
-				}
-
-				return blockFile.ResetUsage(usageCount) != nil
-			},
 			func(data []byte) error {
 				return blockFile.Write(data)
 			},
-			func() bool {
-				if usageCountBackup == 1 {
-					return blockFile.Verify()
-				}
-
-				if err := blockFile.ResetUsage(usageCountBackup); err != nil {
+			func(usage uint16) bool {
+				if err := blockFile.ResetUsage(usage); err != nil {
 					return false
 				}
 				return blockFile.Verify()
@@ -624,7 +585,17 @@ func (c *commander) symv(conn net.Conn) error {
 }
 
 func (c *commander) syls(conn net.Conn) error {
-	container, err := c.fs.Sync().Container()
+	var snapshotTimeUint uint64
+	if err := c.readBinaryWithTimeout(conn, &snapshotTimeUint); err != nil {
+		return err
+	}
+
+	var snapshotTime *time.Time
+	if snapshotTimeUint > 0 {
+		snapshotTime, _ = c.fs.Snapshot().FromUint(snapshotTimeUint)
+	}
+
+	snapshots, err := c.fs.Snapshot().Dates()
 	if err != nil {
 		return err
 	}
@@ -633,52 +604,48 @@ func (c *commander) syls(conn net.Conn) error {
 		return err
 	}
 
-	pushFileItemsFunc := func(fileItems map[string]common.SyncFileItem) error {
-		fileItemsLength := uint64(len(fileItems))
-		if err := c.writeBinaryWithTimeout(conn, fileItemsLength); err != nil {
-			return err
-		}
-
-		for _, fileItem := range fileItems {
-			sha512Sum, err := hex.DecodeString(fileItem.Sha512Hex)
-			if err != nil {
-				return err
-			}
-
-			if err := c.writeWithTimeout(conn, sha512Sum); err != nil {
-				return err
-			}
-
-			if err := c.writeBinaryWithTimeout(conn, fileItem.Usage); err != nil {
-				return err
-			}
-
-			if err := c.writeBinaryWithTimeout(conn, fileItem.Size); err != nil {
-				return err
-			}
-		}
-
-		return nil
-	}
-
-	snapshotsLength := uint64(len(container.Snapshots))
+	snapshotsLength := uint64(len(snapshots))
 	if err := c.writeBinaryWithTimeout(conn, snapshotsLength); err != nil {
 		return err
 	}
 
-	if err := pushFileItemsFunc(container.FileItems); err != nil {
-		return err
-	}
-
-	for _, snapshotContainer := range container.Snapshots {
-		snapshotTimeUint, _ := strconv.ParseUint(snapshotContainer.Date.Format("20060102150405"), 10, 64)
+	for _, snapshot := range snapshots {
+		snapshotTimeUint := c.fs.Snapshot().ToUint(snapshot)
 		if err := c.writeBinaryWithTimeout(conn, snapshotTimeUint); err != nil {
 			return err
 		}
+	}
 
-		if err := pushFileItemsFunc(snapshotContainer.FileItems); err != nil {
+	if err := c.fs.Sync().List(snapshotTime, func(fileItem *common.SyncFileItem) error {
+		sha512Sum, err := hex.DecodeString(fileItem.Sha512Hex)
+		if err != nil {
 			return err
 		}
+
+		if err := c.writeWithTimeout(conn, sha512Sum); err != nil {
+			return err
+		}
+
+		if err := c.writeBinaryWithTimeout(conn, fileItem.Usage); err != nil {
+			return err
+		}
+
+		if err := c.writeBinaryWithTimeout(conn, fileItem.Size); err != nil {
+			return err
+		}
+
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	sha512Sum, err := hex.DecodeString(common.NullSha512Hex)
+	if err != nil {
+		return err
+	}
+
+	if err := c.writeWithTimeout(conn, sha512Sum); err != nil {
+		return err
 	}
 
 	return nil
@@ -706,7 +673,7 @@ func (c *commander) syfl(conn net.Conn) error {
 	return nil
 }
 
-func (c *commander) sscr(conn net.Conn) error {
+func (c *commander) sscr() error {
 	_, err := c.fs.Snapshot().Create(nil)
 	return err
 }
@@ -751,7 +718,7 @@ func (c *commander) ssrs(conn net.Conn) error {
 	return nil
 }
 
-func (c *commander) wipe(conn net.Conn) error {
+func (c *commander) wipe() error {
 	if err := c.fs.Wipe(); err != nil {
 		return err
 	}

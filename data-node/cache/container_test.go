@@ -8,15 +8,19 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 )
 
 func TestContainer_PurgeV1(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+
 	container := container{
 		limit:       1024 * 1024 * 5,
 		lifetime:    time.Second * 60,
 		mutex:       &sync.Mutex{},
 		index:       make(map[string]indexItem),
 		sortedIndex: make(indexItemList, 0),
+		logger:      logger,
 	} // limit 5MB
 
 	type dI struct {
@@ -57,12 +61,15 @@ func TestContainer_PurgeV1(t *testing.T) {
 }
 
 func TestContainer_PurgeV2(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+
 	container := container{
 		limit:       1024 * 1024 * 5,
 		lifetime:    time.Second * 5,
 		mutex:       &sync.Mutex{},
 		index:       make(map[string]indexItem),
 		sortedIndex: make(indexItemList, 0),
+		logger:      logger,
 	} // limit 5MB
 	container.start()
 
@@ -81,7 +88,7 @@ func TestContainer_PurgeV2(t *testing.T) {
 		})
 
 		container.Upsert(fmt.Sprintf("a%d", i+1), []byte{})
-		container.sortedIndex[i].date = time.Now().UTC().Add(time.Second)
+		container.sortedIndex[i].expiresAt = time.Now().UTC().Add(time.Second * 6)
 	}
 
 	for i := 0; i < 5; i++ {
@@ -97,21 +104,24 @@ func TestContainer_PurgeV2(t *testing.T) {
 		assert.Equal(t, i, container.sortedIndex[i].sortIndex)
 	}
 
-	<-time.After(time.Second * 5)
+	<-time.After(time.Millisecond * 5200)
 
 	for i := 0; i < 4; i++ {
 		assert.Equal(t, i, container.sortedIndex[i].sortIndex)
 	}
 }
 
-// Memmory Test
+// Memory Test
 func TestContainer_PurgeV3(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+
 	container := container{
 		limit:       1024 * 1024 * 5,
 		lifetime:    time.Second * 60,
 		mutex:       &sync.Mutex{},
 		index:       make(map[string]indexItem),
 		sortedIndex: make(indexItemList, 0),
+		logger:      logger,
 	} // limit 5MB
 	container.start()
 
@@ -134,7 +144,7 @@ func TestContainer_PurgeV3(t *testing.T) {
 		}
 
 		container.Upsert(dI.name, dI.data)
-		container.sortedIndex[i].date = time.Now().UTC().Add(time.Second)
+		container.sortedIndex[i].expiresAt = time.Now().UTC().Add(time.Second * 61)
 	}
 	runtime.GC()
 

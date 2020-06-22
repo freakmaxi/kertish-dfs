@@ -16,7 +16,8 @@ import (
 )
 
 type Synchronize interface {
-	Container() (*common.SyncContainer, error)
+	List(snapshotTime *time.Time, itemHandler func(fileItem *common.SyncFileItem) error) error
+
 	Start(sourceAddr string) error
 }
 
@@ -40,58 +41,30 @@ func NewSynchronize(rootPath string, snapshot Snapshot, logger *zap.Logger) Sync
 	}
 }
 
-func (s *synchronize) Container() (*common.SyncContainer, error) {
+func (s *synchronize) List(snapshotTime *time.Time, itemHandler func(fileItem *common.SyncFileItem) error) error {
 	s.syncMutex.Lock()
 	defer s.syncMutex.Unlock()
 
-	return s.createContainer()
+	dataPath := s.rootPath
+	headerMap := make(HeaderMap)
+
+	if snapshotTime != nil {
+		snapshotPathName := s.snapshot.PathName(*snapshotTime)
+		dataPath = path.Join(dataPath, snapshotPathName)
+
+		headerMap, _ = s.snapshot.ReadHeaderBackup(*snapshotTime)
+	}
+
+	return s.iterateFileItems(dataPath, headerMap, itemHandler)
 }
 
-func (s *synchronize) createContainer() (*common.SyncContainer, error) {
-	var err error
-
-	container := common.NewSyncContainer()
-	container.FileItems, err = s.createFileItems(s.rootPath, make(HeaderMap))
-	if err != nil {
-		return nil, err
-	}
-
-	snapshotDates, err := s.snapshot.Dates()
-	if err != nil {
-		return nil, err
-	}
-
-	for _, snapshotDate := range snapshotDates {
-		headerMap, err := s.snapshot.ReadHeaderBackup(snapshotDate)
-		if err != nil {
-			return nil, err
-		}
-
-		snapshotPathName := s.snapshot.PathName(snapshotDate)
-		snapshotPath := path.Join(s.rootPath, snapshotPathName)
-
-		snapshotContainer := common.NewContainer(snapshotDate)
-		snapshotContainer.FileItems, err = s.createFileItems(snapshotPath, headerMap)
-		if err != nil {
-			return nil, err
-		}
-
-		container.Snapshots = append(container.Snapshots, snapshotContainer)
-	}
-	container.Sort()
-
-	return container, nil
-}
-
-func (s *synchronize) createFileItems(dataPath string, headerMap HeaderMap) (map[string]common.SyncFileItem, error) {
+func (s *synchronize) iterateFileItems(dataPath string, headerMap HeaderMap, itemHandler func(fileItem *common.SyncFileItem) error) error {
 	b, err := block.NewManager(dataPath, s.logger)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	fileItems := make(map[string]common.SyncFileItem)
-
-	if err := dnc.Traverse(dataPath, func(info os.FileInfo) error {
+	return dnc.Traverse(dataPath, func(info os.FileInfo) error {
 		return b.File(info.Name(), func(file block.File) error {
 			size, err := file.Size()
 			if err != nil {
@@ -103,20 +76,15 @@ func (s *synchronize) createFileItems(dataPath string, headerMap HeaderMap) (map
 				usage = file.Usage()
 			}
 
-			fileItems[info.Name()] =
-				common.SyncFileItem{
+			return itemHandler(
+				&common.SyncFileItem{
 					Sha512Hex: info.Name(),
 					Usage:     usage,
-					Size:      int32(size),
-				}
-
-			return nil
+					Size:      size,
+				},
+			)
 		})
-	}); err != nil {
-		return nil, err
-	}
-
-	return fileItems, nil
+	})
 }
 
 func (s *synchronize) Start(sourceAddr string) (syncErr error) {
@@ -140,50 +108,60 @@ func (s *synchronize) Start(sourceAddr string) (syncErr error) {
 		s.nodeCache[sourceAddr] = sourceNode
 	}
 
-	currentContainer, err := s.createContainer()
+	sourceContainer, err := sourceNode.SyncList(nil)
 	if err != nil {
 		return err
 	}
 
-	sourceContainer, err := sourceNode.SyncList()
-	if err != nil {
+	if err := s.syncFileItems(sourceNode, nil, sourceContainer.FileItems); err != nil {
 		return err
 	}
 
-	if err := s.syncFileItems(sourceNode, nil, currentContainer.FileItems, sourceContainer.FileItems); err != nil {
-		return err
-	}
-
-	if len(currentContainer.Snapshots) > 0 || len(sourceContainer.Snapshots) > 0 {
-		s.logger.Sugar().Infof("Snapshot Sync will complete in background...")
-		go s.syncSnapshots(sourceNode, currentContainer, sourceContainer)
-	}
+	go s.syncSnapshots(sourceNode, sourceContainer)
 
 	return nil
 }
 
-func (s *synchronize) syncFileItems(sourceNode cluster.DataNode, snapshotTime *time.Time, currentFileItems map[string]common.SyncFileItem, sourceFileItems map[string]common.SyncFileItem) error {
-	createList := make(common.SyncFileItemList, 0)
+func (s *synchronize) syncFileItems(sourceNode cluster.DataNode, snapshotTime *time.Time, sourceFileItems common.SyncFileItemMap) error {
+	syncLoc := "ROOT"
 
-	for sha512Hex, sourceFileItem := range sourceFileItems {
-		currentFileItem, has := currentFileItems[sha512Hex]
-		if !has {
-			createList = append(createList, sourceFileItem)
-			continue
-		}
+	dataPath := s.rootPath
+	headerMap := make(HeaderMap)
+	if snapshotTime != nil {
+		snapshotPathName := s.snapshot.PathName(*snapshotTime)
+		dataPath = path.Join(dataPath, snapshotPathName)
 
-		if !common.CompareFileItems(currentFileItem, sourceFileItem) {
-			createList = append(createList, sourceFileItem)
-		}
-
-		delete(currentFileItems, sha512Hex)
+		headerMap, _ = s.snapshot.ReadHeaderBackup(*snapshotTime)
+		syncLoc = fmt.Sprintf("SNAPSHOT %s", snapshotTime.Format(common.FriendlyTimeFormatWithSeconds))
 	}
 
 	wipeList := make(common.SyncFileItemList, 0)
+	createList := make(common.SyncFileItemList, 0)
+	sourceHeaderMap := make(HeaderMap)
 
-	if len(currentFileItems) > 0 {
-		for _, fileItem := range currentFileItems {
-			wipeList = append(wipeList, fileItem)
+	if err := s.iterateFileItems(dataPath, headerMap, func(fileItem *common.SyncFileItem) error {
+		sourceFileItem, has := sourceFileItems[fileItem.Sha512Hex]
+		if !has {
+			wipeList = append(wipeList, *fileItem)
+			return nil
+		}
+
+		sourceHeaderMap[fileItem.Sha512Hex] = sourceFileItem.Usage
+
+		if !common.CompareFileItems(*fileItem, sourceFileItem) {
+			createList = append(createList, sourceFileItem)
+		}
+
+		delete(sourceFileItems, sourceFileItem.Sha512Hex)
+
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	if len(sourceFileItems) > 0 {
+		for _, fileItem := range sourceFileItems {
+			createList = append(createList, fileItem)
 		}
 	}
 
@@ -191,14 +169,6 @@ func (s *synchronize) syncFileItems(sourceNode cluster.DataNode, snapshotTime *t
 		return nil
 	}
 
-	dataPath := s.rootPath
-	syncLoc := "ROOT"
-	if snapshotTime != nil {
-		snapshotPathName := s.snapshot.PathName(*snapshotTime)
-		dataPath = path.Join(s.rootPath, snapshotPathName)
-
-		syncLoc = fmt.Sprintf("SNAPSHOT %s", snapshotTime.Format(common.FriendlyTimeFormatWithSeconds))
-	}
 	s.logger.Sugar().Infof("Sync (%s) will, create: %d / delete: %d", syncLoc, len(createList), len(wipeList))
 
 	b, err := block.NewManager(dataPath, s.logger)
@@ -217,81 +187,96 @@ func (s *synchronize) syncFileItems(sourceNode cluster.DataNode, snapshotTime *t
 	wg.Wait()
 
 	if snapshotTime != nil {
-		headerMap := make(HeaderMap)
-		for sha512Hex, fileItem := range sourceFileItems {
-			headerMap[sha512Hex] = fileItem.Usage
-		}
-		return s.snapshot.ReplaceHeaderBackup(*snapshotTime, headerMap)
+		return s.snapshot.ReplaceHeaderBackup(*snapshotTime, sourceHeaderMap)
 	}
 
 	return nil
 }
 
-func (s *synchronize) syncSnapshots(sourceNode cluster.DataNode, currentContainer *common.SyncContainer, sourceContainer *common.SyncContainer) {
-	var err error
+func (s *synchronize) syncSnapshots(sourceNode cluster.DataNode, sourceContainer *common.SyncContainer) {
+	s.logger.Sugar().Infof("Snapshot Sync will complete in background...")
+
+	completed := false
+
+	snapshots, err := s.snapshot.Dates()
+	if err != nil {
+		s.logger.Error("unable to get snapshot dates for snapshot sync operation", zap.Error(err))
+		return
+	}
 
 	s.logger.Sugar().Infof("Snapshot Sync is in progress...")
 	defer func() {
-		if err != nil {
-			s.logger.Error("Snapshot Sync is failed.", zap.Error(err))
+		if !completed {
+			s.logger.Error("Snapshot Sync is failed.")
 			return
 		}
 
 		s.logger.Sugar().Infof("Snapshot Sync is completed.")
 	}()
 
-	createSnapshotAndSyncFunc := func(sourceSnapshotContainer *common.SnapshotContainer) error {
-		if _, err := s.snapshot.Create(&sourceSnapshotContainer.Date); err != nil {
+	if len(snapshots) == 0 && len(sourceContainer.Snapshots) == 0 {
+		completed = true
+		return
+	}
+
+	createSnapshotAndSyncFunc := func(targetSnapshot time.Time) error {
+		if _, err := s.snapshot.Create(&targetSnapshot); err != nil {
+			s.logger.Error("snapshot creation for sync is failed", zap.Error(err))
 			return err
 		}
 
-		snapshotPathName := s.snapshot.PathName(sourceSnapshotContainer.Date)
-		snapshotPath := path.Join(s.rootPath, snapshotPathName)
-
-		snapshotFileItems, err := s.createFileItems(snapshotPath, make(HeaderMap))
+		targetContainer, err := sourceNode.SyncList(&targetSnapshot)
 		if err != nil {
+			s.logger.Error("request for snapshot sync list is failed", zap.Error(err))
 			return err
 		}
 
-		if err := s.syncFileItems(sourceNode, &sourceSnapshotContainer.Date, snapshotFileItems, sourceSnapshotContainer.FileItems); err != nil {
+		if err = s.syncFileItems(sourceNode, &targetSnapshot, targetContainer.FileItems); err != nil {
+			s.logger.Error("syncing snapshot files is failed", zap.Error(err))
 			return err
 		}
 
 		return nil
 	}
 
-	for len(currentContainer.Snapshots) > 0 {
-		currentSnapshotContainer := currentContainer.Snapshots[0]
+	for len(snapshots) > 0 {
+		currentSnapshot := snapshots[0]
 
 		if len(sourceContainer.Snapshots) == 0 {
-			_ = s.snapshot.Delete(currentSnapshotContainer.Date)
-			currentContainer.Snapshots = currentContainer.Snapshots[1:]
+			_ = s.snapshot.Delete(currentSnapshot)
+			snapshots = snapshots[1:]
 
 			continue
 		}
 
-		sourceSnapshotContainer := sourceContainer.Snapshots[0]
+		sourceSnapshot := sourceContainer.Snapshots[0]
 
-		if currentSnapshotContainer.Date.Equal(sourceSnapshotContainer.Date) {
-			if err = s.syncFileItems(sourceNode, &sourceSnapshotContainer.Date, currentSnapshotContainer.FileItems, sourceSnapshotContainer.FileItems); err != nil {
+		if currentSnapshot.Equal(sourceSnapshot) {
+			targetContainer, err := sourceNode.SyncList(&sourceSnapshot)
+			if err != nil {
+				s.logger.Error("request for snapshot sync list is failed", zap.Error(err))
 				return
 			}
 
-			currentContainer.Snapshots = currentContainer.Snapshots[1:]
+			if err = s.syncFileItems(sourceNode, &sourceSnapshot, targetContainer.FileItems); err != nil {
+				return
+			}
+
+			snapshots = snapshots[1:]
 			sourceContainer.Snapshots = sourceContainer.Snapshots[1:]
 
 			continue
 		}
 
-		if currentSnapshotContainer.Date.Before(sourceSnapshotContainer.Date) {
-			_ = s.snapshot.Delete(currentSnapshotContainer.Date)
-			currentContainer.Snapshots = currentContainer.Snapshots[1:]
+		if currentSnapshot.Before(sourceSnapshot) {
+			_ = s.snapshot.Delete(currentSnapshot)
+			snapshots = snapshots[1:]
 
 			continue
 		}
 
 		// Create snapshot from root then sync
-		if err = createSnapshotAndSyncFunc(sourceSnapshotContainer); err != nil {
+		if err := createSnapshotAndSyncFunc(sourceSnapshot); err != nil {
 			return
 		}
 
@@ -299,14 +284,16 @@ func (s *synchronize) syncSnapshots(sourceNode cluster.DataNode, currentContaine
 	}
 
 	for len(sourceContainer.Snapshots) > 0 {
-		sourceSnapshotContainer := sourceContainer.Snapshots[0]
+		sourceSnapshot := sourceContainer.Snapshots[0]
 
-		if err = createSnapshotAndSyncFunc(sourceSnapshotContainer); err != nil {
+		if err := createSnapshotAndSyncFunc(sourceSnapshot); err != nil {
 			return
 		}
 
 		sourceContainer.Snapshots = sourceContainer.Snapshots[1:]
 	}
+
+	completed = true
 }
 
 func (s *synchronize) delete(wg *sync.WaitGroup, b block.Manager, wipeList common.SyncFileItemList) {
@@ -381,45 +368,26 @@ func (s *synchronize) createBlockFile(sourceNode cluster.DataNode, snapshotTime 
 		)
 	}()
 
-	snapshotTimeUint64 := uint64(0)
-	if snapshotTime != nil {
-		snapshotTimeUint64 = s.snapshot.ToUint(*snapshotTime)
-	}
-
 	return b.File(fileItem.Sha512Hex, func(blockFile block.File) error {
-		usageCountBackup := uint16(1)
+		if !blockFile.Temporary() {
+			if blockFile.VerifyForce() {
+				return blockFile.ResetUsage(fileItem.Usage)
+			}
+
+			if err := blockFile.Truncate(uint32(fileItem.Size)); err != nil {
+				return err
+			}
+		}
 
 		return sourceNode.SyncRead(
-			snapshotTimeUint64,
+			snapshotTime,
 			fileItem.Sha512Hex,
 			false,
-			func(blockSize uint32, usageCount uint16) bool {
-				usageCountBackup = usageCount
-
-				if blockFile.Temporary() {
-					return true
-				}
-
-				size, _ := blockFile.Size()
-				if size != blockSize {
-					return true
-				}
-
-				if !blockFile.VerifyForce() {
-					return blockFile.Truncate(blockSize) == nil
-				}
-
-				return blockFile.ResetUsage(usageCount) != nil
-			},
 			func(data []byte) error {
 				return blockFile.Write(data)
 			},
-			func() bool {
-				if usageCountBackup == 1 {
-					return blockFile.Verify()
-				}
-
-				if err := blockFile.ResetUsage(usageCountBackup); err != nil {
+			func(usage uint16) bool {
+				if err := blockFile.ResetUsage(usage); err != nil {
 					return false
 				}
 
