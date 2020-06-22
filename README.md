@@ -22,7 +22,7 @@ Kertish-dfs is suitable to use as a back service of front services. It means, it
 to the file manipulation.
 
 #### Architecture
-Kertish-dfs has 3 vital parts for a working system. Manager-Node, Head-Node, Data-Node.
+Kertish-dfs has 3 vital parts for a working farm. Manager-Node, Head-Node, Data-Node.
 - Manager-Node is responsible to handle data-node synchronisation and harmony for each cluster. It is handling the
 space reservation, indexing data-node contents for fast search and find operations, health tracking of each data-node
 and optimize for the best performance every second, cluster balancing, check/repair/fix operations and synchronisation.
@@ -68,7 +68,7 @@ the real size
 - Fast traditional move/copy operations. It can take up to 5 seconds to move/copy a 1tb sized file in the dfs. 
 - Multi tasking. Different request can work on the same folder.
 - Automated sync. Data nodes are smart enough to sync the data in the cluster.
-- Possible to take "snapshot" for marking the state of data-node and revert that if it requires.
+- Possible to take "snapshot" for marking the state of data-node and revert that moment if it requires.
 - REST architecture for file/folder manipulation.
 - Command-line `Admin` and `File System` tools
 
@@ -140,7 +140,7 @@ Put any file using `kertish-dfs` file system tool. Ex:
 `./kertish-dfs cp local:~/Downloads/demo.mov /demo.mov`
 
 Just change the path and file after `local:` according to the file in your system. Try to choose a file more than 70 Mb
-to see file chunk distribution between clusters. If file size is smaller than 32 Mb, it will be placed only a cluster.
+to see file chunk distribution between clusters. If file size is smaller than 32 Mb, it will be placed only in a cluster.
 
 `./kertish-dfs ls -l` will give you an output similar like below
 
@@ -316,5 +316,5 @@ If you get the same or similar outputs like here, congratulations! you successfu
 
 When you setup the cluster and the cluster starts taking data blocks, consider that cluster is as absolute. Deleting 
 the cluster will cause you data inconsistency and lost. Due to this reason, when you are creating the structure of
-your farm, pay attention to your cluster setups the most. Moving, Splitting and Joining the clusters will be introduced
-in future releases.
+your farm, pay attention to your cluster setups the most. If you want to remove the cluster from the farm, consider to
+move the cluster first from one point to another using `kertish-admin` client tool.
