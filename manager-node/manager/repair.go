@@ -207,7 +207,7 @@ func (r *repair) repairIntegrity() error {
 					continue
 				}
 
-				if uint32(cacheFileItem.FileItem.Size) != chunk.Size {
+				if cacheFileItem.FileItem.Size != chunk.Size {
 					deletionResult.Missing = append(deletionResult.Missing, chunk.Hash)
 					continue
 				}

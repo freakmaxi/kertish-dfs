@@ -374,7 +374,7 @@ func (s *synchronize) createBlockFile(sourceNode cluster.DataNode, snapshotTime 
 				return blockFile.ResetUsage(fileItem.Usage)
 			}
 
-			if err := blockFile.Truncate(uint32(fileItem.Size)); err != nil {
+			if err := blockFile.Truncate(fileItem.Size); err != nil {
 				return err
 			}
 		}
