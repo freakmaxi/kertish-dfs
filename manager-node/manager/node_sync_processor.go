@@ -13,14 +13,16 @@ type nodeSyncProcessor struct {
 	nodeCacheMutex sync.Mutex
 	nodeCache      map[string]cluster2.DataNode
 
-	index  data.Index
-	logger *zap.Logger
+	clusters data.Clusters
+	index    data.Index
+	logger   *zap.Logger
 }
 
-func newNodeSyncProcessor(index data.Index, logger *zap.Logger) *nodeSyncProcessor {
+func newNodeSyncProcessor(clusters data.Clusters, index data.Index, logger *zap.Logger) *nodeSyncProcessor {
 	return &nodeSyncProcessor{
 		nodeCacheMutex: sync.Mutex{},
 		nodeCache:      make(map[string]cluster2.DataNode),
+		clusters:       clusters,
 		index:          index,
 		logger:         logger,
 	}
@@ -44,6 +46,26 @@ func (d *nodeSyncProcessor) get(node *common.Node) (cluster2.DataNode, error) {
 }
 
 func (d *nodeSyncProcessor) Sync(ns *nodeSync) bool {
+	cluster, err := d.clusters.Get(ns.clusterId)
+	if err != nil {
+		d.logger.Error(
+			"Sync is failed (CLUSTER)",
+			zap.String("sha512Hex", ns.sha512Hex),
+			zap.Bool("create", ns.create),
+			zap.Error(err),
+		)
+		return false
+	}
+
+	if cluster.Paralyzed {
+		d.logger.Warn(
+			"Sync will try again (PARALYSED)",
+			zap.String("sha512Hex", ns.sha512Hex),
+			zap.Bool("create", ns.create),
+		)
+		return false
+	}
+
 	if ns.create {
 		d.create(ns.sourceAddr, ns.sha512Hex, ns.targets)
 		for i := 0; i < len(ns.targets); i++ {

@@ -39,11 +39,11 @@ type nodeSync struct {
 	targets    []*targetContainer
 }
 
-func NewNode(index data.Index, clusters data.Clusters, logger *zap.Logger) Node {
+func NewNode(clusters data.Clusters, index data.Index, logger *zap.Logger) Node {
 	return &node{
 		index:           index,
 		clusters:        clusters,
-		nodeSyncManager: newNodeSyncManager(index, logger),
+		nodeSyncManager: newNodeSyncManager(clusters, index, logger),
 	}
 }
 

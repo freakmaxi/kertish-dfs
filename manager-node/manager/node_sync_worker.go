@@ -1,12 +1,15 @@
 package manager
 
 import (
+	"time"
+
 	"github.com/freakmaxi/kertish-dfs/manager-node/data"
 	"go.uber.org/zap"
 )
 
 const queueLimit = 500
 const parallelLimit = 10
+const pauseDuration = time.Second * 30
 
 type nodeSyncWorker struct {
 	queueChan       chan *nodeSync
@@ -15,11 +18,11 @@ type nodeSyncWorker struct {
 	processor *nodeSyncProcessor
 }
 
-func newNodeSyncWorker(index data.Index, logger *zap.Logger) *nodeSyncWorker {
+func newNodeSyncWorker(clusters data.Clusters, index data.Index, logger *zap.Logger) *nodeSyncWorker {
 	return &nodeSyncWorker{
 		queueChan:       make(chan *nodeSync, queueLimit),
 		processSlotChan: make(chan int, parallelLimit),
-		processor:       newNodeSyncProcessor(index, logger),
+		processor:       newNodeSyncProcessor(clusters, index, logger),
 	}
 }
 
@@ -47,8 +50,11 @@ func (c *nodeSyncWorker) Queue(ns *nodeSync) {
 
 func (c *nodeSyncWorker) process(ns *nodeSync, index int) {
 	if !c.processor.Sync(ns) {
+		<-time.After(pauseDuration)
+
 		c.processSlotChan <- index
 		c.queueChan <- ns
+
 		return
 	}
 	c.processSlotChan <- index

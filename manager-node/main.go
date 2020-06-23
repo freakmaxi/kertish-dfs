@@ -148,7 +148,7 @@ func main() {
 	routerManager := routing.NewManager()
 	routerManager.Add(managerRouter)
 
-	managerNode := manager.NewNode(index, dataClusters, logger)
+	managerNode := manager.NewNode(dataClusters, index, logger)
 	nodeRouter := routing.NewNodeRouter(managerNode, logger)
 	routerManager.Add(nodeRouter)
 
