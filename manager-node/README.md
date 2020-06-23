@@ -1,10 +1,10 @@
 # Kertish DFS Manager Node
 
-Manager node is responsible to orchestrate data nodes.
+Manager node is responsible to orchestrate Kertish-dfs farm.
 Default bind endpoint port is `:9400`
 
-Manager node keep the index of files in Redis dss and cluster information in mongo db. Redis dss will also use to keep 
-index and cluster stability
+Manager node keep the index of files in Redis dss and cluster information in mongo db. Locking-center will use to keep 
+index and cluster stability.
 
 Should be started with parameters that are set as environment variables
 
@@ -24,18 +24,23 @@ Cluster and Data node setup and information will be kept in Mongo DB.
 
 Will be used to index file information.
 
-- `REDIS_CLUSTER_MODE` : Redis cluster mode activation Ex: `true`
+- `REDIS_PASSWORD` (optional) : Redis password for secure redis dss
+
+- `REDIS_CLUSTER_MODE` (optional) : Redis cluster mode activation Ex: `true`
 
 - `LOCKING_CENTER` (mandatory) : Locking-Center Server. Ex: `127.0.0.1:22119`
 
 Will be used to synchronize accesses between services
+
+- `HEALTH_CHECK_INTERVAL` (optional) : Frequency of checking data-node(s) accessibility. default value is **10** seconds.
 
 ### Manager Cluster and Node Manipulation Requests
 
 - `GET` is used to sync cluster/clusters, list cluster/clusters and nodes and find the cluster information for file.
 
 ##### Required Headers:
-- `X-Action` defines the behaviour of get request. Values: `sync` or `repair` or `move` or `clusters` or `find`
+- `X-Action` defines the behaviour of get request. Values: `sync` or `repair` or `health` or `move` or `balance` or 
+`clusters` or `find`
 
 ##### Possible Status Codes
 - `422`: Required Request Headers are not valid or absent
@@ -48,7 +53,7 @@ Sync action is to trigger the sync operation on cluster/clusters.
 ##### Possible Status Codes
 - `404`: Not found
 - `500`: Operational failures
-- `200`: Successful
+- `202`: Accepted to finish in future
 
 All failed responses comes with error json. Ex:
 
@@ -62,10 +67,14 @@ All failed responses comes with error json. Ex:
 ##### Repair Action
 Repair action is to trigger the consistency and integrity repair operation on cluster/clusters.
 
+- `X-Options` header is used to point the repair type. Omit for full repair, `structure` for only metadata structure 
+repair or `integrity` for only data-node and metadata integrity repair.
+
 ##### Possible Status Codes
 - `404`: Not found
+- `423`: Locked for another repair operation
 - `500`: Operational failures
-- `200`: Successful
+- `202`: Accepted to finish in future
 
 All failed responses comes with error json. Ex:
 
@@ -76,6 +85,41 @@ All failed responses comes with error json. Ex:
 }
 ```
 
+##### Health Action
+Health action is to get the data-node accessibility report.
+
+##### Possible Status Codes
+- `500`: Operational failures
+- `200`: Successful
+
+All failed responses comes with error json. Ex:
+
+```json
+{
+  "code": 140,
+  "message": "clusters are not available for repair"
+}
+```
+
+Sample report output:
+```json
+{
+  "[clusterId]": [
+    {
+      "nodeId": "2f194705b3b6292e84dc71dbb0185a9c",
+      "address": "172.20.1.40:9430",
+      "master": true,
+      "quality": 0
+    }
+  ]
+}
+```
+
+Possible quality values:
+- -2 DNS Error, unable to resolve
+- -1 Paralysed or Frozen Data-Node/Cluster
+- 0 or higher Response Time in ms 
+
 ##### Move Action
 Move action is to move one cluster content to other one. Target cluster should have enough space for move operation.
 
@@ -83,6 +127,7 @@ Move action is to move one cluster content to other one. Target cluster should h
 
 ##### Possible Status Codes
 - `404`: Not found
+- `422`: Invalid Headers for operation
 - `500`: Operational failures
 - `503`: Service Unavailable
 - `507`: Insufficient Space
@@ -97,8 +142,29 @@ All failed responses comes with error json. Ex:
 }
 ```
 
+##### Balance Action
+Balance action is to balance data weight between clusters.
+
+- `X-Options` header is used to point specific clusters to balance between. `clusterId,clusterId,...`
+
+##### Possible Status Codes
+- `404`: Not found
+- `422`: Invalid Headers for operation
+- `500`: Operational failures
+- `503`: Service Unavailable
+- `200`: Successful
+
+All failed responses comes with error json. Ex:
+
+```json
+{
+  "code": 135,
+  "message": "cluster is not available for cluster wide actions"
+}
+```
+
 ##### Clusters Action
-Clusters action is to get the information about the cluster/clusters and depended on data nodes.
+Clusters action is to get the information about the cluster/clusters and related data nodes.
 
 - `X-Options` header is used to point the cluster or omit it to get al clusters information.
 
@@ -126,6 +192,7 @@ Find action is to get the clusterId and data node of a file.
 ##### Possible Status Codes
 - `404`: Not found
 - `500`: Operational failures
+- `503`: Not available to complete the operation (Frozen or Paralysed cluster/node)
 - `200`: Successful
 
 All failed responses comes with error json. Ex:
@@ -137,10 +204,11 @@ All failed responses comes with error json. Ex:
 }
 ```
 ---
-- `POST` is used to create cluster, register node, make reservation, create read and delete maps.
+- `POST` is used to create cluster, register node, take snapshot, make reservation, create read and delete maps.
 
 ##### Required Headers:
-- `X-Action` defines the behaviour of post request. Values: `register` or `reserve` or `readMap` or `deleteMap`
+- `X-Action` defines the behaviour of post request. Values: `register` or `snapshot` or `reserve` or `readMap` or 
+`createMap` or `deleteMap`
 
 ##### Possible Status Codes
 - `422`: Required Request Headers are not valid or absent
@@ -184,21 +252,41 @@ Successful request response sample
     {
       "nodeId": "7a758a149e4453b20a40b35f83f3a0e4",
       "address": "127.0.0.1:9430",
-      "master": true
+      "master": true,
+      "quality": 0
     }
   ],
   "reservations": []
 }
 ```
 
-##### Reservation Action
-Reservation action is to reserve data space on data nodes to guaranteed that files can be stored.
+##### Snapshot Action
+Snapshot action will create a snapshot state for the cluster.
+
+- `X-Options` header is used to send the cluster id to take the snapshot for.
+
+##### Possible Status Codes
+- `400`: Operational failure
+- `200`: Successful
+
+All failed responses comes with error json. Ex:
+
+```json
+{
+  "code": 205,
+  "message": "cluster is already exists"
+}
+```
+
+##### Reserve Action
+Reserve action is to reserve data space on data nodes to guaranteed that files can be stored.
 
 - `X-Size` header uint64 value for the required space size.
 
 ##### Possible Status Codes
 - `400`: Operational failures
 - `422`: Required Request Headers are not valid or absent
+- `503`: Not available for reservation (Frozen or Paralysed cluster/node)
 - `507`: Insufficient space
 - `200`: Successful
 
@@ -229,7 +317,7 @@ Successful request response sample
 }
 ```
 
-##### Read and Delete Map Action
+##### Create, Read and Delete Map Action
 Creates the cluster access map for the specified files.
 
 - `X-Options` header holds the file hex id list with `,` separated. Ex: `e5c0adae0f05cf60f7e34b45bd44249f42627b1f3b1b453ae45e106adbfdfbdb,45bd44249f42627b1f3b1b453ae45e106adbfdfbdba5c0adae0f05cf60f7e34b`
@@ -237,7 +325,7 @@ Creates the cluster access map for the specified files.
 ##### Possible Status Codes
 - `400`: Operational failures
 - `422`: Required Request Headers are not valid or absent
-- `507`: No available node
+- `503`: Not available for reservation (Frozen or Paralysed cluster/node)
 - `200`: Successful
 
 All failed responses comes with error json. Ex:
@@ -257,10 +345,11 @@ Successful request response sample
 }
 ```
 ---
-- `DELETE` is used to delete cluster, unregister node, discard or commit reservation.
+- `DELETE` is used to delete cluster, unregister node, delete snapshot, unfreeze cluster, discard or commit reservation.
 
 ##### Required Headers:
-- `X-Action` defines the behaviour of delete request. Values: `unregister` or `commit` or `discard`
+- `X-Action` defines the behaviour of delete request. Values: `unregister` or `unfreeze` or `snapshot` or `commit` or 
+`discard`
 
 ##### Possible Status Codes
 - `422`: Required Request Headers are not valid or absent
@@ -290,8 +379,45 @@ All failed responses comes with error json. code can be `300` for cluster or `35
 }
 ```
 
-##### Commit Reservation Action
-Commit Reservation action is to commit that reservation can move to the further process.
+##### Unfreeze Action
+Unfreeze action will unfreeze the frozen cluster(s).
+
+- `X-Options` header contains the clusterIds to unfreeze with `,` separated. Ex: `clusterId,clusterId,...`
+
+##### Possible Status Codes
+- `500`: Operational failure
+- `200`: Successful
+
+All failed responses comes with error json. Ex:
+
+```json
+{
+  "code": 355,
+  "message": "cluster is already exists"
+}
+```
+
+##### Snapshot Action
+Snapshot action will delete the snapshot for the cluster pointed with snapshot index.
+
+- `X-Options` header contains the clusterId and snapshot index with `=` separator. Ex: `clusterId=snapshotIndex`
+
+##### Possible Status Codes
+- `422`: Required Request Headers are not valid or absent 
+- `500`: Operational failure
+- `200`: Successful
+
+All failed responses comes with error json. Ex:
+
+```json
+{
+  "code": 380,
+  "message": "cluster is already exists"
+}
+```
+
+##### Commit Action
+Commit action is to commit the reserved disk space for the further process.
 
 - `X-Reservation-Id` header for registration id.
 - `X-Options` for committing details. It has a special format `clusterId=size,clusterId=size,...`
@@ -302,8 +428,8 @@ size must be uint64.
 when reservation is committed once with the clusterId-size map, unused space will be added to the cluster total space. 
 
 ##### Possible Status Codes
-- `400`: Operational failures
 - `422`: Required Request Headers are not valid or absent
+- `500`: Operational failures
 - `200`: Successful
 
 All failed responses comes with error json. Ex:
@@ -315,8 +441,8 @@ All failed responses comes with error json. Ex:
 }
 ```
 
-##### Discard Reservation Action
-Discard Reservation action is to discard the reservation in all related clusters.
+##### Discard Action
+Discard action is to discard the reserved disk space in all related clusters.
 
 - `X-Reservation-Id` header for registration id.
 
