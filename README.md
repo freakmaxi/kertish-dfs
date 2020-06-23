@@ -107,20 +107,20 @@ must. If you provide minimum 4 or more CPU Cores, it will significantly drop the
 According to your Kertish farm setup, you may need 2GB or more memory. If you are serving many small files between
 1kb to 16mb, it is better to keep memory not less than 8 GB for 4 clusters with 8 data-nodes working master-slave logic
 and disk space size is between 350GB to 600GB. It is required to handle synchronization and repair operation handling
-otherwise, it can fall to swap space which case slow operation problem and if there is not any swap space configuration,
+otherwise, it can fall to swap space which cause slow operation problem and if there is not any swap space configuration,
 it will lead the service to crash. **NOTE Always remember that Manager-Node is not scalable right now. It will work only
-one instance. I'm working to make scalable.**
+one instance. I'm working to make it scalable.**
 
 - **Head-Node** has mongodb and locking-center TCP connections. Also, it serves REST end-points for file system
 manipulations. It means, it is a good idea to have 200mbit or powerful network connection. Head-Node will cache the
 uploaded file to process. So, if you are uploading raw 32GB file to the Kertish-dfs, you should have a powerful
-memory and swap disk to hold the whole file in the memory. For this reason, you should have a powerful SSD Disk with a 
-huge swap space configured. **NOTE this logic will be extended and will able to cover real-time uploading without
-caching.** If you are configuring the Kertish-dfs farm to serve just small files between 1kb to 2GB, 4GB ram with
-8GB swap space will be more than enough to cover expectations. On read wise, Head-Node does not cache anything, it
-transfers the data from the data-node to client. So memory is essential just for file uploads. Remember that, Head-Node
-is scalable and you can put as much as Head-Node for file manipulation behind the load balancer. CPU is not a big 
-consideration. Minimum 2 or more CPU Cores will be sufficient. Head-Node does not do any serious calculation.
+memory and swap space to hold the whole file in the memory. For this reason, you should have a powerful SSD Disk with a 
+huge swap space configured. **NOTE this logic will be extended in the future releases and will able to cover real-time
+uploading without caching.** If you are configuring the Kertish-dfs farm to serve just small files between 1kb to 2GB,
+4GB ram with 8GB swap space will be more than enough to cover expectations. On read wise, Head-Node does not cache
+anything, it transfers the data from the data-node to client. So memory is essential just for file uploads. Remember
+that, Head-Node is scalable and you can put as much as Head-Node for file manipulation behind the load balancer. CPU is
+not a big consideration. Minimum 2 or more CPU Cores will be sufficient. Head-Node does not do any serious calculation.
 
 - **Data-Node** has backend custom TCP ports to serve content. It makes REST requests to Manager-Node. For this reason,
 each node can have 100mbit or powerful network connection to serve files. Data-Node has optional caching feature to
