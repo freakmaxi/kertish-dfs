@@ -1,7 +1,9 @@
+<img src="http://imfrk.com/p/kertish-dfs/logo-point.png" width="200px">
+
 # Kertish-DFS
 
 Kertish-dfs is a simple and highly scalable distributed file system to store and serve billions of files. It is
-developed to cover the expectation for mass file storage requirement in isolated networks.
+developed to cover the expectation for mass file storage requirements in isolated networks.
 **It does not have security implementation.**
 
 #### What is it for?
