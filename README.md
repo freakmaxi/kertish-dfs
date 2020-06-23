@@ -3,7 +3,7 @@
 [![Build Status](https://travis-ci.org/freakmaxi/kertish-dfs.svg?branch=master)](https://travis-ci.org/freakmaxi/kertish-dfs)
 [![Docker Pulls](https://img.shields.io/docker/pulls/freakmaxi/kertish-dfs.svg?maxAge=604800)](https://hub.docker.com/r/freakmaxi/kertish-dfs/)
 
-<img src="http://imfrk.com/p/kertish-dfs/logo-point.png" width="100px">
+<img src="http://imfrk.com/p/kertish-dfs/logo-point.png" width="200px">
 
 # Table of Contents
 - [Introduction](#introduction)
