@@ -14,7 +14,7 @@
 - [Installation Guide](#setup-description)
   - [Sample Setup](#sample-setup)
   - [Setup Using Docker](#setup-using-docker)
-  - [Setup Using Binaries](#setup-using-releasesource)
+  - [Setup Using Binaries](#setup-using-binaries)
     - [Preparation](#preparation)
     - [Setting Up Manager Node](#setting-up-manager-node)
     - [Setting Up Head Node](#setting-up-head-node)
@@ -214,7 +214,7 @@ total 1
 
 ---
 
-### Setup Using Release/Source
+### Setup Using Binaries
 
 #### Preparation
 
