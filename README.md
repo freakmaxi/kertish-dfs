@@ -3,7 +3,7 @@
 # Content
 - [Introduction](#kertish-dfs)
 - [Architecture](#architecture)
-- [Terminolody](#terminology)
+- [Terminology](#terminology)
 - [Features](#features)
 - [System Requirements](#system-requirements)
 - [Setup Description](#setup-description)
