@@ -29,6 +29,9 @@ func (d *dfsRouter) handleGet(w http.ResponseWriter, r *http.Request) {
 		} else if err == os.ErrInvalid {
 			w.WriteHeader(422)
 			return
+		} else if err == errors.ErrNoAvailableActionNode {
+			w.WriteHeader(503)
+			return
 		} else if err == errors.ErrLock {
 			w.WriteHeader(523)
 			return

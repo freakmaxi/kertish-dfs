@@ -50,6 +50,9 @@ func (d *dfsRouter) handlePut(w http.ResponseWriter, r *http.Request) {
 		} else if err == os.ErrInvalid {
 			w.WriteHeader(422)
 			return
+		} else if err == errors.ErrNoAvailableActionNode {
+			w.WriteHeader(503)
+			return
 		} else if err == errors.ErrZombie {
 			w.WriteHeader(524)
 			return
