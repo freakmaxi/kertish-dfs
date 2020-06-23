@@ -1,0 +1,15 @@
+sudo: false
+language: go
+go:
+  - 1.14.x
+
+before_install:
+  - export PATH=/home/travis/gopath/bin:$PATH
+
+install:
+  - export CGO_ENABLED="0"
+  - go env
+
+script:
+  - env GO111MODULE=on go test ./basics/...
+  - env GO111MODULE=on go test ./data-node/...
