@@ -1,10 +1,9 @@
 # Kertish DFS Head Node
 
-Head node is responsible to handle file system client and dfs using manager node and data nodes.
+Head node is responsible to handle file system manipulation requests.
 Default bind endpoint port is `:4000`
 
-Head node keep the metadata of files/folders in mongo db and metadata stability is supported
-with Redis dss.
+Head node keep the metadata of files/folders in mongo db and metadata stability is supported with Locking-Center
 
 Should be started with parameters that are set as environment variables
 
@@ -15,7 +14,7 @@ Client will access the service using `http://127.0.0.1:4000/client/dfs`
 
 - `MANAGER_ADDRESS` (mandatory) : Manager Node accessing endpoint. Ex: `http://127.0.0.1:9400`
 
-Manager address will be used to create the data node mapping, reservation, discard and commit 
+Manager address will be used to create the data node mapping, reserve, discard and commit 
 operations of file/folder placement.
 
 - `MONGO_CONN` (mandatory) : Mongo DB endpoint. Ex: `mongodb://admin:password@127.0.0.1:27017`
@@ -23,6 +22,8 @@ operations of file/folder placement.
 Metadata of the file system will be kept in Mongo DB.
 
 - `MONGO_DATABASE` (optional) : Mongo DB name. Default: `kertish-dfs`
+
+- `MONGO_TRANSACTION` (optional) : Set `true` if you have a Mongo DB Cluster setup 
 
 - `LOCKING_CENTER` (mandatory) : Locking-Center Server. Ex: `127.0.0.1:22119`
 
@@ -38,7 +39,8 @@ Will be used to have the stability of metadata of the file system
 
 ##### Optional Headers:
 - `X-Calculate-Usage` (only folder) force to calculate the size of folders
-- `X-Download` works only with file request. It provides the data with `Content-Disposition` header. Values: `1` or `true`. Default: `false`
+- `X-Download` works only with file request. It provides the data with `Content-Disposition` header. Values: `1` or 
+`true`. Default: `false`
 - `Range` to grab the part of the file. 
 
 ##### Possible Responses
@@ -55,9 +57,11 @@ Will be used to have the stability of metadata of the file system
 - `416`: Range dissatisfaction
 - `422`: Required Request Headers are not valid or absent
 - `500`: Operational failures
+- `503`: Not available for reservation (Frozen or Paralysed cluster/node)
 - `523`: File or folder has lock
 - `524`: Zombie file or folder has zombie file(s)
 - `200`: Successful
+- `206`: Partial Content
 
 ##### Folder Sample Response
 ```json
@@ -107,13 +111,15 @@ Will be used to have the stability of metadata of the file system
 
 ##### Optional Headers:
 - `X-Allow-Empty` (only file) allow zero length file upload. Values: `1` or `true`. Default: `false`
-- `X-Overwrite` (only file) ignore file existence and continue without conflict response. Values: `1` or `true`. Default: `false` 
+- `X-Overwrite` (only file) ignore file existence and continue without conflict response. Values: `1` or `true`. 
+Default: `false` 
 
 ##### Possible Status Codes
 - `409`: Conflict (folder/file exists)
 - `411`: Content Length is required
 - `422`: Required Request Headers are not valid or absent
 - `500`: Operational failures
+- `503`: Not available for reservation (Frozen or Paralysed cluster/node)
 - `507`: Out of disk space
 - `202`: Accepted
 ---
@@ -125,14 +131,18 @@ Will be used to have the stability of metadata of the file system
 - `X-Target` action and target of folder/file. it is formatted header, the value must be `[action],[targetPath]` and
 `targetPath` should be url encoded. 
 `c` is used for copy action, `m` is used for move action. Ex: `c,/SomeTargetFolder` or `m,/SomeTargetFolder` 
-- `X-Overwrite` ignore file/folder existence and continue without conflict response. Values: `1` or `true`. Default: `false`
+- `X-Overwrite` ignore file/folder existence and continue without conflict response. Values: `1` or `true`. Default: 
+`false`
 
 ##### Possible Status Codes
 - `404`: Source not found
+- `406`: Not Acceptable (folder is not empty)
 - `409`: Conflict (folder/file exists)
 - `412`: Conflict when joining folders
 - `422`: Required Request Headers are not valid or absent
 - `500`: Operational failures
+- `503`: Not available for reservation (Frozen or Paralysed cluster/node)
+- `524`: Zombie file or folder has zombie file(s)
 - `200`: Accepted
 ---
 - `DELETE` is used to delete folders/files in file system.
@@ -146,6 +156,7 @@ Will be used to have the stability of metadata of the file system
 - `404`: Not found
 - `422`: Required Request Headers are not valid or absent
 - `500`: Operational failures
+- `503`: Not available for reservation (Frozen or Paralysed cluster/node)
 - `523`: File or folder has lock
 - `524`: Zombie file or folder has zombie file(s)
 - `525`: Zombie file or folder is still alive, try again to kill

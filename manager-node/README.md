@@ -20,6 +20,8 @@ Cluster and Data node setup and information will be kept in Mongo DB.
 
 - `MONGO_DATABASE` (optional) : Mongo DB name. Default: `kertish-dfs`
 
+- `MONGO_TRANSACTION` (optional) : Set `true` if you have a Mongo DB Cluster setup
+
 - `REDIS_CONN` (mandatory) : Redis dss. Ex: `127.0.0.1:6379`
 
 Will be used to index file information.
