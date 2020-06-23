@@ -24,8 +24,7 @@
 - [Important Note](#one-last-important-note)
 
 ---
-# Introduction
-
+## Introduction
 Kertish-dfs is a simple and highly scalable distributed file system to store and serve billions of files. It is
 developed to cover the expectation for mass file storage requirements in isolated networks.
 **It does not have security implementation.**
@@ -47,7 +46,7 @@ network. Also it does not have file/folder permission integration, so user base 
 Kertish-dfs is suitable to use as a back service of front services. It means, it is better not to allow users directly 
 to the file manipulation.
 
-#### Architecture
+## Architecture
 Kertish-dfs has 3 vital parts for a working farm. Manager-Node, Head-Node, Data-Node.
 - Manager-Node is responsible to handle data-node synchronisation and harmony for each cluster. It is handling the
 space reservation, indexing data-node contents for fast search and find operations, health tracking of each data-node
@@ -69,7 +68,7 @@ map reservation if it has successful placement or discard the reservation to sav
 6. User gets success or error response with http status header.
 7. User can hold the file location in a database (/Foo/Bar/demo.mov)
 
-#### Terminology
+## Terminology
 - Farm: Whole Kertish-dfs with multi clusters. A farm can have one or more clusters with different sizes.
 - Cluster: A group of servers to hold data. A cluster can have one or more data node. 
 - Data Node: A service running in a cluster to handle data manipulation requests. 
@@ -86,7 +85,7 @@ Data is always written to and deleted from the master data node in the cluster. 
 will be balanced between slave data nodes. So in read sensitive environments, as much as new data node added
 to the cluster will help you to increase the response time. 
 
-#### Features
+## Features
 - Scalable horizontally. You can add as much as cluster to grow the size of the storage. No total size limit.
 - Data shadowing. Copy operation won't increase the usage but let you the file/folder logically placed
 - Data particle stacking. Same data block won't be duplicated so theoretically total physical size may smaller than 
@@ -98,7 +97,7 @@ the real size
 - REST architecture for file/folder manipulation.
 - Command-line `Admin` and `File System` tools
 
-#### System Requirements
+## System Requirements
 
 Kertish-dfs nodes has different hardware requirements to work flawless.
 
@@ -135,7 +134,7 @@ you a slow data-node. On CPU wise, it is not a critical topic. Minimum 2 or more
 files. On the other hand, slave nodes are periodically synchronize content with master and on that operation, CPU usage
 can raise. So if you provide fast and more CPU core(s), synchronisation will finish quicker. 
 
-#### Setup Description
+## Setup Description
 
 Kertish-dfs farm consist of minimum
 - 1 Manager Node
@@ -158,7 +157,7 @@ different clusters.
 
 **CAUTION: Deletion of a data node from cluster may cause the data lost and inconsistency.**
 ---
-#### Sample Setup
+### Sample Setup
 
 I'll setup a farm using
 - 1 Manager Node
