@@ -115,7 +115,7 @@ func (m *managerRouter) handleDeleteSnapshot(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	w.WriteHeader(400)
+	w.WriteHeader(500)
 	m.logger.Error("Delete snapshot request is failed", zap.Error(err))
 
 	e := common.NewError(380, err.Error())
@@ -134,7 +134,7 @@ func (m *managerRouter) handleCommit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := m.manager.Commit(reservationId, clusterMap); err != nil {
-		w.WriteHeader(400)
+		w.WriteHeader(500)
 		m.logger.Error("Commit request is failed", zap.Error(err))
 
 		e := common.NewError(360, err.Error())
@@ -155,7 +155,7 @@ func (m *managerRouter) handleDiscard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := m.manager.Discard(reservationId); err != nil {
-		w.WriteHeader(400)
+		w.WriteHeader(500)
 		m.logger.Error("Discard request is failed", zap.Error(err))
 
 		e := common.NewError(370, err.Error())
