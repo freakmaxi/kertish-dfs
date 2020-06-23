@@ -1,4 +1,4 @@
-<img src="http://imfrk.com/p/kertish-dfs/logo-point.png" width="200px">
+<img src="http://imfrk.com/p/kertish-dfs/logo-point.png" width="100px">
 
 # Kertish-DFS
 
