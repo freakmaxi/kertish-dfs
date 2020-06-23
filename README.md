@@ -1,15 +1,18 @@
+[![Build Status](https://travis-ci.org/freakmaxi/kertish-dfs.svg?branch=master)](https://travis-ci.org/freakmaxi/kertish-dfs)
+[![Docker Pulls](https://img.shields.io/docker/pulls/freakmaxi/kertish-dfs.svg?maxAge=604800)](https://hub.docker.com/r/freakmaxi/kertish-dfs/)
+
 <img src="http://imfrk.com/p/kertish-dfs/logo-point.png" width="100px">
 
-# Content
+# Table of Contents
 - [Introduction](#kertish-dfs)
 - [Architecture](#architecture)
 - [Terminology](#terminology)
 - [Features](#features)
 - [System Requirements](#system-requirements)
-- [Setup Description](#setup-description)
+- [Installation Guide](#setup-description)
   - [Sample Setup](#sample-setup)
   - [Setup Using Docker](#setup-using-docker)
-  - [Setup Using Release/Source](#setup-using-releasesource)
+  - [Setup Using Binaries](#setup-using-releasesource)
     - [Preparation](#preparation)
     - [Setting Up Manager Node](#setting-up-manager-node)
     - [Setting Up Head Node](#setting-up-head-node)
