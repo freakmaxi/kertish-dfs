@@ -1,10 +1,12 @@
+# Kertish-DFS
+---
 [![Build Status](https://travis-ci.org/freakmaxi/kertish-dfs.svg?branch=master)](https://travis-ci.org/freakmaxi/kertish-dfs)
 [![Docker Pulls](https://img.shields.io/docker/pulls/freakmaxi/kertish-dfs.svg?maxAge=604800)](https://hub.docker.com/r/freakmaxi/kertish-dfs/)
 
 <img src="http://imfrk.com/p/kertish-dfs/logo-point.png" width="100px">
 
 # Table of Contents
-- [Introduction](#kertish-dfs)
+- [Introduction](#introduction)
 - [Architecture](#architecture)
 - [Terminology](#terminology)
 - [Features](#features)
@@ -21,7 +23,8 @@
     - [Manipulation Filesystem](#manipulating-filesystem)
 - [Important Note](#one-last-important-note)
 
-# Kertish-DFS
+---
+# Introduction
 
 Kertish-dfs is a simple and highly scalable distributed file system to store and serve billions of files. It is
 developed to cover the expectation for mass file storage requirements in isolated networks.
