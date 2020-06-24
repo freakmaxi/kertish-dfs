@@ -87,16 +87,11 @@ func (s *synchronize) iterateFileItems(dataPath string, headerMap HeaderMap, ite
 	})
 }
 
-func (s *synchronize) Start(sourceAddr string) (syncErr error) {
+func (s *synchronize) Start(sourceAddr string) error {
 	s.syncMutex.Lock()
 	defer s.syncMutex.Unlock()
 
 	s.logger.Sugar().Infof("Sync is in progress...")
-	defer func() {
-		if syncErr == nil {
-			s.logger.Sugar().Infof("Sync is completed.")
-		}
-	}()
 
 	sourceNode, has := s.nodeCache[sourceAddr]
 	if !has {
@@ -118,6 +113,8 @@ func (s *synchronize) Start(sourceAddr string) (syncErr error) {
 	}
 
 	go s.syncSnapshots(sourceNode, sourceContainer)
+
+	s.logger.Sugar().Infof("Sync is completed.")
 
 	return nil
 }
@@ -146,7 +143,7 @@ func (s *synchronize) syncFileItems(sourceNode cluster.DataNode, snapshotTime *t
 			return nil
 		}
 
-		sourceHeaderMap[fileItem.Sha512Hex] = sourceFileItem.Usage
+		sourceHeaderMap[sourceFileItem.Sha512Hex] = sourceFileItem.Usage
 
 		if !common.CompareFileItems(*fileItem, sourceFileItem) {
 			createList = append(createList, sourceFileItem)
@@ -327,12 +324,12 @@ func (s *synchronize) create(wg *sync.WaitGroup, sourceNode cluster.DataNode, sn
 	totalCreateCount := len(createList)
 	for len(createList) > 0 {
 		fileItem := createList[0]
-
-		if err := s.createBlockFile(sourceNode, snapshotTime, b, fileItem, totalCreateCount-(len(createList)-1), totalCreateCount); err != nil {
+		currentCreatedCount := totalCreateCount - (len(createList) - 1)
+		if err := s.createBlockFile(sourceNode, snapshotTime, b, fileItem, currentCreatedCount, totalCreateCount); err != nil && err != errors.ErrQuit {
 			s.logger.Error(
-				"Sync cannot create",
+				fmt.Sprintf("Sync cannot create %s - %d/%d", fileItem.Sha512Hex, currentCreatedCount, totalCreateCount),
 				zap.String("sha512Hex", fileItem.Sha512Hex),
-				zap.Int("current", totalCreateCount-(len(createList)-1)),
+				zap.Int("current", currentCreatedCount),
 				zap.Int("total", totalCreateCount),
 				zap.Error(err),
 			)
@@ -342,33 +339,7 @@ func (s *synchronize) create(wg *sync.WaitGroup, sourceNode cluster.DataNode, sn
 }
 
 func (s *synchronize) createBlockFile(sourceNode cluster.DataNode, snapshotTime *time.Time, b block.Manager, fileItem common.SyncFileItem, current int, total int) (resultError error) {
-	s.logger.Info(
-		"Syncing...",
-		zap.String("sha512Hex", fileItem.Sha512Hex),
-		zap.Int("current", current),
-		zap.Int("total", total),
-	)
-	defer func() {
-		if resultError != nil && resultError != errors.ErrQuit {
-			s.logger.Error(
-				"Sync is failed",
-				zap.String("sha512Hex", fileItem.Sha512Hex),
-				zap.Int("current", current),
-				zap.Int("total", total),
-				zap.Error(resultError),
-			)
-			return
-		}
-
-		s.logger.Info(
-			"Synced",
-			zap.String("sha512Hex", fileItem.Sha512Hex),
-			zap.Int("current", current),
-			zap.Int("total", total),
-		)
-	}()
-
-	return b.File(fileItem.Sha512Hex, func(blockFile block.File) error {
+	if err := b.File(fileItem.Sha512Hex, func(blockFile block.File) error {
 		if !blockFile.Temporary() {
 			if blockFile.VerifyForce() {
 				return blockFile.ResetUsage(fileItem.Usage)
@@ -393,7 +364,18 @@ func (s *synchronize) createBlockFile(sourceNode cluster.DataNode, snapshotTime 
 
 				return blockFile.Verify()
 			})
-	})
+	}); err != nil {
+		return err
+	}
+
+	s.logger.Info(
+		fmt.Sprintf("Synced %s - %d/%d...", fileItem.Sha512Hex, current, total),
+		zap.String("sha512Hex", fileItem.Sha512Hex),
+		zap.Int("current", current),
+		zap.Int("total", total),
+	)
+
+	return nil
 }
 
 var _ Synchronize = &synchronize{}
