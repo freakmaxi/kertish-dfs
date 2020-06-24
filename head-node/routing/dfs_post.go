@@ -64,10 +64,13 @@ func (d *dfsRouter) handlePost(w http.ResponseWriter, r *http.Request) {
 				return
 			} else if err == os.ErrInvalid {
 				w.WriteHeader(422)
+				return
 			} else if err == errors.ErrNoAvailableActionNode {
 				w.WriteHeader(503)
+				return
 			} else if err == errors.ErrNoSpace {
 				w.WriteHeader(507)
+				return
 			} else {
 				w.WriteHeader(500)
 			}

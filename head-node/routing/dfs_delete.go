@@ -25,14 +25,19 @@ func (d *dfsRouter) handleDelete(w http.ResponseWriter, r *http.Request) {
 			return
 		} else if err == errors.ErrNoAvailableActionNode {
 			w.WriteHeader(503)
+			return
 		} else if err == errors.ErrLock {
 			w.WriteHeader(523)
+			return
 		} else if err == errors.ErrZombie {
 			w.WriteHeader(524)
+			return
 		} else if err == errors.ErrZombieAlive {
 			w.WriteHeader(525)
+			return
 		} else if err == errors.ErrRepair {
 			w.WriteHeader(526)
+			return
 		} else {
 			w.WriteHeader(500)
 		}
