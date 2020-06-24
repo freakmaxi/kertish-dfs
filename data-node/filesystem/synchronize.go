@@ -15,10 +15,21 @@ import (
 	"go.uber.org/zap"
 )
 
+const queueSize = 5000
+const pauseDuration = time.Second * 30
+
 type Synchronize interface {
 	List(snapshotTime *time.Time, itemHandler func(fileItem *common.SyncFileItem) error) error
 
-	Start(sourceAddr string) error
+	Create(sourceAddr string, sha512Hex string)
+	Delete(sha512Hex string)
+	Full(sourceAddr string) error
+}
+
+type queueItem struct {
+	sourceAddr *string
+	sha512Hex  string
+	create     bool
 }
 
 type synchronize struct {
@@ -28,16 +39,107 @@ type synchronize struct {
 
 	syncMutex sync.Mutex
 	nodeCache map[string]cluster.DataNode
+
+	queueChan chan queueItem
 }
 
-func NewSynchronize(rootPath string, snapshot Snapshot, logger *zap.Logger) Synchronize {
-	return &synchronize{
+func NewSynchronize(rootPath string, snapshot Snapshot, logger *zap.Logger) (Synchronize, error) {
+	s := &synchronize{
 		rootPath: rootPath,
 		snapshot: snapshot,
 		logger:   logger,
 
 		syncMutex: sync.Mutex{},
 		nodeCache: make(map[string]cluster.DataNode),
+
+		queueChan: make(chan queueItem, queueSize),
+	}
+	if err := s.start(); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+func (s *synchronize) start() error {
+	b, err := block.NewManager(s.rootPath, s.logger)
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		for {
+			select {
+			case item, more := <-s.queueChan:
+				if !more {
+					return
+				}
+
+				s.syncMutex.Lock()
+				s.consumeQueueChannel(b, s.queueChan, item)
+				s.syncMutex.Unlock()
+			}
+		}
+	}()
+
+	return nil
+}
+
+func (s *synchronize) consumeQueueChannel(b block.Manager, queueChan chan queueItem, firstItem queueItem) {
+	wg := &sync.WaitGroup{}
+
+	wg.Add(1)
+	go s.processQueueItem(wg, b, firstItem)
+
+	for len(queueChan) > 0 {
+		item := <-queueChan
+
+		wg.Add(1)
+		go s.processQueueItem(wg, b, item)
+	}
+
+	wg.Wait()
+}
+
+func (s *synchronize) processQueueItem(wg *sync.WaitGroup, b block.Manager, item queueItem) {
+	defer wg.Done()
+
+	if !item.create {
+		if err := s.deleteBlockFile(b, common.SyncFileItem{Sha512Hex: item.sha512Hex}, true); err != nil {
+			s.logger.Error(
+				fmt.Sprintf("Queue sync cannot delete %s", item.sha512Hex),
+				zap.Error(err),
+			)
+		}
+		return
+	}
+
+	sourceAddr := *item.sourceAddr
+	sourceNode, has := s.nodeCache[sourceAddr]
+	if !has {
+		var err error
+		sourceNode, err = cluster.NewDataNode(sourceAddr)
+		if err != nil {
+			s.logger.Warn(
+				"Unable to create source node object",
+				zap.String("masterNodeAddress", sourceAddr),
+				zap.Error(err),
+			)
+
+			go func(qI queueItem) {
+				<-time.After(pauseDuration)
+				s.queueChan <- qI
+			}(item)
+
+			return
+		}
+		s.nodeCache[sourceAddr] = sourceNode
+	}
+
+	if err := s.createBlockFile(sourceNode, nil, b, common.SyncFileItem{Sha512Hex: item.sha512Hex}, true); err != nil {
+		s.logger.Error(
+			fmt.Sprintf("Queue sync cannot create %s", item.sha512Hex),
+			zap.Error(err),
+		)
 	}
 }
 
@@ -87,7 +189,23 @@ func (s *synchronize) iterateFileItems(dataPath string, headerMap HeaderMap, ite
 	})
 }
 
-func (s *synchronize) Start(sourceAddr string) error {
+func (s *synchronize) Create(sourceAddr string, sha512Hex string) {
+	s.queueChan <- queueItem{
+		sourceAddr: &sourceAddr,
+		sha512Hex:  sha512Hex,
+		create:     true,
+	}
+}
+
+func (s *synchronize) Delete(sha512Hex string) {
+	s.queueChan <- queueItem{
+		sourceAddr: nil,
+		sha512Hex:  sha512Hex,
+		create:     false,
+	}
+}
+
+func (s *synchronize) Full(sourceAddr string) error {
 	s.syncMutex.Lock()
 	defer s.syncMutex.Unlock()
 
@@ -299,23 +417,39 @@ func (s *synchronize) delete(wg *sync.WaitGroup, b block.Manager, wipeList commo
 	totalWipeCount := len(wipeList)
 	for len(wipeList) > 0 {
 		fileItem := wipeList[0]
-
-		if err := b.File(fileItem.Sha512Hex, func(blockFile block.File) error {
-			if blockFile.Temporary() {
-				return nil
-			}
-			return blockFile.Wipe()
-		}); err != nil {
+		currentDeletedCount := totalWipeCount - (len(wipeList) - 1)
+		if err := s.deleteBlockFile(b, fileItem, false); err != nil {
 			s.logger.Error(
 				"Sync cannot delete",
 				zap.String("sha512Hex", fileItem.Sha512Hex),
-				zap.Int("current", totalWipeCount-(len(wipeList)-1)),
+				zap.Int("current", currentDeletedCount),
 				zap.Int("total", totalWipeCount),
 				zap.Error(err),
+			)
+		} else {
+			s.logger.Info(
+				fmt.Sprintf("Synced (DELETED) %s - %d/%d...", fileItem.Sha512Hex, currentDeletedCount, totalWipeCount),
+				zap.String("sha512Hex", fileItem.Sha512Hex),
+				zap.Int("current", currentDeletedCount),
+				zap.Int("total", totalWipeCount),
 			)
 		}
 		wipeList = wipeList[1:]
 	}
+}
+
+func (s *synchronize) deleteBlockFile(b block.Manager, fileItem common.SyncFileItem, queueRequest bool) error {
+	return b.File(fileItem.Sha512Hex, func(blockFile block.File) error {
+		if blockFile.Temporary() {
+			return nil
+		}
+
+		if queueRequest {
+			return blockFile.Delete()
+		}
+
+		return blockFile.Wipe()
+	})
 }
 
 func (s *synchronize) create(wg *sync.WaitGroup, sourceNode cluster.DataNode, snapshotTime *time.Time, b block.Manager, createList common.SyncFileItemList) {
@@ -325,7 +459,7 @@ func (s *synchronize) create(wg *sync.WaitGroup, sourceNode cluster.DataNode, sn
 	for len(createList) > 0 {
 		fileItem := createList[0]
 		currentCreatedCount := totalCreateCount - (len(createList) - 1)
-		if err := s.createBlockFile(sourceNode, snapshotTime, b, fileItem, currentCreatedCount, totalCreateCount); err != nil && err != errors.ErrQuit {
+		if err := s.createBlockFile(sourceNode, snapshotTime, b, fileItem, false); err != nil && err != errors.ErrQuit {
 			s.logger.Error(
 				fmt.Sprintf("Sync cannot create %s - %d/%d", fileItem.Sha512Hex, currentCreatedCount, totalCreateCount),
 				zap.String("sha512Hex", fileItem.Sha512Hex),
@@ -333,15 +467,25 @@ func (s *synchronize) create(wg *sync.WaitGroup, sourceNode cluster.DataNode, sn
 				zap.Int("total", totalCreateCount),
 				zap.Error(err),
 			)
+		} else {
+			s.logger.Info(
+				fmt.Sprintf("Synced (CREATED) %s - %d/%d...", fileItem.Sha512Hex, currentCreatedCount, totalCreateCount),
+				zap.String("sha512Hex", fileItem.Sha512Hex),
+				zap.Int("current", currentCreatedCount),
+				zap.Int("total", totalCreateCount),
+			)
 		}
 		createList = createList[1:]
 	}
 }
 
-func (s *synchronize) createBlockFile(sourceNode cluster.DataNode, snapshotTime *time.Time, b block.Manager, fileItem common.SyncFileItem, current int, total int) (resultError error) {
-	if err := b.File(fileItem.Sha512Hex, func(blockFile block.File) error {
+func (s *synchronize) createBlockFile(sourceNode cluster.DataNode, snapshotTime *time.Time, b block.Manager, fileItem common.SyncFileItem, queueRequest bool) error {
+	return b.File(fileItem.Sha512Hex, func(blockFile block.File) error {
 		if !blockFile.Temporary() {
 			if blockFile.VerifyForce() {
+				if queueRequest {
+					return blockFile.IncreaseUsage()
+				}
 				return blockFile.ResetUsage(fileItem.Usage)
 			}
 
@@ -364,18 +508,7 @@ func (s *synchronize) createBlockFile(sourceNode cluster.DataNode, snapshotTime 
 
 				return blockFile.Verify()
 			})
-	}); err != nil {
-		return err
-	}
-
-	s.logger.Info(
-		fmt.Sprintf("Synced %s - %d/%d...", fileItem.Sha512Hex, current, total),
-		zap.String("sha512Hex", fileItem.Sha512Hex),
-		zap.Int("current", current),
-		zap.Int("total", total),
-	)
-
-	return nil
+	})
 }
 
 var _ Synchronize = &synchronize{}

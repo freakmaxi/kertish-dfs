@@ -38,7 +38,10 @@ func NewManager(rootPath string, logger *zap.Logger) (Manager, error) {
 	}
 
 	ss := NewSnapshot(rootPath, logger)
-	s := NewSynchronize(rootPath, ss, logger)
+	s, err := NewSynchronize(rootPath, ss, logger)
+	if err != nil {
+		return nil, err
+	}
 
 	return &manager{
 		rootPath:    rootPath,

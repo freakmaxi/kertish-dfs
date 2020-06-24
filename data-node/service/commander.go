@@ -428,30 +428,9 @@ func (c *commander) sycr(conn net.Conn) error {
 	}
 	sourceAddr := string(sourceAddrBuf)
 
-	return c.fs.Block().LockFile(sha512Hex, func(blockFile block.File) error {
-		if !blockFile.Temporary() && blockFile.VerifyForce() {
-			return blockFile.IncreaseUsage()
-		}
+	c.fs.Sync().Create(sourceAddr, sha512Hex)
 
-		dn, err := cluster.NewDataNode(sourceAddr)
-		if err != nil {
-			return err
-		}
-
-		return dn.SyncRead(
-			nil,
-			sha512Hex,
-			false,
-			func(data []byte) error {
-				return blockFile.Write(data)
-			},
-			func(usage uint16) bool {
-				if err := blockFile.ResetUsage(usage); err != nil {
-					return false
-				}
-				return blockFile.Verify()
-			})
-	})
+	return nil
 }
 
 func (c *commander) syrd(conn net.Conn) error {
@@ -530,19 +509,9 @@ func (c *commander) syde(conn net.Conn) error {
 		return err
 	}
 
-	return c.fs.Block().LockFile(sha512Hex, func(blockFile block.File) error {
-		if blockFile.Temporary() {
-			return nil
-		}
+	c.fs.Sync().Delete(sha512Hex)
 
-		if err := blockFile.Delete(); err != nil {
-			return err
-		}
-
-		c.cache.Remove(sha512Hex)
-
-		return nil
-	})
+	return nil
 }
 
 func (c *commander) symv(conn net.Conn) error {
@@ -663,7 +632,7 @@ func (c *commander) syfl(conn net.Conn) error {
 	}
 	sourceAddr := string(sourceAddrBuf)
 
-	if err := c.fs.Sync().Start(sourceAddr); err != nil {
+	if err := c.fs.Sync().Full(sourceAddr); err != nil {
 		c.logger.Warn("Sync is failed", zap.String("masterNodeAddress", sourceAddr), zap.Error(err))
 		return err
 	}
