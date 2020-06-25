@@ -184,7 +184,10 @@ func (f *file) Wipe() error {
 }
 
 func (f *file) Truncate(blockSize uint32) error {
-	return os.Truncate(f.targetPath, int64(blockSize)+f.header.Size())
+	if err := os.Truncate(f.targetPath, int64(blockSize)+f.header.Size()); err != nil {
+		return err
+	}
+	return f.ResetUsage(1)
 }
 
 func (f *file) Cancel() {
