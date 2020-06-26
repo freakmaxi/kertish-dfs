@@ -86,11 +86,11 @@ func (d *dfsRouter) handleGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := read.Read(w, begins, ends); err != nil {
-		d.logger.Error(
-			"Transferring file content is failed",
+		d.logger.Warn(
+			"Streaming file content is failed",
 			zap.Strings("paths", requestedPaths),
 			zap.Int64("begins", begins),
-			zap.Int64("begins", ends),
+			zap.Int64("ends", ends),
 			zap.Error(err),
 		)
 	}
