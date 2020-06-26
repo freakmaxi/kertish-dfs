@@ -1,6 +1,7 @@
 # Kertish-DFS
 ---
 [![Build Status](https://travis-ci.org/freakmaxi/kertish-dfs.svg?branch=master)](https://travis-ci.org/freakmaxi/kertish-dfs)
+![GitHub tag (latest SemVer)](https://img.shields.io/github/tag/freakmaxi/kertish-dfs.svg)
 [![Docker Pulls](https://img.shields.io/docker/pulls/freakmaxi/kertish-dfs.svg?maxAge=604800)](https://hub.docker.com/r/freakmaxi/kertish-dfs/)
 [![Go Report Card](https://goreportcard.com/badge/github.com/freakmaxi/kertish-dfs)](https://goreportcard.com/report/github.com/freakmaxi/kertish-dfs)
 
