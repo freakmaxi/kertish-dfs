@@ -21,7 +21,7 @@
     - [Setting Up Head Node](#setting-up-head-node)
     - [Setting Up Data Node](#setting-up-data-nodes)
     - [Creating Clusters](#creating-clusters)
-    - [Manipulation Filesystem](#manipulating-filesystem)
+    - [Manipulation File Storage](#manipulating-file-storage)
 - [Important Note](#one-last-important-note)
 
 ---
@@ -145,8 +145,8 @@ Kertish-dfs farm consist of minimum
 - Redis DSS
 - Locking-Center Server
 
-`Head Node` is for filesystem interaction. When the data is wanted to access, the application should
-make the request to this node. It works as REST service. Filesystem command-line tool communicate directly to 
+`Head Node` is for file storage interaction. When the data is wanted to access, the application should
+make the request to this node. It works as REST service. File storage command-line tool communicate directly to 
 head node. Head node is scalable. Check `head-node` folder for details.
 
 `Manager Node` is for orchestrating the cluster(s). When the system should be setup first time or 
@@ -347,7 +347,7 @@ Cluster Details: 8f0e2bc02811f346d6cbb542c92d118d
 ok.
 ```
 ---
-##### Manipulating FileSystem
+##### Manipulating File Storage
 
 - Copy `kertish-dfs` executable to `/usr/local/bin` folder on the system.
 - Give execution permission to the file `sudo chmod +x /usr/local/bin/kertish-dfs`

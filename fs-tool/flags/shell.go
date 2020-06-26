@@ -112,7 +112,7 @@ func (s *shellCommand) printWelcome() {
 	s.output.Println("     (  / )(  __)(  _ \\(_  _)(  )/ ___)/ )( \\     (    \\(  __)/ ___)")
 	s.output.Println("      )  (  ) _)  )   /  )(   )( \\___ \\) __ (      ) D ( ) _) \\___ \\")
 	s.output.Println("     (__\\_)(____)(__\\_) (__) (__)(____/\\_)(_/     (____/(__)  (____/")
-	s.output.Printf("FileSystem Shell v%s, Visit: https://github.com/freakmaxi/kertish-dfs\n", s.version)
+	s.output.Printf("File Storage Shell v%s, Visit: https://github.com/freakmaxi/kertish-dfs\n", s.version)
 	s.output.Refresh()
 }
 

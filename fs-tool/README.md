@@ -26,7 +26,7 @@ commands:
      (  / )(  __)(  _ \(_  _)(  )/ ___)/ )( \     (    \(  __)/ ___)                                                                   
       )  (  ) _)  )   /  )(   )( \___ \) __ (      ) D ( ) _) \___ \                                                                   
      (__\_)(____)(__\_) (__) (__)(____/\_)(_/     (____/(__)  (____/                                                                   
-FileSystem Shell vXX.X.XXXX, Visit: https://github.com/freakmaxi/kertish-dfs                                                           
+File Storage Shell vXX.X.XXXX, Visit: https://github.com/freakmaxi/kertish-dfs                                                           
 processing... ok.                                                                                                                      
                                                                                                                                        
 (/)                                                                                                                                    
