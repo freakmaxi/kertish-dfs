@@ -1,4 +1,4 @@
-# Kertish DFS File System Tool
+# Kertish DFS File Storage Tool
 
 ```
 Kertish-dfs (vXX.X.XXXX) usage: 

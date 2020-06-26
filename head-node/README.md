@@ -1,6 +1,6 @@
 # Kertish DFS Head Node
 
-Head node is responsible to handle file system manipulation requests.
+Head node is responsible to handle file storage manipulation requests.
 Default bind endpoint port is `:4000`
 
 Head node keep the metadata of files/folders in mongo db and metadata stability is supported with Locking-Center
@@ -19,7 +19,7 @@ operations of file/folder placement.
 
 - `MONGO_CONN` (mandatory) : Mongo DB endpoint. Ex: `mongodb://admin:password@127.0.0.1:27017`
 
-Metadata of the file system will be kept in Mongo DB.
+Metadata of the file storage will be kept in Mongo DB.
 
 - `MONGO_DATABASE` (optional) : Mongo DB name. Default: `kertish-dfs`
 
@@ -27,9 +27,9 @@ Metadata of the file system will be kept in Mongo DB.
 
 - `LOCKING_CENTER` (mandatory) : Locking-Center Server. Ex: `127.0.0.1:22119`
 
-Will be used to have the stability of metadata of the file system
+Will be used to have the stability of metadata of the file storage
 
-### File System Manipulation Requests
+### File Storage Manipulation Requests
 
 - `GET` is used to get folders/files list and also file downloading.
 
@@ -123,7 +123,7 @@ Default: `false`
 - `507`: Out of disk space
 - `202`: Accepted
 ---
-- `PUT` is used to move/copy folders/files in file system.
+- `PUT` is used to move/copy folders/files in file storage.
 
 ##### Required Headers:
 - `X-Path` source folder(s)/file(s) location in dfs. Possible formats are `[sourcePath]` or for file/folder joining
@@ -145,7 +145,7 @@ Default: `false`
 - `524`: Zombie file or folder has zombie file(s)
 - `200`: Accepted
 ---
-- `DELETE` is used to delete folders/files in file system.
+- `DELETE` is used to delete folders/files in file storage.
 **CAUTION: Deletion operation is applied immediately**
 
 ##### Required Headers:

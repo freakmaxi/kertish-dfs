@@ -2,6 +2,7 @@
 ---
 [![Build Status](https://travis-ci.org/freakmaxi/kertish-dfs.svg?branch=master)](https://travis-ci.org/freakmaxi/kertish-dfs)
 [![Docker Pulls](https://img.shields.io/docker/pulls/freakmaxi/kertish-dfs.svg?maxAge=604800)](https://hub.docker.com/r/freakmaxi/kertish-dfs/)
+[![Go Report Card](https://goreportcard.com/badge/github.com/freakmaxi/kertish-dfs)](https://goreportcard.com/report/github.com/freakmaxi/kertish-dfs)
 
 <img src="http://imfrk.com/p/kertish-dfs/logo-point.png" width="200px">
 
@@ -25,12 +26,12 @@
 
 ---
 ## Introduction
-Kertish-dfs is a simple and highly scalable distributed file system to store and serve billions of files. It is
+Kertish-dfs is a simple and highly scalable distributed file storage to store and serve billions of files. It is
 developed to cover the expectation for mass file storage requirements in isolated networks.
 **It does not have security implementation.**
 
 #### What is it for?
-Kertish-dfs is developed to cover the traditional file system requirements in a scalable way. Software will use the same
+Kertish-dfs is developed to cover the traditional file storage requirements in a scalable way. Software will use the same
 path-tree structure virtually to keep the files but will not stuck in hard-drive limits of the machine. It is possible
 to create a fail-safe, highly available fast and scalable file storage.
 
@@ -95,7 +96,7 @@ the real size
 - Automated sync. Data nodes are smart enough to sync the data in the cluster.
 - Possible to take "snapshot" for marking the state of data-node and revert that moment if it requires.
 - REST architecture for file/folder manipulation.
-- Command-line `Admin` and `File System` tools
+- Command-line `Admin` and `File Storage` tools
 
 ## System Requirements
 
@@ -111,7 +112,7 @@ otherwise, it can fall to swap space which cause slow operation problem and if t
 it will lead the service to crash. **NOTE Always remember that Manager-Node is not scalable right now. It will work only
 one instance. I'm working to make it scalable.**
 
-- **Head-Node** has mongodb and locking-center TCP connections. Also, it serves REST end-points for file system
+- **Head-Node** has mongodb and locking-center TCP connections. Also, it serves REST end-points for file storage
 manipulations. It means, it is a good idea to have 200mbit or powerful network connection. Head-Node will cache the
 uploaded file to process. So, if you are uploading raw 32GB file to the Kertish-dfs, you should have a powerful
 memory and swap space to hold the whole file in the memory. For this reason, you should have a powerful SSD Disk with a 
@@ -197,7 +198,7 @@ Download setup script from [https://github.com/freakmaxi/kertish-dfs/blob/master
 
 Your Kertish-dfs farm is ready to go.
 
-Put any file using `kertish-dfs` file system tool. Ex:
+Put any file using `kertish-dfs` file storage tool. Ex:
 
 `./kertish-dfs cp local:~/Downloads/demo.mov /demo.mov`
 
