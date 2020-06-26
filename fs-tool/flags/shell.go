@@ -336,7 +336,14 @@ func (s *shellCommand) processCommand() bool {
 		return false
 	}
 
-	s.history = append([]string{s.buffer}, s.history...)
+	var prevHistoryCommand *string
+	if len(s.history) > 0 {
+		prevHistoryCommand = &s.history[0]
+	}
+
+	if prevHistoryCommand == nil || strings.Compare(s.buffer, *prevHistoryCommand) != 0 {
+		s.history = append([]string{s.buffer}, s.history...)
+	}
 	s.buffer = ""
 
 	if e != nil {
