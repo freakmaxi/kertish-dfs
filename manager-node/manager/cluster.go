@@ -511,7 +511,13 @@ func (c *cluster) Find(sha512Hex string, mapType common.MapType) (string, string
 	}
 
 	if cluster.Paralyzed {
-		return "", "", errors.ErrNoAvailableClusterNode
+		if !cluster.Frozen {
+			return "", "", errors.ErrNoAvailableClusterNode
+		}
+
+		if mapType != common.MT_Read {
+			return "", "", errors.ErrNoAvailableClusterNode
+		}
 	}
 
 	var node *common.Node
