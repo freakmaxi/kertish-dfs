@@ -135,7 +135,7 @@ func (h *healthCheck) maintain() {
 						)
 					}
 				}
-				h.logger.Info("Maintain is completed!")
+				h.logger.Info("Maintain is completed")
 			}()
 		}
 	}

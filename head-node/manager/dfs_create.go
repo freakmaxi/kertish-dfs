@@ -68,7 +68,7 @@ func (d *dfs) CreateFile(path string, mime string, size uint64, overwrite bool, 
 	if err != nil {
 		if errUpdate := d.update(path, nil); errUpdate != nil {
 			d.logger.Error(
-				"Dropping file entry due to file creation failure is failed, file is now zombie!",
+				"Dropping file entry due to file creation failure is failed, file is now zombie",
 				zap.String("path", path),
 				zap.Error(errUpdate),
 			)

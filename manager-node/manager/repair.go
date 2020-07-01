@@ -80,7 +80,7 @@ func (r *repair) Start(repairType RepairType) error {
 			return
 		}
 		_ = r.operation.SetRepairing(false, true)
-		r.logger.Info("Consistency repair is completed!")
+		r.logger.Info("Consistency repair is completed")
 	}()
 
 	return nil
@@ -95,7 +95,7 @@ func (r *repair) start(repairType RepairType) error {
 		if err := r.repairStructure(); err != nil {
 			return err
 		}
-		r.logger.Info("Metadata structure consistency repair is completed!")
+		r.logger.Info("Metadata structure consistency repair is completed")
 	}
 
 	if repairIntegrity {
@@ -103,7 +103,7 @@ func (r *repair) start(repairType RepairType) error {
 		if err := r.repairIntegrity(); err != nil {
 			return err
 		}
-		r.logger.Info("Metadata integrity repair is completed!")
+		r.logger.Info("Metadata integrity repair is completed")
 	}
 
 	return nil
@@ -322,7 +322,7 @@ func (r *repair) cleanupOrphan(wg *sync.WaitGroup, clusterId string, masterNode 
 		)
 	}
 
-	r.logger.Sugar().Infof("Orphan chunks cleanup for %s is completed!", clusterId)
+	r.logger.Sugar().Infof("Orphan chunks cleanup for %s is completed", clusterId)
 
 	// Schedule sync cluster for snapshot sync
 	r.synchronize.QueueCluster(clusterId, true)
