@@ -242,49 +242,20 @@ func (s *snapshot) Restore(sourceSnapshot time.Time) error {
 		return err
 	}
 
-	if err := sourceBlock.Traverse(func(sourceFile block.File) error {
-		return targetBlock.LockFile(sourceFile.Id(), func(targetFile block.File) error {
-			if !targetFile.Temporary() {
-				usage, has := sourceHeaderMap[sourceFile.Id()]
-				if !has {
-					usage = sourceFile.Usage()
-				}
+	if err := sourceBlock.Traverse(func(sha512Hex string) error {
+		sourceFilePath := path.Join(sourceSnapshotPath, sha512Hex)
+		targetFilePath := path.Join(s.rootPath, sha512Hex)
 
-				if err := targetFile.ResetUsage(usage); err != nil {
-					return err
-				}
+		if err := os.Link(sourceFilePath, targetFilePath); err != nil {
+			return err
+		}
 
-				if targetFile.VerifyForce() {
-					return nil
-				}
-
-				// Fallback
-				if err := targetFile.Seek(0); err != nil {
-					return err
-				}
+		return targetBlock.LockFile(sha512Hex, func(targetFile block.File) error {
+			usage, has := sourceHeaderMap[sha512Hex]
+			if !has {
+				return os.ErrNotExist
 			}
-
-			return sourceFile.Read(
-				func(data []byte) error {
-					return targetFile.Write(data)
-				},
-				func() error {
-					usage, has := sourceHeaderMap[sourceFile.Id()]
-					if !has {
-						usage = sourceFile.Usage()
-					}
-
-					if err := targetFile.ResetUsage(usage); err != nil {
-						return err
-					}
-
-					if !targetFile.Verify() {
-						return fmt.Errorf("file is not verified")
-					}
-
-					return nil
-				},
-			)
+			return targetFile.ResetUsage(usage)
 		})
 	}); err != nil {
 		s.logger.Error(

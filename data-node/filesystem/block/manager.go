@@ -14,7 +14,7 @@ type Manager interface {
 	File(sha512Hex string, fileHandler func(file File) error) error
 	LockFile(sha512Hex string, fileHandler func(file File) error) error
 
-	Traverse(fileHandler func(file File) error) error
+	Traverse(hexHandler func(sha512Hex string) error) error
 
 	Wipe() error
 }
@@ -95,9 +95,9 @@ func (m *manager) LockFile(sha512Hex string, fileHandler func(file File) error) 
 	return m.File(sha512Hex, fileHandler)
 }
 
-func (m *manager) Traverse(fileHandler func(file File) error) error {
+func (m *manager) Traverse(hexHandler func(sha512Hex string) error) error {
 	return common.Traverse(m.dataPath, func(info os.FileInfo) error {
-		return m.LockFile(info.Name(), fileHandler)
+		return hexHandler(info.Name())
 	})
 }
 
