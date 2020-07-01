@@ -153,12 +153,19 @@ func (s *snapshot) Create(targetSnapshot *time.Time) (snapshotTime *time.Time, s
 		}
 	}()
 
+	s.logger.Info(
+		fmt.Sprintf("Creating snapshot as %d", s.ToUint(nextSnapshot)),
+		zap.Time("snapshot", nextSnapshot),
+	)
+
 	headerBackupFilePath := path.Join(nextSnapshotPath, snapshotHeaderBackupFile)
 	headerFile, err := os.OpenFile(headerBackupFilePath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = headerFile.Close() }()
+
+	s.logger.Info("Start traversing for snapshot creation")
 
 	if err := dnc.Traverse(s.rootPath, func(info os.FileInfo) error {
 		sha512Hex := info.Name()
@@ -190,6 +197,8 @@ func (s *snapshot) Create(targetSnapshot *time.Time) (snapshotTime *time.Time, s
 		return nil, err
 	}
 
+	s.logger.Info("Snapshot creation is completed")
+
 	return &nextSnapshot, nil
 }
 
@@ -201,6 +210,11 @@ func (s *snapshot) Delete(targetSnapshot time.Time) error {
 }
 
 func (s *snapshot) Restore(sourceSnapshot time.Time) error {
+	s.logger.Info(
+		fmt.Sprintf("Restoring snapshot (%d)", s.ToUint(sourceSnapshot)),
+		zap.Time("snapshot", sourceSnapshot),
+	)
+
 	sourceSnapshotPathName := s.PathName(sourceSnapshot)
 	sourceSnapshotPath := path.Join(s.rootPath, sourceSnapshotPathName)
 
@@ -228,11 +242,32 @@ func (s *snapshot) Restore(sourceSnapshot time.Time) error {
 		return err
 	}
 
-	return sourceBlock.Traverse(func(sourceFile block.File) error {
+	if err := sourceBlock.Traverse(func(sourceFile block.File) error {
 		return targetBlock.LockFile(sourceFile.Id(), func(targetFile block.File) error {
-			return sourceFile.Read(func(data []byte) error {
-				return targetFile.Write(data)
-			},
+			if !targetFile.Temporary() {
+				usage, has := sourceHeaderMap[sourceFile.Id()]
+				if !has {
+					usage = sourceFile.Usage()
+				}
+
+				if err := targetFile.ResetUsage(usage); err != nil {
+					return err
+				}
+
+				if targetFile.VerifyForce() {
+					return nil
+				}
+
+				// Fallback
+				if err := targetFile.Seek(0); err != nil {
+					return err
+				}
+			}
+
+			return sourceFile.Read(
+				func(data []byte) error {
+					return targetFile.Write(data)
+				},
 				func() error {
 					usage, has := sourceHeaderMap[sourceFile.Id()]
 					if !has {
@@ -251,7 +286,20 @@ func (s *snapshot) Restore(sourceSnapshot time.Time) error {
 				},
 			)
 		})
-	})
+	}); err != nil {
+		s.logger.Error(
+			fmt.Sprintf("Restoring snapshot (%d) is failed", s.ToUint(sourceSnapshot)),
+			zap.Error(err),
+		)
+		return err
+	}
+
+	s.logger.Info(
+		fmt.Sprintf("Restoring snapshot (%d) is completed", s.ToUint(sourceSnapshot)),
+		zap.Time("snapshot", sourceSnapshot),
+	)
+
+	return nil
 }
 
 func (s *snapshot) Block(snapshot time.Time) (block.Manager, error) {

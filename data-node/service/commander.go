@@ -644,6 +644,9 @@ func (c *commander) syfl(conn net.Conn) error {
 
 func (c *commander) sscr() error {
 	_, err := c.fs.Snapshot().Create(nil)
+	if err != nil {
+		c.logger.Error("Snapshot creation is failed", zap.Error(err))
+	}
 	return err
 }
 

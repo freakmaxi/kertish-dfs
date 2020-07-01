@@ -22,6 +22,7 @@ type File interface {
 	Verify() bool
 	VerifyForce() bool
 
+	Seek(offset int64) error
 	Read(readHandler func(data []byte) error, completedHandler func() error) error
 
 	Id() string
@@ -123,6 +124,11 @@ func (f *file) VerifyForce() bool {
 	}
 
 	return f.verified
+}
+
+func (f *file) Seek(offset int64) error {
+	_, err := f.inner.Seek(f.header.Size()+offset, io.SeekStart)
+	return err
 }
 
 func (f *file) Read(readHandler func(data []byte) error, completedHandler func() error) error {

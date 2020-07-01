@@ -68,7 +68,7 @@ func (c *container) start() {
 			case <-time.After(c.lifetime):
 				c.logger.Info("Purging Cache...")
 				c.Purge()
-				c.logger.Info("Cache Purging is completed!")
+				c.logger.Info("Cache Purging is completed")
 			}
 		}
 	}()
