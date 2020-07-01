@@ -133,8 +133,27 @@ func (r *repair) repairIntegrity() error {
 
 	syncFailure := false
 
+	clusterMap := make(map[string]*common.Cluster)
+	clusterIndexMap := make(map[string]map[string]string)
+
+	mapMutex := sync.Mutex{}
+	addIndexMapFunc := func(clusterId string, indexMap map[string]string) {
+		mapMutex.Lock()
+		defer mapMutex.Unlock()
+
+		clusterIndexMap[clusterId] = indexMap
+	}
+	deleteFromIndexMapFunc := func(clusterId string, sha512Hex string) {
+		mapMutex.Lock()
+		defer mapMutex.Unlock()
+
+		delete(clusterIndexMap[clusterId], sha512Hex)
+	}
+
 	wg := &sync.WaitGroup{}
 	for _, cluster := range clusters {
+		clusterMap[cluster.Id] = cluster
+
 		wg.Add(1)
 		go func(wg *sync.WaitGroup, clusterId string) {
 			defer wg.Done()
@@ -145,31 +164,27 @@ func (r *repair) repairIntegrity() error {
 					zap.Error(err),
 				)
 				syncFailure = true
+				return
 			}
+
+			r.logger.Info("Caching cluster chunk map for integrity exam")
+
+			indexMap, err := r.index.PullMap(clusterId)
+			if err != nil {
+				r.logger.Error("Cluster chunk map caching is failed for integrity repair",
+					zap.String("clusterId", clusterId),
+					zap.Error(err),
+				)
+				syncFailure = true
+				return
+			}
+			addIndexMapFunc(clusterId, indexMap)
 		}(wg, cluster.Id)
 	}
 	wg.Wait()
 
 	if syncFailure {
 		return errors.ErrSync
-	}
-
-	r.logger.Info("Caching cluster chunk map for integrity exam")
-
-	clusterMap := make(map[string]*common.Cluster)
-	matchedFileItemListMap := make(map[string]common.SyncFileItemList)
-
-	for _, cluster := range clusters {
-		clusterMap[cluster.Id] = cluster
-		matchedFileItemListMap[cluster.Id] = make(common.SyncFileItemList, 0)
-	}
-
-	mapMutex := sync.Mutex{}
-	appendToMatchedFileItemListMapFunc := func(clusterId string, fileItem *common.SyncFileItem) {
-		mapMutex.Lock()
-		defer mapMutex.Unlock()
-
-		matchedFileItemListMap[clusterId] = append(matchedFileItemListMap[clusterId], *fileItem)
 	}
 
 	r.logger.Info("Start traversing metadata entries for integrity check up")
@@ -219,7 +234,7 @@ func (r *repair) repairIntegrity() error {
 				}
 
 				deletionResult.Untouched = append(deletionResult.Untouched, chunk.Hash)
-				appendToMatchedFileItemListMapFunc(cacheFileItem.ClusterId, &cacheFileItem.FileItem)
+				deleteFromIndexMapFunc(cacheFileItem.ClusterId, cacheFileItem.FileItem.Sha512Hex)
 			}
 			file.IngestDeletion(deletionResult)
 
@@ -240,43 +255,27 @@ func (r *repair) repairIntegrity() error {
 	r.logger.Info("Start orphan chunk cleanup on clusters")
 
 	// Make Orphan File Chunk Cleanup
-	for clusterId, matchedFileItemList := range matchedFileItemListMap {
+	for clusterId, indexMap := range clusterIndexMap {
 		masterNode := clusterMap[clusterId].Master()
 
 		wg.Add(1)
-		go r.cleanupOrphan(wg, clusterId, masterNode, matchedFileItemList)
+		go r.cleanupOrphan(wg, clusterId, masterNode, indexMap)
 	}
 	wg.Wait()
 
 	return nil
 }
 
-func (r *repair) cleanupOrphan(wg *sync.WaitGroup, clusterId string, masterNode *common.Node, matchedFileItemList common.SyncFileItemList) {
+func (r *repair) cleanupOrphan(wg *sync.WaitGroup, clusterId string, masterNode *common.Node, indexMap map[string]string) {
 	defer wg.Done()
 
-	clusterSha512HexMap, err := r.index.PullMap(clusterId)
-	if err != nil {
-		r.logger.Error(
-			"Unable to pull cluster file map",
-			zap.String("clusterId", clusterId),
-			zap.Error(err),
-		)
-		return
-	}
-
-	for _, fileItem := range matchedFileItemList {
-		if _, has := clusterSha512HexMap[fileItem.Sha512Hex]; has {
-			delete(clusterSha512HexMap, fileItem.Sha512Hex)
-		}
-	}
-
-	if len(clusterSha512HexMap) == 0 {
+	if len(indexMap) == 0 {
 		r.logger.Sugar().Infof("%s does not have orphan chunks", clusterId)
 		return
 	}
 
 	clusterSha512HexList := make([]string, 0)
-	for k := range clusterSha512HexMap {
+	for k := range indexMap {
 		clusterSha512HexList = append(clusterSha512HexList, k)
 	}
 
@@ -309,7 +308,7 @@ func (r *repair) cleanupOrphan(wg *sync.WaitGroup, clusterId string, masterNode 
 	for _, sha512Hex := range clusterSha512HexList {
 		if err := mdn.Delete(sha512Hex); err != nil {
 			r.logger.Error(
-				"Deleting orphan chunk is failed",
+				fmt.Sprintf("Deleting orphan chunk %s from %s is failed", sha512Hex, clusterId),
 				zap.String("clusterId", clusterId),
 				zap.String("sha512Hex", sha512Hex),
 				zap.Error(err),
@@ -317,7 +316,7 @@ func (r *repair) cleanupOrphan(wg *sync.WaitGroup, clusterId string, masterNode 
 			continue
 		}
 		r.logger.Info(
-			"Orphan chunk is deleted",
+			fmt.Sprintf("Orphan chunk %s from %s is deleted", sha512Hex, clusterId),
 			zap.String("clusterId", clusterId),
 			zap.String("sha512Hex", sha512Hex),
 		)
