@@ -253,7 +253,11 @@ func (s *snapshot) Restore(sourceSnapshot time.Time) error {
 		return targetBlock.LockFile(sha512Hex, func(targetFile block.File) error {
 			usage, has := sourceHeaderMap[sha512Hex]
 			if !has {
-				return os.ErrNotExist
+				s.logger.Warn(
+					"File header info is missing for snapshot restoring",
+					zap.String("sha512Hex", sha512Hex),
+				)
+				usage = 1
 			}
 			return targetFile.ResetUsage(usage)
 		})
