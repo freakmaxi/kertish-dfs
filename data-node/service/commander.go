@@ -428,9 +428,10 @@ func (c *commander) sycr(conn net.Conn) error {
 	}
 	sourceAddr := string(sourceAddrBuf)
 
-	c.fs.Sync().Create(sourceAddr, sha512Hex)
-
-	return nil
+	return c.fs.Sync(func(sync filesystem.Synchronize) error {
+		sync.Create(sourceAddr, sha512Hex)
+		return nil
+	})
 }
 
 func (c *commander) syrd(conn net.Conn) error {
@@ -451,13 +452,15 @@ func (c *commander) syrd(conn net.Conn) error {
 
 	blockManager := c.fs.Block()
 	if snapshotTimeUint64 > 0 {
-		snapshotTime, err := c.fs.Snapshot().FromUint(snapshotTimeUint64)
-		if err != nil {
-			return err
-		}
+		if err := c.fs.Snapshot(func(snapshot filesystem.Snapshot) error {
+			snapshotTime, err := snapshot.FromUint(snapshotTimeUint64)
+			if err != nil {
+				return err
+			}
 
-		blockManager, err = c.fs.Snapshot().Block(*snapshotTime)
-		if err != nil {
+			blockManager, err = snapshot.Block(*snapshotTime)
+			return err
+		}); err != nil {
 			return err
 		}
 	}
@@ -509,9 +512,10 @@ func (c *commander) syde(conn net.Conn) error {
 		return err
 	}
 
-	c.fs.Sync().Delete(sha512Hex)
-
-	return nil
+	return c.fs.Sync(func(sync filesystem.Synchronize) error {
+		sync.Delete(sha512Hex)
+		return nil
+	})
 }
 
 func (c *commander) symv(conn net.Conn) error {
@@ -561,11 +565,18 @@ func (c *commander) syls(conn net.Conn) error {
 
 	var snapshotTime *time.Time
 	if snapshotTimeUint > 0 {
-		snapshotTime, _ = c.fs.Snapshot().FromUint(snapshotTimeUint)
+		_ = c.fs.Snapshot(func(snapshot filesystem.Snapshot) error {
+			snapshotTime, _ = snapshot.FromUint(snapshotTimeUint)
+			return nil
+		})
 	}
 
-	snapshots, err := c.fs.Snapshot().Dates()
-	if err != nil {
+	var snapshots common.Snapshots
+	if err := c.fs.Snapshot(func(snapshot filesystem.Snapshot) error {
+		var err error
+		snapshots, err = snapshot.Dates()
+		return err
+	}); err != nil {
 		return err
 	}
 
@@ -579,31 +590,37 @@ func (c *commander) syls(conn net.Conn) error {
 	}
 
 	for _, snapshot := range snapshots {
-		snapshotTimeUint := c.fs.Snapshot().ToUint(snapshot)
+		var snapshotTimeUint uint64
+		_ = c.fs.Snapshot(func(s filesystem.Snapshot) error {
+			snapshotTimeUint = s.ToUint(snapshot)
+			return nil
+		})
 		if err := c.writeBinaryWithTimeout(conn, snapshotTimeUint); err != nil {
 			return err
 		}
 	}
 
-	if err := c.fs.Sync().List(snapshotTime, func(fileItem *common.SyncFileItem) error {
-		sha512Sum, err := hex.DecodeString(fileItem.Sha512Hex)
-		if err != nil {
-			return err
-		}
+	if err := c.fs.Sync(func(sync filesystem.Synchronize) error {
+		return sync.List(snapshotTime, func(fileItem *common.SyncFileItem) error {
+			sha512Sum, err := hex.DecodeString(fileItem.Sha512Hex)
+			if err != nil {
+				return err
+			}
 
-		if err := c.writeWithTimeout(conn, sha512Sum); err != nil {
-			return err
-		}
+			if err := c.writeWithTimeout(conn, sha512Sum); err != nil {
+				return err
+			}
 
-		if err := c.writeBinaryWithTimeout(conn, fileItem.Usage); err != nil {
-			return err
-		}
+			if err := c.writeBinaryWithTimeout(conn, fileItem.Usage); err != nil {
+				return err
+			}
 
-		if err := c.writeBinaryWithTimeout(conn, fileItem.Size); err != nil {
-			return err
-		}
+			if err := c.writeBinaryWithTimeout(conn, fileItem.Size); err != nil {
+				return err
+			}
 
-		return nil
+			return nil
+		})
 	}); err != nil {
 		return err
 	}
@@ -632,7 +649,9 @@ func (c *commander) syfl(conn net.Conn) error {
 	}
 	sourceAddr := string(sourceAddrBuf)
 
-	if err := c.fs.Sync().Full(sourceAddr); err != nil {
+	if err := c.fs.Sync(func(sync filesystem.Synchronize) error {
+		return sync.Full(sourceAddr)
+	}); err != nil {
 		c.logger.Warn("Sync is failed", zap.String("masterNodeAddress", sourceAddr), zap.Error(err))
 		return err
 	}
@@ -643,7 +662,10 @@ func (c *commander) syfl(conn net.Conn) error {
 }
 
 func (c *commander) sscr() error {
-	_, err := c.fs.Snapshot().Create(nil)
+	err := c.fs.Snapshot(func(snapshot filesystem.Snapshot) error {
+		_, err := snapshot.Create(nil)
+		return err
+	})
 	if err != nil {
 		c.logger.Error("Snapshot creation is failed", zap.Error(err))
 	}
@@ -656,15 +678,16 @@ func (c *commander) ssde(conn net.Conn) error {
 		return err
 	}
 
-	snapshotDates, err := c.fs.Snapshot().Dates()
-	if err != nil {
-		return err
-	}
-	if uint64(len(snapshotDates)) <= snapshotIndex {
-		return fmt.Errorf("snapshot index (%d) is out of range", snapshotIndex)
-	}
-
-	return c.fs.Snapshot().Delete(snapshotDates[snapshotIndex])
+	return c.fs.Snapshot(func(snapshot filesystem.Snapshot) error {
+		snapshotDates, err := snapshot.Dates()
+		if err != nil {
+			return err
+		}
+		if uint64(len(snapshotDates)) <= snapshotIndex {
+			return fmt.Errorf("snapshot index (%d) is out of range", snapshotIndex)
+		}
+		return snapshot.Delete(snapshotDates[snapshotIndex])
+	})
 }
 
 func (c *commander) ssrs(conn net.Conn) error {
@@ -673,15 +696,16 @@ func (c *commander) ssrs(conn net.Conn) error {
 		return err
 	}
 
-	snapshotDates, err := c.fs.Snapshot().Dates()
-	if err != nil {
-		return err
-	}
-	if uint64(len(snapshotDates)) <= snapshotIndex {
-		return fmt.Errorf("snapshot index (%d) is out of range", snapshotIndex)
-	}
-
-	if err := c.fs.Snapshot().Restore(snapshotDates[snapshotIndex]); err != nil {
+	if err := c.fs.Snapshot(func(snapshot filesystem.Snapshot) error {
+		snapshotDates, err := snapshot.Dates()
+		if err != nil {
+			return err
+		}
+		if uint64(len(snapshotDates)) <= snapshotIndex {
+			return fmt.Errorf("snapshot index (%d) is out of range", snapshotIndex)
+		}
+		return snapshot.Restore(snapshotDates[snapshotIndex])
+	}); err != nil {
 		return err
 	}
 

@@ -13,8 +13,8 @@ import (
 
 type Manager interface {
 	Block() block.Manager
-	Snapshot() Snapshot
-	Sync() Synchronize
+	Snapshot(func(snapshot Snapshot) error) error
+	Sync(func(sync Synchronize) error) error
 
 	Wipe() error
 	Used() (uint64, error)
@@ -55,27 +55,27 @@ func NewManager(rootPath string, logger *zap.Logger) (Manager, error) {
 
 func (m *manager) Block() block.Manager {
 	m.mutex.Lock()
-	m.mutex.Unlock()
+	defer m.mutex.Unlock()
 
 	return m.block
 }
 
-func (m *manager) Snapshot() Snapshot {
+func (m *manager) Snapshot(handler func(snapshot Snapshot) error) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
 	m.block.Wait()
 
-	return m.snapshot
+	return handler(m.snapshot)
 }
 
-func (m *manager) Sync() Synchronize {
+func (m *manager) Sync(handler func(sync Synchronize) error) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
 	m.block.Wait()
 
-	return m.synchronize
+	return handler(m.synchronize)
 }
 
 func (m *manager) Wipe() error {

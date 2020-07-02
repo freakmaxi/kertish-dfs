@@ -141,7 +141,9 @@ func main() {
 			mode = "SLAVE"
 
 			go func() {
-				if err := m.Sync().Full(n.MasterAddress()); err != nil {
+				if err := m.Sync(func(sync filesystem.Synchronize) error {
+					return sync.Full(n.MasterAddress())
+				}); err != nil {
 					logger.Warn("Sync is failed", zap.String("masterNodeAddress", n.MasterAddress()), zap.Error(err))
 				}
 			}()
