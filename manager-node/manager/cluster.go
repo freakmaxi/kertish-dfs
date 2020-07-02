@@ -485,7 +485,7 @@ func (c *cluster) RestoreSnapshot(clusterId string, snapshotIndex uint64) error 
 }
 
 func (c *cluster) Map(sha512HexList []string, mapType common.MapType) (map[string]string, error) {
-	clusterMapping := make(map[string]string, 0)
+	clusterMapping := make(map[string]string)
 	for _, sha512Hex := range sha512HexList {
 		_, address, err := c.Find(sha512Hex, mapType)
 		if err != nil {

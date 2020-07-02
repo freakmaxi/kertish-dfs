@@ -12,7 +12,7 @@ import (
 
 func md5Hash(v string) string {
 	hash := md5.New()
-	hash.Write([]byte(v))
+	_, _ = hash.Write([]byte(v))
 
 	return hex.EncodeToString(hash.Sum(nil))
 }

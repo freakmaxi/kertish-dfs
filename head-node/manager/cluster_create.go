@@ -41,7 +41,7 @@ func NewCreate(
 
 func (c *create) calculateHash(data []byte) string {
 	hash := sha512.New512_256()
-	hash.Write(data)
+	_, _ = hash.Write(data)
 	return hex.EncodeToString(hash.Sum(nil))
 }
 
@@ -154,56 +154,44 @@ func (c *create) updateClusterUsage(clusterId string, size uint64) {
 
 func (c *create) complete(successChan chan *common.DataChunk) common.DataChunks {
 	chunks := make(common.DataChunks, 0)
-	for {
-		select {
-		case dataChunk, more := <-successChan:
-			if !more {
-				return chunks
-			}
-			chunks = append(chunks, dataChunk)
-		}
+	for dataChunk := range successChan {
+		chunks = append(chunks, dataChunk)
 	}
+	return chunks
 }
 
 func (c *create) revert(successChan chan *common.DataChunk, errorChan chan error) {
-	for {
-		select {
-		case dataChunk, more := <-successChan:
-			if !more {
-				return
-			}
+	for dataChunk := range successChan {
+		clusterId, address, err := c.findClusterHandler(dataChunk.Hash)
+		if err != nil {
+			errorChan <- fmt.Errorf(
+				"unable to revert chunk creation, sha512Hex: %s, error: %s",
+				dataChunk.Hash,
+				err,
+			)
+			continue
+		}
 
-			clusterId, address, err := c.findClusterHandler(dataChunk.Hash)
-			if err != nil {
-				errorChan <- fmt.Errorf(
-					"unable to revert chunk creation, sha512Hex: %s, error: %s",
-					dataChunk.Hash,
-					err,
-				)
-				continue
-			}
+		dn, err := c.dataNodeProviderHandler(address)
+		if err != nil {
+			errorChan <- fmt.Errorf(
+				"unable to get data node for creation reversion, clusterId: %s, address: %s, sha512Hex: %s, error: %s",
+				clusterId,
+				address,
+				dataChunk.Hash,
+				err,
+			)
+			continue
+		}
 
-			dn, err := c.dataNodeProviderHandler(address)
-			if err != nil {
-				errorChan <- fmt.Errorf(
-					"unable to get data node for creation reversion, clusterId: %s, address: %s, sha512Hex: %s, error: %s",
-					clusterId,
-					address,
-					dataChunk.Hash,
-					err,
-				)
-				continue
-			}
-
-			if err := dn.Delete(dataChunk.Hash); err != nil {
-				errorChan <- fmt.Errorf(
-					"unable to delete chunk, failure on data node, clusterId: %s, address: %s, sha512Hex: %s, error: %s",
-					clusterId,
-					address,
-					dataChunk.Hash,
-					err,
-				)
-			}
+		if err := dn.Delete(dataChunk.Hash); err != nil {
+			errorChan <- fmt.Errorf(
+				"unable to delete chunk, failure on data node, clusterId: %s, address: %s, sha512Hex: %s, error: %s",
+				clusterId,
+				address,
+				dataChunk.Hash,
+				err,
+			)
 		}
 	}
 }
@@ -211,14 +199,10 @@ func (c *create) revert(successChan chan *common.DataChunk, errorChan chan error
 func (c *create) createBulkError(errorChan chan error) error {
 	bulkError := errors.NewBulkError()
 
-	for {
-		select {
-		case err, more := <-errorChan:
-			if !more {
-				bulkError.Add(fmt.Errorf("possible zombie file or orphan chunk is appeared. repair may require"))
-				return bulkError
-			}
-			bulkError.Add(err)
-		}
+	for err := range errorChan {
+		bulkError.Add(err)
 	}
+
+	bulkError.Add(fmt.Errorf("possible zombie file or orphan chunk is appeared. repair may require"))
+	return bulkError
 }

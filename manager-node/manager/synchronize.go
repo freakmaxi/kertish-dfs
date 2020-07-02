@@ -51,21 +51,18 @@ func NewSynchronize(clusters data.Clusters, index data.Index, logger *zap.Logger
 
 func (s *synchronize) start() {
 	go func() {
-		for {
-			select {
-			case so := <-s.syncChan:
-				go func() {
-					if err := s.startSync(so.clusterId, so.force, so.keepFrozen); err != nil {
-						s.logger.Error(
-							"Cluster sync is failed",
-							zap.String("clusterId", so.clusterId),
-							zap.Bool("keepFrozen", so.keepFrozen),
-							zap.Bool("force", so.force),
-							zap.Error(err),
-						)
-					}
-				}()
-			}
+		for so := range s.syncChan {
+			go func(so syncOrder) {
+				if err := s.startSync(so.clusterId, so.force, so.keepFrozen); err != nil {
+					s.logger.Error(
+						"Cluster sync is failed",
+						zap.String("clusterId", so.clusterId),
+						zap.Bool("keepFrozen", so.keepFrozen),
+						zap.Bool("force", so.force),
+						zap.Error(err),
+					)
+				}
+			}(so)
 		}
 	}()
 }

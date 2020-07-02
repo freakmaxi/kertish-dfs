@@ -67,17 +67,10 @@ func (s *synchronize) start() error {
 	}
 
 	go func() {
-		for {
-			select {
-			case item, more := <-s.queueChan:
-				if !more {
-					return
-				}
-
-				s.syncMutex.Lock()
-				s.consumeQueueChannel(b, s.queueChan, item)
-				s.syncMutex.Unlock()
-			}
+		for item := range s.queueChan {
+			s.syncMutex.Lock()
+			s.consumeQueueChannel(b, s.queueChan, item)
+			s.syncMutex.Unlock()
 		}
 	}()
 

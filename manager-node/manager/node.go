@@ -105,7 +105,7 @@ func (n *node) create(nodeId string, fileItemList common.SyncFileItemList) error
 		return fmt.Errorf("node id didn't match to get others: %s", nodeId)
 	}
 
-	cacheFileItems := make(common.CacheFileItemMap, 0)
+	cacheFileItems := make(common.CacheFileItemMap)
 	nodeSyncItems := make([]*nodeSync, 0)
 
 	for _, fileItem := range fileItemList {

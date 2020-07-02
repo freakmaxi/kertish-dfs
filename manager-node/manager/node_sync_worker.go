@@ -31,16 +31,9 @@ func (c *nodeSyncWorker) Start() {
 		c.processSlotChan <- i
 	}
 
-	for {
-		select {
-		case ns, more := <-c.queueChan:
-			if !more {
-				return
-			}
-
-			i := <-c.processSlotChan
-			go c.process(ns, i)
-		}
+	for ns := range c.queueChan {
+		i := <-c.processSlotChan
+		go c.process(ns, i)
 	}
 }
 
@@ -49,13 +42,13 @@ func (c *nodeSyncWorker) Queue(ns *nodeSync) {
 }
 
 func (c *nodeSyncWorker) process(ns *nodeSync, index int) {
-	if !c.processor.Sync(ns) {
-		<-time.After(pauseDuration)
-
+	if c.processor.Sync(ns) {
 		c.processSlotChan <- index
-		c.queueChan <- ns
-
 		return
 	}
+
+	<-time.After(pauseDuration)
+
 	c.processSlotChan <- index
+	c.queueChan <- ns
 }

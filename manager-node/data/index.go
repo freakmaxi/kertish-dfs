@@ -315,14 +315,13 @@ func (i *index) Get(sha512Hex string) (*common.CacheFileItem, error) {
 	if err != nil {
 		return nil, err
 	}
-	if cn != nil {
-		for k, v := range cn {
-			nodeState, err := strconv.ParseBool(v)
-			if err != nil {
-				nodeState = false
-			}
-			item.ExistsIn[k] = nodeState
+
+	for k, v := range cn {
+		nodeState, err := strconv.ParseBool(v)
+		if err != nil {
+			nodeState = false
 		}
+		item.ExistsIn[k] = nodeState
 	}
 
 	return item, nil

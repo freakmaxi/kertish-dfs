@@ -23,20 +23,7 @@ func TestContainer_PurgeV1(t *testing.T) {
 		logger:      logger,
 	} // limit 5MB
 
-	type dI struct {
-		name  string
-		data  []byte
-		index int
-	}
-
-	dIs := make([]dI, 0)
 	for i := 0; i < 5; i++ {
-		dIs = append(dIs, dI{
-			name:  fmt.Sprintf("a%d", i+1),
-			data:  []byte{},
-			index: i,
-		})
-
 		container.Upsert(fmt.Sprintf("a%d", i+1), []byte{})
 	}
 
@@ -73,20 +60,7 @@ func TestContainer_PurgeV2(t *testing.T) {
 	} // limit 5MB
 	container.start()
 
-	type dI struct {
-		name  string
-		data  []byte
-		index int
-	}
-
-	dIs := make([]dI, 0)
 	for i := 0; i < 5; i++ {
-		dIs = append(dIs, dI{
-			name:  fmt.Sprintf("a%d", i+1),
-			data:  []byte{},
-			index: i,
-		})
-
 		container.Upsert(fmt.Sprintf("a%d", i+1), []byte{})
 		container.sortedIndex[i].expiresAt = time.Now().UTC().Add(time.Second * 6)
 	}

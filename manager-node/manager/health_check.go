@@ -110,62 +110,56 @@ func (h *healthCheck) Report() (HealthReport, error) {
 }
 
 func (h *healthCheck) maintain() {
-	for {
-		select {
-		case <-time.After(maintainInterval):
-			h.logger.Info("Maintaining Clusters...")
-			// Fire Forget
-			go func() {
-				clusters, err := h.clusters.GetAll()
-				if err != nil {
-					return
-				}
+	for range time.After(maintainInterval) {
+		h.logger.Info("Maintaining Clusters...")
+		// Fire Forget
+		go func() {
+			clusters, err := h.clusters.GetAll()
+			if err != nil {
+				return
+			}
 
-				for _, cluster := range clusters {
-					if err := h.synchronize.Cluster(cluster.Id, false, false); err != nil {
-						if err == errors.ErrFrozen {
-							h.logger.Warn("Frozen cluster is skipped to maintain", zap.String("clusterId", cluster.Id))
-							continue
-						}
-
-						h.logger.Error(
-							"Syncing cluster in maintain is failed",
-							zap.String("clusterId", cluster.Id),
-							zap.Error(err),
-						)
+			for _, cluster := range clusters {
+				if err := h.synchronize.Cluster(cluster.Id, false, false); err != nil {
+					if err == errors.ErrFrozen {
+						h.logger.Warn("Frozen cluster is skipped to maintain", zap.String("clusterId", cluster.Id))
+						continue
 					}
+
+					h.logger.Error(
+						"Syncing cluster in maintain is failed",
+						zap.String("clusterId", cluster.Id),
+						zap.Error(err),
+					)
 				}
-				h.logger.Info("Maintain is completed")
-			}()
-		}
+			}
+			h.logger.Info("Maintain is completed")
+		}()
 	}
 }
 
 func (h *healthCheck) health() {
-	for {
-		select {
-		case <-time.After(h.interval):
-			clusters, err := h.clusters.GetAll()
-			if err != nil {
-				h.logger.Error(
-					"Unable to get cluster list for health check",
-					zap.Error(err),
-				)
+	for range time.After(h.interval) {
+		clusters, err := h.clusters.GetAll()
+		if err != nil {
+			h.logger.Error(
+				"Unable to get cluster list for health check",
+				zap.Error(err),
+			)
+			continue
+		}
+
+		wg := &sync.WaitGroup{}
+		for _, cluster := range clusters {
+			if cluster.Frozen {
+				h.logger.Warn("Frozen cluster is skipped for health check", zap.String("clusterId", cluster.Id))
 				continue
 			}
 
-			wg := &sync.WaitGroup{}
-			for _, cluster := range clusters {
-				if cluster.Frozen {
-					h.logger.Warn("Frozen cluster is skipped for health check", zap.String("clusterId", cluster.Id))
-					continue
-				}
-
-				wg.Add(1)
-				go h.checkHealth(wg, cluster)
-			}
-			wg.Wait()
+			wg.Add(1)
+			go h.checkHealth(wg, cluster)
 		}
+		wg.Wait()
 	}
 }
 

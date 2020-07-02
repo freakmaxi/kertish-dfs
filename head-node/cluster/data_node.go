@@ -64,7 +64,7 @@ func (d *dataNode) Create(data []byte) (exists bool, sha512Hex string, err error
 		}
 
 		sha512Hash := sha512.New512_256()
-		sha512Hash.Write(data)
+		_, _ = sha512Hash.Write(data)
 
 		sha512Sum := sha512Hash.Sum(nil)
 		if _, err := conn.Write(sha512Sum); err != nil {
@@ -146,7 +146,7 @@ func (d *dataNode) Read(sha512Hex string, readHandler func([]byte) error) error 
 		}
 
 		sha512Hash := sha512.New512_256()
-		sha512Hash.Write(buf)
+		_, _ = sha512Hash.Write(buf)
 
 		if err := readHandler(buf); err != nil {
 			return err

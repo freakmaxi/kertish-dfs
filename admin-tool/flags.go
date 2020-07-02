@@ -351,6 +351,8 @@ Ex: clusterId=snapshotIndex`)
 		uf = []string{}
 	}
 
+	joinedArgs := strings.Join(os.Args, " ")
+
 	fc := &flagContainer{
 		managerAddress:     managerAddress,
 		createCluster:      cc,
@@ -367,13 +369,13 @@ Ex: clusterId=snapshotIndex`)
 		deleteSnapshot:     deleteSnapshot,
 		restoreSnapshot:    restoreSnapshot,
 		syncCluster:        syncCluster,
-		syncClusters:       strings.Index(strings.Join(os.Args, " "), "sync-clusters") > -1,
-		clustersReport:     strings.Index(strings.Join(os.Args, " "), "clusters-report") > -1,
+		syncClusters:       strings.Contains(joinedArgs, "sync-clusters"),
+		clustersReport:     strings.Contains(joinedArgs, "clusters-report"),
 		getCluster:         getCluster,
-		getClusters:        strings.Index(strings.Join(os.Args, " "), "get-clusters") > -1,
-		force:              strings.Index(strings.Join(os.Args, " "), "-force") > -1,
-		help:               strings.Index(strings.Join(os.Args, " "), "-help") > -1,
-		version:            strings.Index(strings.Join(os.Args, " "), "-version") > -1,
+		getClusters:        strings.Contains(joinedArgs, "get-clusters"),
+		force:              strings.Contains(joinedArgs, "-force"),
+		help:               strings.Contains(joinedArgs, "-help"),
+		version:            strings.Contains(joinedArgs, "-version"),
 	}
 
 	switch fc.Define(v) {

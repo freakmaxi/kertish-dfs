@@ -81,9 +81,7 @@ func (d *dfs) changeFolder(sources []string, target string, move bool) error {
 					continue
 				}
 
-				for _, chunk := range file.Chunks {
-					createShadowChunks = append(createShadowChunks, chunk)
-				}
+				createShadowChunks = append(createShadowChunks, file.Chunks...)
 			}
 
 			clonedFolderPaths = append(clonedFolderPaths, sourceFolder.Full)
@@ -120,9 +118,7 @@ func (d *dfs) changeFolder(sources []string, target string, move bool) error {
 				continue
 			}
 
-			for _, chunk := range file.Chunks {
-				createShadowChunks = append(createShadowChunks, chunk)
-			}
+			createShadowChunks = append(createShadowChunks, file.Chunks...)
 		}
 
 		return true, nil
@@ -258,7 +254,7 @@ func (d *dfs) changeFile(sources []string, target string, overwrite bool, move b
 	return d.metadata.SaveBlock(sourceParents, func(folders map[string]*common.Folder) (bool, error) {
 		for _, source := range sources {
 			sourceParent, sourceFilename := common.Split(source)
-			sourceFolder, _ := folders[sourceParent]
+			sourceFolder := folders[sourceParent]
 
 			_ = sourceFolder.DeleteFile(sourceFilename, func(file *common.File) error {
 				return nil

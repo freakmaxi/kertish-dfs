@@ -43,7 +43,7 @@ func (f *Folder) NewFolder(name string) (*Folder, error) {
 		return nil, os.ErrInvalid
 	}
 
-	if strings.Index(name, pathSeparator) > -1 {
+	if strings.Contains(name, pathSeparator) {
 		return nil, os.ErrInvalid
 	}
 
@@ -68,7 +68,7 @@ func (f *Folder) NewFile(name string) (*File, error) {
 		return nil, os.ErrInvalid
 	}
 
-	if strings.Index(name, pathSeparator) > -1 {
+	if strings.Contains(name, pathSeparator) {
 		return nil, os.ErrInvalid
 	}
 
@@ -241,10 +241,5 @@ func (f *Folder) exists(name string) bool {
 		return true
 	}
 
-	folder := f.Folder(name)
-	if folder != nil {
-		return true
-	}
-
-	return false
+	return f.Folder(name) != nil
 }

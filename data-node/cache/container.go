@@ -63,13 +63,10 @@ func NewContainer(limit uint64, lifetime time.Duration, logger *zap.Logger) Cont
 func (c *container) start() {
 	// Purge Timer
 	go func() {
-		for {
-			select {
-			case <-time.After(c.lifetime):
-				c.logger.Info("Purging Cache...")
-				c.Purge()
-				c.logger.Info("Cache Purging is completed")
-			}
+		for range time.After(c.lifetime) {
+			c.logger.Info("Purging Cache...")
+			c.Purge()
+			c.logger.Info("Cache Purging is completed")
 		}
 	}()
 }

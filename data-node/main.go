@@ -170,9 +170,9 @@ func findHardwareAddress() (string, error) {
 		}
 
 		for _, addr := range addrs {
-			switch addr.(type) {
+			switch addr := addr.(type) {
 			case *net.IPNet:
-				addrIp := addr.(*net.IPNet).IP
+				addrIp := addr.IP
 
 				if addrIp.To4() == nil || addrIp.IsLoopback() {
 					continue
