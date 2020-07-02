@@ -19,7 +19,9 @@ func NewConnection(connectionString string, transaction bool) (*Connection, erro
 	if err != nil {
 		return nil, err
 	}
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*30)
+
+	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancelFunc()
 
 	err = client.Connect(ctx)
 	if err != nil {

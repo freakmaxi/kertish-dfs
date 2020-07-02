@@ -10,7 +10,7 @@ import (
 )
 
 type Connection struct {
-	db          *mongo.Client
+	client      *mongo.Client
 	transaction bool
 }
 
@@ -19,7 +19,8 @@ func NewConnection(connectionString string, transaction bool) (*Connection, erro
 	if err != nil {
 		return nil, err
 	}
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*30)
+	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancelFunc()
 
 	err = client.Connect(ctx)
 	if err != nil {
@@ -32,7 +33,7 @@ func NewConnection(connectionString string, transaction bool) (*Connection, erro
 	}
 
 	return &Connection{
-		db:          client,
+		client:      client,
 		transaction: transaction,
 	}, nil
 }

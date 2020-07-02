@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"io"
 	"os"
 	"sync"
 	"time"
@@ -39,12 +40,71 @@ func NewMetadata(mutex mutex.LockingCenter, conn *Connection, database string) (
 	}, nil
 }
 
-func (m *metadata) context(sc context.Context) context.Context {
-	if sc != nil && m.conn.transaction {
-		return sc
+func (m *metadata) context(parentContext context.Context) (context.Context, context.CancelFunc) {
+	timeoutDuration := time.Second * 30
+	return context.WithTimeout(parentContext, timeoutDuration)
+}
+
+func (m *metadata) countDocuments() (int64, error) {
+	ctx, cancelFunc := m.context(context.Background())
+	defer cancelFunc()
+
+	return m.col.CountDocuments(ctx, bson.M{})
+}
+
+func (m *metadata) find(filter interface{}, opts ...*options.FindOptions) (*mongo.Cursor, error) {
+	ctx, cancelFunc := m.context(context.Background())
+	defer cancelFunc()
+
+	return m.col.Find(ctx, filter, opts...)
+}
+
+func (m *metadata) findOne(filter interface{}, opts ...*options.FindOneOptions) (*common.Folder, error) {
+	ctx, cancelFunc := m.context(context.Background())
+	defer cancelFunc()
+
+	var folder *common.Folder
+	if err := m.col.FindOne(ctx, filter, opts...).Decode(&folder); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, os.ErrNotExist
+		}
+		return nil, err
 	}
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*30)
-	return ctx
+	return folder, nil
+}
+
+func (m *metadata) next(cursor *mongo.Cursor) (*common.Folder, error) {
+	ctx, cancelFunc := m.context(context.Background())
+	defer cancelFunc()
+
+	if !cursor.Next(ctx) {
+		return nil, io.EOF
+	}
+
+	var folder *common.Folder
+	if err := cursor.Decode(&folder); err != nil {
+		return nil, err
+	}
+	return folder, nil
+}
+
+func (m *metadata) nextRaw(cursor *mongo.Cursor) (bson.Raw, error) {
+	ctx, cancelFunc := m.context(context.Background())
+	defer cancelFunc()
+
+	if !cursor.Next(ctx) {
+		return nil, io.EOF
+	}
+	return cursor.Current, nil
+}
+
+func (m *metadata) updateOne(parentContext context.Context, folder common.Folder) error {
+	ctx, cancelFunc := m.context(parentContext)
+	defer cancelFunc()
+
+	opts := (&options.UpdateOptions{}).SetUpsert(true)
+	_, err := m.col.UpdateOne(ctx, bson.M{"full": folder.Full}, bson.M{"$set": folder}, opts)
+	return err
 }
 
 func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error), parallelSize uint8) error {
@@ -56,7 +116,7 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 	}
 	defer close(semaphoreChan)
 
-	total, err := m.col.CountDocuments(m.context(nil), bson.M{})
+	total, err := m.countDocuments()
 	if err != nil {
 		return err
 	}
@@ -66,14 +126,19 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 	opts.SetProjection(bson.M{"_id": 1, "full": 1})
 	opts.SetNoCursorTimeout(true)
 
-	cursor, err := m.col.Find(m.context(nil), bson.M{}, opts)
+	cursor, err := m.find(bson.M{}, opts)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return os.ErrNotExist
 		}
 		return err
 	}
-	defer func() { _ = cursor.Close(m.context(nil)) }()
+	defer func() {
+		ctx, cancelFunc := m.context(context.Background())
+		defer cancelFunc()
+
+		_ = cursor.Close(ctx)
+	}()
 
 	handlerFunc := func(wg *sync.WaitGroup, id primitive.ObjectID, folderPath string, errorChan chan error) {
 		defer wg.Done()
@@ -82,9 +147,9 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 		m.mutex.Lock(folderPath)
 		defer m.mutex.Unlock(folderPath)
 
-		var folder *common.Folder
-		if err := m.col.FindOne(m.context(nil), bson.M{"_id": id}).Decode(&folder); err != nil {
-			if err == mongo.ErrNoDocuments {
+		folder, err := m.findOne(bson.M{"_id": id})
+		if err != nil {
+			if err == os.ErrNotExist {
 				return
 			}
 			errorChan <- err
@@ -109,9 +174,17 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 	wg := &sync.WaitGroup{}
 	errorChan := make(chan error, parallelSize)
 
-	for cursor.Next(m.context(nil)) {
-		id := cursor.Current.Lookup("_id").ObjectID()
-		folderPath := cursor.Current.Lookup("full").StringValue()
+	for {
+		raw, err := m.nextRaw(cursor)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+
+		id := raw.Lookup("_id").ObjectID()
+		folderPath := raw.Lookup("full").StringValue()
 
 		wg.Add(1)
 		go handlerFunc(wg, id, folderPath, errorChan)
@@ -133,14 +206,8 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 	wg.Add(1)
 	go func(wg *sync.WaitGroup) {
 		defer wg.Done()
-		for {
-			select {
-			case err, more := <-errorChan:
-				if !more {
-					return
-				}
-				bulkError.Add(err)
-			}
+		for err = range errorChan {
+			bulkError.Add(err)
 		}
 	}(wg)
 	wg.Wait()
@@ -165,19 +232,27 @@ func (m *metadata) LockTree(folderHandler func(folders []*common.Folder) ([]*com
 
 	filter := bson.M{"full": bson.M{"$regex": primitive.Regex{Pattern: "^/.*"}}}
 
-	cursor, err := m.col.Find(m.context(nil), filter, opts)
+	cursor, err := m.find(filter, opts)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return os.ErrNotExist
 		}
 		return err
 	}
-	defer func() { _ = cursor.Close(m.context(nil)) }()
+	defer func() {
+		ctx, cancelFunc := m.context(context.Background())
+		defer cancelFunc()
+
+		_ = cursor.Close(ctx)
+	}()
 
 	folders := make([]*common.Folder, 0)
-	for cursor.Next(m.context(nil)) {
-		var folder *common.Folder
-		if err := cursor.Decode(&folder); err != nil {
+	for {
+		folder, err := m.next(cursor)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
 			return err
 		}
 		folders = append(folders, folder)
@@ -201,26 +276,34 @@ func (m *metadata) save(folders []*common.Folder, upsert bool) error {
 		return err
 	}
 
-	if err = mongo.WithSession(m.context(nil), session, func(sc mongo.SessionContext) error {
+	ctxS1, cancelS1Func := m.context(context.Background())
+	defer cancelS1Func()
+
+	if err = mongo.WithSession(ctxS1, session, func(sc mongo.SessionContext) error {
 		if err = sc.StartTransaction(); err != nil {
 			return err
 		}
 
-		for _, folder := range folders {
-			filter := bson.M{"full": folder.Full}
+		var parentContext context.Context = sc
+		if !m.conn.transaction {
+			parentContext = context.Background()
+		}
 
-			opts := (&options.UpdateOptions{}).SetUpsert(upsert)
-			if _, err := m.col.UpdateOne(m.context(sc), filter, bson.M{"$set": folder}, opts); err != nil {
+		for _, folder := range folders {
+			if err := m.updateOne(parentContext, *folder); err != nil {
 				return err
 			}
 		}
 
-		return sc.CommitTransaction(m.context(sc))
+		return sc.CommitTransaction(parentContext)
 	}); err != nil {
 		return err
 	}
 
-	session.EndSession(m.context(nil))
+	ctxS2, cancelS2Func := m.context(context.Background())
+	defer cancelS2Func()
+
+	session.EndSession(ctxS2)
 
 	return nil
 }

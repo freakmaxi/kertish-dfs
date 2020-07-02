@@ -3,6 +3,7 @@ package data
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -36,7 +37,7 @@ type metadata struct {
 }
 
 func NewMetadata(mutex mutex.LockingCenter, conn *Connection, database string) (Metadata, error) {
-	dfsCol := conn.db.Database(database).Collection(metadataCollection)
+	dfsCol := conn.client.Database(database).Collection(metadataCollection)
 
 	m := &metadata{
 		mutex: mutex,
@@ -49,38 +50,93 @@ func NewMetadata(mutex mutex.LockingCenter, conn *Connection, database string) (
 	return m, nil
 }
 
-func (m *metadata) context(sc context.Context) context.Context {
-	if sc != nil && m.conn.transaction {
-		return sc
-	}
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*30)
-	return ctx
+func (m *metadata) context(parentContext context.Context) (context.Context, context.CancelFunc) {
+	timeoutDuration := time.Second * 30
+	return context.WithTimeout(parentContext, timeoutDuration)
 }
 
 func (m *metadata) setupIndices() error {
 	model := mongo.IndexModel{
 		Keys: bson.M{"full": 1},
 	}
-	_, err := m.col.Indexes().CreateOne(m.context(nil), model, nil)
+
+	ctx, cancelFunc := m.context(context.Background())
+	defer cancelFunc()
+
+	_, err := m.col.Indexes().CreateOne(ctx, model)
+	return err
+}
+
+func (m *metadata) find(filter interface{}, opts ...*options.FindOptions) (*mongo.Cursor, error) {
+	ctx, cancelFunc := m.context(context.Background())
+	defer cancelFunc()
+
+	return m.col.Find(ctx, filter, opts...)
+}
+
+func (m *metadata) findOne(parentContext context.Context, filter interface{}, opts ...*options.FindOneOptions) (*common.Folder, error) {
+	ctx, cancelFunc := m.context(parentContext)
+	defer cancelFunc()
+
+	var folder *common.Folder
+	if err := m.col.FindOne(ctx, filter, opts...).Decode(&folder); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, os.ErrNotExist
+		}
+		return nil, err
+	}
+	return folder, nil
+}
+
+func (m *metadata) next(cursor *mongo.Cursor) (*common.Folder, error) {
+	ctx, cancelFunc := m.context(context.Background())
+	defer cancelFunc()
+
+	if !cursor.Next(ctx) {
+		return nil, io.EOF
+	}
+
+	var folder *common.Folder
+	if err := cursor.Decode(&folder); err != nil {
+		return nil, err
+	}
+	return folder, nil
+}
+
+func (m *metadata) updateOne(parentContext context.Context, folderPath string, folder common.Folder) error {
+	ctx, cancelFunc := m.context(parentContext)
+	defer cancelFunc()
+
+	opts := (&options.UpdateOptions{}).SetUpsert(true)
+	_, err := m.col.UpdateOne(ctx, bson.M{"full": folderPath}, bson.M{"$set": folder}, opts)
 	return err
 }
 
 func (m *metadata) Get(folderPaths []string) ([]*common.Folder, error) {
 	folderPaths = m.cleanDuplicates(folderPaths)
 
-	folders := make([]*common.Folder, 0)
-	for _, folderPath := range folderPaths {
+	findOneFunc := func(folderPath string) (*common.Folder, error) {
+		ctx, cancelFunc := m.context(context.Background())
+		defer cancelFunc()
+
 		var folder *common.Folder
-		if err := m.col.FindOne(m.context(nil), bson.M{"full": folderPath}).Decode(&folder); err != nil {
+		if err := m.col.FindOne(ctx, bson.M{"full": folderPath}).Decode(&folder); err != nil {
 			if err == mongo.ErrNoDocuments {
 				return nil, os.ErrNotExist
 			}
 			return nil, err
 		}
-
-		folders = append(folders, folder)
+		return folder, nil
 	}
 
+	folders := make([]*common.Folder, 0)
+	for _, folderPath := range folderPaths {
+		folder, err := findOneFunc(folderPath)
+		if err != nil {
+			return nil, err
+		}
+		folders = append(folders, folder)
+	}
 	return folders, nil
 }
 
@@ -100,24 +156,31 @@ func (m *metadata) Tree(folderPath string, includeItself bool, reverseSort bool)
 		opts.SetSort(bson.M{"full": -1})
 	}
 
-	cursor, err := m.col.Find(m.context(nil), filter, opts)
+	cursor, err := m.find(filter, opts)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, os.ErrNotExist
 		}
 		return nil, err
 	}
-	defer func() { _ = cursor.Close(m.context(nil)) }()
+	defer func() {
+		ctx, cancelFunc := m.context(context.Background())
+		defer cancelFunc()
+
+		_ = cursor.Close(ctx)
+	}()
 
 	folders := make([]*common.Folder, 0)
-	for cursor.Next(m.context(nil)) {
-		var folder *common.Folder
-		if err := cursor.Decode(&folder); err != nil {
+	for {
+		folder, err := m.next(cursor)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
 			return nil, err
 		}
 		folders = append(folders, folder)
 	}
-
 	return folders, nil
 }
 
@@ -137,8 +200,8 @@ func (m *metadata) SaveBlock(folderPaths []string, saveHandler func(folders map[
 
 	folders := make(map[string]*common.Folder)
 	for _, folderPath := range folderPaths {
-		var folder *common.Folder
-		if err := m.col.FindOne(m.context(nil), bson.M{"full": folderPath}).Decode(&folder); err != nil && err != mongo.ErrNoDocuments {
+		folder, err := m.findOne(context.Background(), folderPath)
+		if err != nil {
 			return err
 		}
 		folders[folderPath] = folder
@@ -153,7 +216,7 @@ func (m *metadata) SaveBlock(folderPaths []string, saveHandler func(folders map[
 	return err
 }
 
-func (m *metadata) SaveChain(folderPath string, saveHandler func(folder *common.Folder) (bool, error)) (resultErr error) {
+func (m *metadata) SaveChain(folderPath string, saveHandler func(folder *common.Folder) (bool, error)) error {
 	folderTree := common.PathTree(folderPath)
 
 	m.mutex.Wait(metadataLockKey)
@@ -174,31 +237,48 @@ func (m *metadata) SaveChain(folderPath string, saveHandler func(folder *common.
 		}
 	}()
 
-	var folder *common.Folder
+	insertOneFunc := func(parentContext context.Context, folder common.Folder) error {
+		ctx, cancelFunc := m.context(parentContext)
+		defer cancelFunc()
 
-	session, err := m.conn.db.StartSession()
+		_, err := m.col.InsertOne(ctx, folder)
+		return err
+	}
+
+	session, err := m.conn.client.StartSession()
 	if err != nil {
 		return err
 	}
 
-	if err = mongo.WithSession(m.context(nil), session, func(sc mongo.SessionContext) error {
+	var folder *common.Folder
+
+	ctxS1, cancelS1Func := m.context(context.Background())
+	defer cancelS1Func()
+
+	if err = mongo.WithSession(ctxS1, session, func(sc mongo.SessionContext) error {
 		if err = sc.StartTransaction(); err != nil {
 			return err
+		}
+
+		var parentContext context.Context = sc
+		if !m.conn.transaction {
+			parentContext = context.Background()
 		}
 
 		var parentFolder *common.Folder
 		for len(folderTree) > 0 {
 			folderPath := folderTree[0]
 
-			if err := m.col.FindOne(m.context(sc), bson.M{"full": folderPath}).Decode(&folder); err != nil {
-				if err != mongo.ErrNoDocuments {
+			folder, err = m.findOne(parentContext, folderPath)
+			if err != nil {
+				if err != os.ErrNotExist {
 					return err
 				}
 
 				if parentFolder == nil {
 					parentFolder = common.NewFolder("/")
 
-					if _, err := m.col.InsertOne(m.context(sc), parentFolder); err != nil {
+					if err := insertOneFunc(parentContext, *parentFolder); err != nil {
 						return err
 					}
 					folderTree = folderTree[1:]
@@ -216,11 +296,10 @@ func (m *metadata) SaveChain(folderPath string, saveHandler func(folder *common.
 					return err
 				}
 
-				opts := (&options.UpdateOptions{}).SetUpsert(true)
-				if _, err := m.col.UpdateOne(m.context(sc), bson.M{"full": parentFolder.Full}, bson.M{"$set": parentFolder}, opts); err != nil {
+				if err := m.updateOne(parentContext, parentFolder.Full, *parentFolder); err != nil {
 					return err
 				}
-				if _, err := m.col.InsertOne(m.context(sc), folder); err != nil {
+				if err := insertOneFunc(parentContext, *folder); err != nil {
 					return err
 				}
 			}
@@ -236,93 +315,86 @@ func (m *metadata) SaveChain(folderPath string, saveHandler func(folder *common.
 			droppedMutex[parentFolder.Full] = true
 		}
 
-		return sc.CommitTransaction(m.context(sc))
+		return sc.CommitTransaction(parentContext)
 	}); err != nil {
 		return err
 	}
 
-	session.EndSession(m.context(nil))
+	ctxS2, cancelS2Func := m.context(context.Background())
+	defer cancelS2Func()
+
+	session.EndSession(ctxS2)
 
 	if folder == nil {
-		return
+		return nil
 	}
 
-	var save bool
-	save, resultErr = saveHandler(folder)
+	save, err := saveHandler(folder)
 	if !save {
-		return
-	}
-
-	opts := (&options.UpdateOptions{}).SetUpsert(true)
-	if _, err := m.col.UpdateOne(m.context(nil), bson.M{"full": folder.Full}, bson.M{"$set": folder}, opts); err != nil {
 		return err
 	}
 
-	return
-}
-
-func (m *metadata) matchTree(folderTree []string) ([]string, error) {
-	folderTree = m.cleanDuplicates(folderTree)
-
-	m.mutex.Wait(metadataLockKey)
-
-	for i := range folderTree {
-		m.mutex.Lock(folderTree[i])
-	}
-	defer func() {
-		for _, folderPath := range folderTree {
-			m.mutex.Unlock(folderPath)
-		}
-	}()
-
-	matches := make([]string, 0)
-	for _, folderPath := range folderTree {
-		if err := m.col.FindOne(m.context(nil), bson.M{"full": folderPath}).Err(); err != nil {
-			if err == mongo.ErrNoDocuments {
-				break
-			}
-			return nil, err
-		}
-
-		matches = append(matches, folderPath)
+	if err := m.updateOne(context.Background(), folder.Full, *folder); err != nil {
+		return err
 	}
 
-	return matches, nil
+	return err
 }
 
 func (m *metadata) overwrite(folders map[string]*common.Folder) error {
-	session, err := m.conn.db.StartSession()
+	deleteOneFunc := func(parentContext context.Context, folderPath string) error {
+		ctx, cancelFunc := m.context(parentContext)
+		defer cancelFunc()
+
+		if _, err := m.col.DeleteOne(ctx, bson.M{"full": folderPath}); err != nil {
+			if err == mongo.ErrNoDocuments {
+				return os.ErrNotExist
+			}
+			return err
+		}
+		return nil
+	}
+
+	session, err := m.conn.client.StartSession()
 	if err != nil {
 		return err
 	}
 
-	if err = mongo.WithSession(m.context(nil), session, func(sc mongo.SessionContext) error {
+	ctxS1, cancelS1Func := m.context(context.Background())
+	defer cancelS1Func()
+
+	if err = mongo.WithSession(ctxS1, session, func(sc mongo.SessionContext) error {
 		if err = sc.StartTransaction(); err != nil {
 			return err
 		}
 
-		for folderPath, folder := range folders {
-			filter := bson.M{"full": folderPath}
+		var parentContext context.Context = sc
+		if !m.conn.transaction {
+			parentContext = context.Background()
+		}
 
+		for folderPath, folder := range folders {
 			if folder == nil {
-				if _, err := m.col.DeleteOne(m.context(sc), filter); err != nil && err != mongo.ErrNoDocuments {
+				if err := deleteOneFunc(parentContext, folderPath); err != nil && err != os.ErrNotExist {
 					return err
 				}
 				continue
 			}
 
-			opts := (&options.UpdateOptions{}).SetUpsert(true)
-			if _, err := m.col.UpdateOne(m.context(sc), filter, bson.M{"$set": folder}, opts); err != nil {
+			if err := m.updateOne(parentContext, folderPath, *folder); err != nil {
 				return err
 			}
 		}
 
-		return sc.CommitTransaction(m.context(sc))
+		return sc.CommitTransaction(parentContext)
 	}); err != nil {
 		return err
 	}
 
-	session.EndSession(m.context(nil))
+	ctxS2, cancelS2Func := m.context(context.Background())
+	defer cancelS2Func()
+
+	session.EndSession(ctxS2)
 
 	return nil
 }
@@ -344,21 +416,6 @@ func (m *metadata) cleanDuplicates(folderPaths []string) []string {
 	}
 
 	return cleanedUps
-}
-
-func (m *metadata) filterFolderTree(matches []string, folderTree []string) []string {
-	if len(matches) == 0 {
-		return folderTree
-	}
-
-	for len(folderTree) > 0 {
-		if strings.Compare(matches[len(matches)-1], folderTree[0]) == 0 {
-			break
-		}
-		folderTree = folderTree[1:]
-	}
-
-	return folderTree
 }
 
 var _ Metadata = &metadata{}
