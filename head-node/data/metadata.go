@@ -31,23 +31,31 @@ const metadataCollection = "metadata"
 const metadataLockKey = "metadata"
 
 type metadata struct {
-	mutex mutex.LockingCenter
-	conn  *Connection
-	col   *mongo.Collection
+	mutex           mutex.LockingCenter
+	mutexSourceAddr string
+
+	conn *Connection
+	col  *mongo.Collection
 }
 
-func NewMetadata(mutex mutex.LockingCenter, conn *Connection, database string) (Metadata, error) {
+func NewMetadata(mutex mutex.LockingCenter, mutexSourceAddr string, conn *Connection, database string) (Metadata, error) {
 	dfsCol := conn.client.Database(database).Collection(metadataCollection)
 
 	m := &metadata{
-		mutex: mutex,
-		conn:  conn,
-		col:   dfsCol,
+		mutex:           mutex,
+		mutexSourceAddr: mutexSourceAddr,
+		conn:            conn,
+		col:             dfsCol,
 	}
 	if err := m.setupIndices(); err != nil {
 		return nil, err
 	}
 	return m, nil
+}
+
+func (m *metadata) wait(key string) {
+	m.mutex.Lock(key, &m.mutexSourceAddr)
+	defer m.mutex.Unlock(key)
 }
 
 func (m *metadata) context(parentContext context.Context) (context.Context, context.CancelFunc) {
@@ -187,10 +195,10 @@ func (m *metadata) Tree(folderPath string, includeItself bool, reverseSort bool)
 func (m *metadata) SaveBlock(folderPaths []string, saveHandler func(folders map[string]*common.Folder) (bool, error)) error {
 	folderPaths = m.cleanDuplicates(folderPaths)
 
-	m.mutex.Wait(metadataLockKey)
+	m.wait(metadataLockKey)
 
 	for i := range folderPaths {
-		m.mutex.Lock(folderPaths[i])
+		m.mutex.Lock(folderPaths[i], &m.mutexSourceAddr)
 	}
 	defer func() {
 		for _, folderPath := range folderPaths {
@@ -219,14 +227,14 @@ func (m *metadata) SaveBlock(folderPaths []string, saveHandler func(folders map[
 func (m *metadata) SaveChain(folderPath string, saveHandler func(folder *common.Folder) (bool, error)) error {
 	folderTree := common.PathTree(folderPath)
 
-	m.mutex.Wait(metadataLockKey)
+	m.wait(metadataLockKey)
 
 	folderTreeBackup := make([]string, len(folderTree))
 	copy(folderTreeBackup, folderTree)
 
 	droppedMutex := make(map[string]bool)
 	for i := range folderTreeBackup {
-		m.mutex.Lock(folderTreeBackup[i])
+		m.mutex.Lock(folderTreeBackup[i], &m.mutexSourceAddr)
 	}
 	defer func() {
 		for _, folderPath := range folderTreeBackup {

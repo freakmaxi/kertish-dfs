@@ -38,6 +38,11 @@ func main() {
 	}
 	logger.Sugar().Infof("BIND_ADDRESS: %s", bindAddr)
 
+	mutexSourceAddr := bindAddr
+	if strings.Index(mutexSourceAddr, ":") == 0 {
+		mutexSourceAddr = fmt.Sprintf("127.0.0.1%s", mutexSourceAddr)
+	}
+
 	managerAddress := os.Getenv("MANAGER_ADDRESS")
 	if len(managerAddress) == 0 {
 		logger.Error("MANAGER_ADDRESS have to be specified")
@@ -73,6 +78,7 @@ func main() {
 		logger.Error("Mutex Setup is failed", zap.Error(err))
 		os.Exit(14)
 	}
+	m.ResetBySource(&mutexSourceAddr)
 
 	conn, err := data.NewConnection(mongoConn, len(mongoTransaction) > 0)
 	if err != nil {
@@ -80,7 +86,7 @@ func main() {
 		os.Exit(15)
 	}
 
-	metadata, err := data.NewMetadata(m, conn, mongoDb)
+	metadata, err := data.NewMetadata(m, mutexSourceAddr, conn, mongoDb)
 	if err != nil {
 		logger.Error("Metadata Manager is failed", zap.Error(err))
 		os.Exit(18)

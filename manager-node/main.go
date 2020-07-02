@@ -40,6 +40,11 @@ func main() {
 	}
 	logger.Sugar().Infof("BIND_ADDRESS: %s", bindAddr)
 
+	mutexSourceAddr := bindAddr
+	if strings.Index(mutexSourceAddr, ":") == 0 {
+		mutexSourceAddr = fmt.Sprintf("127.0.0.1%s", mutexSourceAddr)
+	}
+
 	healthCheckIntervalString := os.Getenv("HEALTH_CHECK_INTERVAL")
 	if len(healthCheckIntervalString) == 0 {
 		healthCheckIntervalString = "10"
@@ -94,6 +99,7 @@ func main() {
 		logger.Error("Mutex Setup is failed", zap.Error(err))
 		os.Exit(20)
 	}
+	m.ResetBySource(&mutexSourceAddr)
 
 	conn, err := data.NewConnection(mongoConn, len(mongoTransaction) > 0)
 	if err != nil {
@@ -101,7 +107,7 @@ func main() {
 		os.Exit(21)
 	}
 
-	dataClusters, err := data.NewClusters(conn, mongoDb, m)
+	dataClusters, err := data.NewClusters(conn, mongoDb, m, mutexSourceAddr)
 	if err != nil {
 		logger.Error("Cluster Data Manager is failed", zap.Error(err))
 		os.Exit(22)
@@ -117,10 +123,10 @@ func main() {
 		logger.Error("Cache Client Setup is failed", zap.Error(err))
 		os.Exit(23)
 	}
-	index := data.NewIndex(m, cacheClient, strings.ReplaceAll(mongoDb, " ", "_"))
+	index := data.NewIndex(m, mutexSourceAddr, cacheClient, strings.ReplaceAll(mongoDb, " ", "_"))
 	operation := data.NewOperation(cacheClient, strings.ReplaceAll(mongoDb, " ", "_"))
 
-	metadata, err := data.NewMetadata(m, conn, mongoDb)
+	metadata, err := data.NewMetadata(m, mutexSourceAddr, conn, mongoDb)
 	if err != nil {
 		logger.Error("Metadata Manager is failed", zap.Error(err))
 		os.Exit(24)
