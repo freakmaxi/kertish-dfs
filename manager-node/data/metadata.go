@@ -25,27 +25,19 @@ const metadataCollection = "metadata"
 const metadataLockKey = "metadata"
 
 type metadata struct {
-	mutex           mutex.LockingCenter
-	mutexSourceAddr string
-
-	conn *Connection
-	col  *mongo.Collection
+	mutex mutex.LockingCenter
+	conn  *Connection
+	col   *mongo.Collection
 }
 
-func NewMetadata(mutex mutex.LockingCenter, mutexSourceAddr string, conn *Connection, database string) (Metadata, error) {
+func NewMetadata(mutex mutex.LockingCenter, conn *Connection, database string) (Metadata, error) {
 	dfsCol := conn.client.Database(database).Collection(metadataCollection)
 
 	return &metadata{
-		mutex:           mutex,
-		mutexSourceAddr: mutexSourceAddr,
-		conn:            conn,
-		col:             dfsCol,
+		mutex: mutex,
+		conn:  conn,
+		col:   dfsCol,
 	}, nil
-}
-
-func (m *metadata) wait(key string) {
-	m.mutex.Lock(key, &m.mutexSourceAddr)
-	defer m.mutex.Unlock(key)
 }
 
 func (m *metadata) context(parentContext context.Context) (context.Context, context.CancelFunc) {
@@ -116,7 +108,7 @@ func (m *metadata) updateOne(parentContext context.Context, folder common.Folder
 }
 
 func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error), parallelSize uint8) error {
-	m.wait(metadataLockKey)
+	m.mutex.Wait(metadataLockKey)
 
 	semaphoreChan := make(chan bool, parallelSize)
 	for i := 0; i < cap(semaphoreChan); i++ {
@@ -152,7 +144,7 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 		defer wg.Done()
 		defer func() { semaphoreChan <- true }()
 
-		m.mutex.Lock(folderPath, &m.mutexSourceAddr)
+		m.mutex.Lock(folderPath)
 		defer m.mutex.Unlock(folderPath)
 
 		folder, err := m.findOne(bson.M{"_id": id})
@@ -232,7 +224,7 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 }
 
 func (m *metadata) LockTree(folderHandler func(folders []*common.Folder) ([]*common.Folder, error)) error {
-	m.mutex.Lock(metadataLockKey, &m.mutexSourceAddr)
+	m.mutex.Lock(metadataLockKey)
 	defer m.mutex.Unlock(metadataLockKey)
 
 	opts := options.Find()

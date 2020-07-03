@@ -34,10 +34,9 @@ type Index interface {
 }
 
 type index struct {
-	mutex           mutex.LockingCenter
-	mutexSourceAddr string
-	client          CacheClient
-	keyPrefix       string
+	mutex     mutex.LockingCenter
+	client    CacheClient
+	keyPrefix string
 }
 
 type keySuffix string
@@ -49,18 +48,12 @@ var (
 	ksCluster    keySuffix = "cluster"
 )
 
-func NewIndex(mutex mutex.LockingCenter, mutexSourceAddr string, client CacheClient, keyPrefix string) Index {
+func NewIndex(mutex mutex.LockingCenter, client CacheClient, keyPrefix string) Index {
 	return &index{
-		mutex:           mutex,
-		mutexSourceAddr: mutexSourceAddr,
-		client:          client,
-		keyPrefix:       keyPrefix,
+		mutex:     mutex,
+		client:    client,
+		keyPrefix: keyPrefix,
 	}
-}
-
-func (i *index) wait(key string) {
-	i.mutex.Lock(key, &i.mutexSourceAddr)
-	defer i.mutex.Unlock(key)
 }
 
 func (i *index) key(name string, suffix keySuffix) string {
@@ -177,7 +170,7 @@ func (i *index) DropBulk(clusterId string, sha512HexList []string) error {
 
 	key := i.key("bulk", ksEmpty)
 
-	i.mutex.Lock(key, &i.mutexSourceAddr)
+	i.mutex.Lock(key)
 	defer i.mutex.Unlock(key)
 
 	count := 0
@@ -201,11 +194,11 @@ func (i *index) DropBulk(clusterId string, sha512HexList []string) error {
 }
 
 func (i *index) Replace(item common.CacheFileItem) error {
-	i.wait(i.key("bulk", ksEmpty))
+	i.mutex.Wait(i.key("bulk", ksEmpty))
 
 	key := i.key(item.FileItem.Sha512Hex, ksEmpty)
 
-	i.mutex.Lock(key, &i.mutexSourceAddr)
+	i.mutex.Lock(key)
 	defer i.mutex.Unlock(key)
 
 	commandSlotsMap := make(map[uint16][]radix.CmdAction)
@@ -223,7 +216,7 @@ func (i *index) ReplaceBulk(items common.CacheFileItemMap) error {
 
 	key := i.key("bulk", ksEmpty)
 
-	i.mutex.Lock(key, &i.mutexSourceAddr)
+	i.mutex.Lock(key)
 	defer i.mutex.Unlock(key)
 
 	count := 0
@@ -247,11 +240,11 @@ func (i *index) ReplaceBulk(items common.CacheFileItemMap) error {
 }
 
 func (i *index) UpdateChunkNode(sha512Hex string, nodeId string, exists bool) error {
-	i.wait(i.key("bulk", ksEmpty))
+	i.mutex.Wait(i.key("bulk", ksEmpty))
 
 	key := i.key(sha512Hex, ksEmpty)
 
-	i.mutex.Lock(key, &i.mutexSourceAddr)
+	i.mutex.Lock(key)
 	defer i.mutex.Unlock(key)
 
 	return i.client.Do(
@@ -270,7 +263,7 @@ func (i *index) UpdateChunkNodeBulk(sha512HexList []string, nodeId string, exist
 
 	key := i.key("bulk", ksEmpty)
 
-	i.mutex.Lock(key, &i.mutexSourceAddr)
+	i.mutex.Lock(key)
 	defer i.mutex.Unlock(key)
 
 	count := 0
@@ -335,11 +328,11 @@ func (i *index) Get(sha512Hex string) (*common.CacheFileItem, error) {
 }
 
 func (i *index) Drop(clusterId string, sha512Hex string) error {
-	i.wait(i.key("bulk", ksEmpty))
+	i.mutex.Wait(i.key("bulk", ksEmpty))
 
 	key := i.key(sha512Hex, ksEmpty)
 
-	i.mutex.Lock(key, &i.mutexSourceAddr)
+	i.mutex.Lock(key)
 	defer i.mutex.Unlock(key)
 
 	commandSlotsMap := make(map[uint16][]radix.CmdAction)
@@ -367,7 +360,7 @@ func (i *index) UpdateUsageInMap(clusterId string, fileItemList common.SyncFileI
 
 	key := i.key("bulk", ksEmpty)
 
-	i.mutex.Lock(key, &i.mutexSourceAddr)
+	i.mutex.Lock(key)
 	defer i.mutex.Unlock(key)
 
 	clusterKey := i.key(clusterId, ksCluster)

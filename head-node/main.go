@@ -73,12 +73,12 @@ func main() {
 	}
 	logger.Sugar().Infof("LOCKING_CENTER: %s", mutexConn)
 
-	m, err := mutex.NewLockingCenter(mutexConn)
+	m, err := mutex.NewLockingCenterWithSourceAddr(mutexConn, &mutexSourceAddr)
 	if err != nil {
 		logger.Error("Mutex Setup is failed", zap.Error(err))
 		os.Exit(14)
 	}
-	m.ResetBySource(&mutexSourceAddr)
+	m.ResetBySource(nil)
 
 	conn, err := data.NewConnection(mongoConn, len(mongoTransaction) > 0)
 	if err != nil {
@@ -86,7 +86,7 @@ func main() {
 		os.Exit(15)
 	}
 
-	metadata, err := data.NewMetadata(m, mutexSourceAddr, conn, mongoDb)
+	metadata, err := data.NewMetadata(m, conn, mongoDb)
 	if err != nil {
 		logger.Error("Metadata Manager is failed", zap.Error(err))
 		os.Exit(18)

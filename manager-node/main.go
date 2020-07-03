@@ -94,12 +94,12 @@ func main() {
 	}
 	logger.Sugar().Infof("LOCKING_CENTER: %s", mutexConn)
 
-	m, err := mutex.NewLockingCenter(mutexConn)
+	m, err := mutex.NewLockingCenterWithSourceAddr(mutexConn, &mutexSourceAddr)
 	if err != nil {
 		logger.Error("Mutex Setup is failed", zap.Error(err))
 		os.Exit(20)
 	}
-	m.ResetBySource(&mutexSourceAddr)
+	m.ResetBySource(nil)
 
 	conn, err := data.NewConnection(mongoConn, len(mongoTransaction) > 0)
 	if err != nil {
@@ -107,7 +107,7 @@ func main() {
 		os.Exit(21)
 	}
 
-	dataClusters, err := data.NewClusters(conn, mongoDb, m, mutexSourceAddr)
+	dataClusters, err := data.NewClusters(conn, mongoDb, m)
 	if err != nil {
 		logger.Error("Cluster Data Manager is failed", zap.Error(err))
 		os.Exit(22)
@@ -123,10 +123,10 @@ func main() {
 		logger.Error("Cache Client Setup is failed", zap.Error(err))
 		os.Exit(23)
 	}
-	index := data.NewIndex(m, mutexSourceAddr, cacheClient, strings.ReplaceAll(mongoDb, " ", "_"))
+	index := data.NewIndex(m, cacheClient, strings.ReplaceAll(mongoDb, " ", "_"))
 	operation := data.NewOperation(cacheClient, strings.ReplaceAll(mongoDb, " ", "_"))
 
-	metadata, err := data.NewMetadata(m, mutexSourceAddr, conn, mongoDb)
+	metadata, err := data.NewMetadata(m, conn, mongoDb)
 	if err != nil {
 		logger.Error("Metadata Manager is failed", zap.Error(err))
 		os.Exit(24)

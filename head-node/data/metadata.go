@@ -31,31 +31,23 @@ const metadataCollection = "metadata"
 const metadataLockKey = "metadata"
 
 type metadata struct {
-	mutex           mutex.LockingCenter
-	mutexSourceAddr string
-
-	conn *Connection
-	col  *mongo.Collection
+	mutex mutex.LockingCenter
+	conn  *Connection
+	col   *mongo.Collection
 }
 
-func NewMetadata(mutex mutex.LockingCenter, mutexSourceAddr string, conn *Connection, database string) (Metadata, error) {
+func NewMetadata(mutex mutex.LockingCenter, conn *Connection, database string) (Metadata, error) {
 	dfsCol := conn.client.Database(database).Collection(metadataCollection)
 
 	m := &metadata{
-		mutex:           mutex,
-		mutexSourceAddr: mutexSourceAddr,
-		conn:            conn,
-		col:             dfsCol,
+		mutex: mutex,
+		conn:  conn,
+		col:   dfsCol,
 	}
 	if err := m.setupIndices(); err != nil {
 		return nil, err
 	}
 	return m, nil
-}
-
-func (m *metadata) wait(key string) {
-	m.mutex.Lock(key, &m.mutexSourceAddr)
-	defer m.mutex.Unlock(key)
 }
 
 func (m *metadata) context(parentContext context.Context) (context.Context, context.CancelFunc) {
@@ -82,12 +74,12 @@ func (m *metadata) find(filter interface{}, opts ...*options.FindOptions) (*mong
 	return m.col.Find(ctx, filter, opts...)
 }
 
-func (m *metadata) findOne(parentContext context.Context, filter interface{}, opts ...*options.FindOneOptions) (*common.Folder, error) {
+func (m *metadata) findOne(parentContext context.Context, folderPath string, opts ...*options.FindOneOptions) (*common.Folder, error) {
 	ctx, cancelFunc := m.context(parentContext)
 	defer cancelFunc()
 
 	var folder *common.Folder
-	if err := m.col.FindOne(ctx, filter, opts...).Decode(&folder); err != nil {
+	if err := m.col.FindOne(ctx, bson.M{"full": folderPath}, opts...).Decode(&folder); err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, os.ErrNotExist
 		}
@@ -123,23 +115,9 @@ func (m *metadata) updateOne(parentContext context.Context, folderPath string, f
 func (m *metadata) Get(folderPaths []string) ([]*common.Folder, error) {
 	folderPaths = m.cleanDuplicates(folderPaths)
 
-	findOneFunc := func(folderPath string) (*common.Folder, error) {
-		ctx, cancelFunc := m.context(context.Background())
-		defer cancelFunc()
-
-		var folder *common.Folder
-		if err := m.col.FindOne(ctx, bson.M{"full": folderPath}).Decode(&folder); err != nil {
-			if err == mongo.ErrNoDocuments {
-				return nil, os.ErrNotExist
-			}
-			return nil, err
-		}
-		return folder, nil
-	}
-
 	folders := make([]*common.Folder, 0)
 	for _, folderPath := range folderPaths {
-		folder, err := findOneFunc(folderPath)
+		folder, err := m.findOne(context.Background(), folderPath)
 		if err != nil {
 			return nil, err
 		}
@@ -195,10 +173,10 @@ func (m *metadata) Tree(folderPath string, includeItself bool, reverseSort bool)
 func (m *metadata) SaveBlock(folderPaths []string, saveHandler func(folders map[string]*common.Folder) (bool, error)) error {
 	folderPaths = m.cleanDuplicates(folderPaths)
 
-	m.wait(metadataLockKey)
+	m.mutex.Wait(metadataLockKey)
 
 	for i := range folderPaths {
-		m.mutex.Lock(folderPaths[i], &m.mutexSourceAddr)
+		m.mutex.Lock(folderPaths[i])
 	}
 	defer func() {
 		for _, folderPath := range folderPaths {
@@ -227,14 +205,14 @@ func (m *metadata) SaveBlock(folderPaths []string, saveHandler func(folders map[
 func (m *metadata) SaveChain(folderPath string, saveHandler func(folder *common.Folder) (bool, error)) error {
 	folderTree := common.PathTree(folderPath)
 
-	m.wait(metadataLockKey)
+	m.mutex.Wait(metadataLockKey)
 
 	folderTreeBackup := make([]string, len(folderTree))
 	copy(folderTreeBackup, folderTree)
 
 	droppedMutex := make(map[string]bool)
 	for i := range folderTreeBackup {
-		m.mutex.Lock(folderTreeBackup[i], &m.mutexSourceAddr)
+		m.mutex.Lock(folderTreeBackup[i])
 	}
 	defer func() {
 		for _, folderPath := range folderTreeBackup {
