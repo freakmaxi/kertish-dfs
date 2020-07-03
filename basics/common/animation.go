@@ -53,7 +53,8 @@ func (p *animation) Start() {
 				p.output.Remove(1)
 				p.output.Printf(string(c))
 				p.output.Refresh()
-				<-time.After(time.Millisecond * 100)
+
+				time.Sleep(time.Millisecond * 100)
 			}
 			i++
 		}

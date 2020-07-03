@@ -47,7 +47,7 @@ func (c *nodeSyncWorker) process(ns *nodeSync, index int) {
 		return
 	}
 
-	<-time.After(pauseDuration)
+	time.Sleep(pauseDuration)
 
 	c.processSlotChan <- index
 	c.queueChan <- ns

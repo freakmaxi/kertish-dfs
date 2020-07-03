@@ -91,7 +91,7 @@ func (n *node) createChannelHandler() {
 			go n.createBulk(failedFileItemList, time.Second*bulkRequestRetryInterval)
 		default:
 			if len(fileItemList) == 0 {
-				<-time.After(time.Millisecond * bulkRequestInterval)
+				time.Sleep(time.Millisecond * bulkRequestInterval)
 				continue
 			}
 
@@ -103,7 +103,7 @@ func (n *node) createChannelHandler() {
 
 func (n *node) createBulk(fileItemList common.SyncFileItemList, delay time.Duration) {
 	if delay > 0 {
-		<-time.After(delay)
+		time.Sleep(delay)
 	}
 
 	if err := n.create(fileItemList); err != nil {
@@ -162,7 +162,7 @@ func (n *node) deleteChannelHandler() {
 			go n.deleteBulk(failedFileItemList, time.Second*bulkRequestRetryInterval)
 		default:
 			if len(fileItemList) == 0 {
-				<-time.After(time.Millisecond * bulkRequestInterval)
+				time.Sleep(time.Millisecond * bulkRequestInterval)
 				continue
 			}
 
@@ -174,7 +174,7 @@ func (n *node) deleteChannelHandler() {
 
 func (n *node) deleteBulk(fileItemList common.SyncFileItemList, delay time.Duration) {
 	if delay > 0 {
-		<-time.After(delay)
+		time.Sleep(delay)
 	}
 
 	if err := n.delete(fileItemList); err != nil {

@@ -63,7 +63,9 @@ func NewContainer(limit uint64, lifetime time.Duration, logger *zap.Logger) Cont
 func (c *container) start() {
 	// Purge Timer
 	go func() {
-		for range time.After(c.lifetime) {
+		for {
+			time.Sleep(c.lifetime)
+
 			c.logger.Info("Purging Cache...")
 			c.Purge()
 			c.logger.Info("Cache Purging is completed")

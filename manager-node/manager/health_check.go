@@ -110,7 +110,9 @@ func (h *healthCheck) Report() (HealthReport, error) {
 }
 
 func (h *healthCheck) maintain() {
-	for range time.After(maintainInterval) {
+	for {
+		time.Sleep(maintainInterval)
+
 		h.logger.Info("Maintaining Clusters...")
 		// Fire Forget
 		go func() {
@@ -139,7 +141,9 @@ func (h *healthCheck) maintain() {
 }
 
 func (h *healthCheck) health() {
-	for range time.After(h.interval) {
+	for {
+		time.Sleep(h.interval)
+
 		clusters, err := h.clusters.GetAll()
 		if err != nil {
 			h.logger.Error(

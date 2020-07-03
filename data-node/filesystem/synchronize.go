@@ -119,7 +119,8 @@ func (s *synchronize) processQueueItem(wg *sync.WaitGroup, b block.Manager, item
 			)
 
 			go func(qI queueItem) {
-				<-time.After(pauseDuration)
+				time.Sleep(pauseDuration)
+
 				s.queueChan <- qI
 			}(item)
 

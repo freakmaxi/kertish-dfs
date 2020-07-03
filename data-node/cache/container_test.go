@@ -78,7 +78,7 @@ func TestContainer_PurgeV2(t *testing.T) {
 		assert.Equal(t, i, container.sortedIndex[i].sortIndex)
 	}
 
-	<-time.After(time.Millisecond * 5200)
+	time.Sleep(time.Millisecond * 5200)
 
 	for i := 0; i < 4; i++ {
 		assert.Equal(t, i, container.sortedIndex[i].sortIndex)
