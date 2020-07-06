@@ -56,7 +56,7 @@ func NewLogger(service string) (*zap.Logger, bool) {
 	case "error":
 		zapLevel = zapcore.ErrorLevel
 	case "warn":
-		zapLevel = zapcore.ErrorLevel
+		zapLevel = zapcore.WarnLevel
 	default:
 	}
 
