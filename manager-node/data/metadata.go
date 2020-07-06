@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"sync"
@@ -217,7 +218,7 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 	}
 
 	if handled != total {
-		return os.ErrInvalid
+		return fmt.Errorf("total (%d) and handled (%d) document counts didn't match", total, handled)
 	}
 
 	return nil
