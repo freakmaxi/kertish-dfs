@@ -36,6 +36,8 @@ const (
 	commandUsed            = "USED"
 )
 
+const pingWaitDuration = time.Second * 10
+
 type DataNode interface {
 	Create(data []byte) (string, error)
 	Read(sha512Hex string, readHandler func(data []byte) error) error
@@ -597,7 +599,7 @@ func (d *dataNode) Ping() (latency int64) {
 	starts := time.Now().UTC()
 
 	if err := d.connect(func(conn *net.TCPConn) error {
-		if err := conn.SetDeadline(time.Now().Add(time.Second * 5)); err != nil {
+		if err := conn.SetDeadline(time.Now().Add(pingWaitDuration)); err != nil {
 			return err
 		}
 
