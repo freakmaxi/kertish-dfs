@@ -1,6 +1,7 @@
 package services
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/freakmaxi/kertish-dfs/manager-node/routing"
@@ -22,7 +23,7 @@ func NewProxy(bindAddr string, manager *routing.Manager, logger *zap.Logger) *Pr
 }
 
 func (p *Proxy) Start() {
-	p.logger.Sugar().Infof("Manager Service is running on %s", p.bindAddr)
+	p.logger.Info(fmt.Sprintf("Manager Service is running on %s", p.bindAddr))
 	if err := http.ListenAndServe(p.bindAddr, p.manager.Get()); err != nil {
 		p.logger.Error("Manager service is failed", zap.Error(err))
 	}

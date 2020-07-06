@@ -36,7 +36,7 @@ func main() {
 	if len(bindAddr) == 0 {
 		bindAddr = ":4000"
 	}
-	logger.Sugar().Infof("BIND_ADDRESS: %s", bindAddr)
+	logger.Info(fmt.Sprintf("BIND_ADDRESS: %s", bindAddr))
 
 	mutexSourceAddr := bindAddr
 	if strings.Index(mutexSourceAddr, ":") == 0 {
@@ -48,30 +48,30 @@ func main() {
 		logger.Error("MANAGER_ADDRESS have to be specified")
 		os.Exit(10)
 	}
-	logger.Sugar().Infof("MANAGER_ADDRESS: %s", managerAddress)
+	logger.Info(fmt.Sprintf("MANAGER_ADDRESS: %s", managerAddress))
 
 	mongoConn := os.Getenv("MONGO_CONN")
 	if len(mongoConn) == 0 {
 		logger.Error("MONGO_CONN have to be specified")
 		os.Exit(11)
 	}
-	logger.Sugar().Infof("MONGO_CONN: %s", mongoConn)
+	logger.Info(fmt.Sprintf("MONGO_CONN: %s", mongoConn))
 
 	mongoDb := os.Getenv("MONGO_DATABASE")
 	if len(mongoDb) == 0 {
 		mongoDb = "kertish-dfs"
 	}
-	logger.Sugar().Infof("MONGO_DATABASE: %s", mongoDb)
+	logger.Info(fmt.Sprintf("MONGO_DATABASE: %s", mongoDb))
 
 	mongoTransaction := os.Getenv("MONGO_TRANSACTION")
-	logger.Sugar().Infof("MONGO_TRANSACTION: %t", len(mongoTransaction) > 0)
+	logger.Info(fmt.Sprintf("MONGO_TRANSACTION: %t", len(mongoTransaction) > 0))
 
 	mutexConn := os.Getenv("LOCKING_CENTER")
 	if len(mutexConn) == 0 {
 		logger.Error("LOCKING_CENTER have to be specified")
 		os.Exit(13)
 	}
-	logger.Sugar().Infof("LOCKING_CENTER: %s", mutexConn)
+	logger.Info(fmt.Sprintf("LOCKING_CENTER: %s", mutexConn))
 
 	m, err := mutex.NewLockingCenterWithSourceAddr(mutexConn, &mutexSourceAddr)
 	if err != nil {

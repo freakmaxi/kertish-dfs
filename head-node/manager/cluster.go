@@ -333,10 +333,12 @@ func (c *cluster) findCluster(sha512Hex string) (string, string, error) {
 		return "", "", errors.ErrNoAvailableClusterNode
 	}
 
-	c.logger.Sugar().Errorf(
-		"cluster manager request is failed (findCluster): %d - %s",
-		res.StatusCode,
-		common.NewErrorFromReader(res.Body).Message,
+	c.logger.Error(
+		fmt.Sprintf(
+			"cluster manager request is failed (findCluster): %d - %s",
+			res.StatusCode,
+			common.NewErrorFromReader(res.Body).Message,
+		),
 	)
 
 	return "", "", errors.ErrRemote

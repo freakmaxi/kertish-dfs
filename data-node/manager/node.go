@@ -209,7 +209,7 @@ func (n *node) Join(clusterId string, nodeId string, masterAddress string) {
 		mode = "MASTER"
 	}
 
-	n.logger.Sugar().Infof("Data Node is joined to cluster (%s) with node id (%s) as %s", clusterId, nodeId, mode)
+	n.logger.Info(fmt.Sprintf("Data Node is joined to cluster (%s) with node id (%s) as %s", clusterId, nodeId, mode))
 }
 
 func (n *node) Mode(master bool) {
@@ -222,11 +222,11 @@ func (n *node) Mode(master bool) {
 		n.masterAddress = ""
 		mode = "MASTER"
 	}
-	n.logger.Sugar().Infof("Data Node (%s) is marked as %s", n.nodeId, mode)
+	n.logger.Info(fmt.Sprintf("Data Node (%s) is marked as %s", n.nodeId, mode))
 }
 
 func (n *node) Leave() {
-	n.logger.Sugar().Infof("Data Node is deleted from cluster (%s). Now working as stand-alone", n.clusterId)
+	n.logger.Info(fmt.Sprintf("Data Node is deleted from cluster (%s). Now working as stand-alone", n.clusterId))
 
 	n.clusterId = ""
 	n.nodeId = ""

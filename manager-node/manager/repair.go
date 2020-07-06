@@ -270,7 +270,7 @@ func (r *repair) cleanupOrphan(wg *sync.WaitGroup, clusterId string, masterNode 
 	defer wg.Done()
 
 	if len(indexMap) == 0 {
-		r.logger.Sugar().Infof("%s does not have orphan chunks", clusterId)
+		r.logger.Info(fmt.Sprintf("%s does not have orphan chunks", clusterId))
 		return
 	}
 
@@ -296,14 +296,14 @@ func (r *repair) cleanupOrphan(wg *sync.WaitGroup, clusterId string, masterNode 
 		return
 	}
 
-	r.logger.Sugar().Infof("Creating snapshot for %s...", clusterId)
+	r.logger.Info(fmt.Sprintf("Creating snapshot for %s...", clusterId))
 
 	if !mdn.SnapshotCreate() {
 		r.logger.Error("Unable to create snapshot, cleanup is skipped", zap.String("clusterId", clusterId))
 		return
 	}
 
-	r.logger.Sugar().Infof("Cleaning up orphan chunks in %s...", clusterId)
+	r.logger.Info(fmt.Sprintf("Cleaning up orphan chunks in %s...", clusterId))
 
 	for _, sha512Hex := range clusterSha512HexList {
 		if err := mdn.Delete(sha512Hex); err != nil {
@@ -322,7 +322,7 @@ func (r *repair) cleanupOrphan(wg *sync.WaitGroup, clusterId string, masterNode 
 		)
 	}
 
-	r.logger.Sugar().Infof("Orphan chunks cleanup for %s is completed", clusterId)
+	r.logger.Info(fmt.Sprintf("Orphan chunks cleanup for %s is completed", clusterId))
 
 	// Schedule sync cluster for snapshot sync
 	r.synchronize.QueueCluster(clusterId, true)

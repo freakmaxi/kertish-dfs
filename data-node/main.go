@@ -40,20 +40,20 @@ func main() {
 		logger.Error("Unable to read hardware details", zap.Error(err))
 		os.Exit(1)
 	}
-	logger.Sugar().Infof("HARDWARE_ID: %s", hardwareAddr)
+	logger.Info(fmt.Sprintf("HARDWARE_ID: %s", hardwareAddr))
 
 	bindAddr := os.Getenv("BIND_ADDRESS")
 	if matched, err := regexp.MatchString(`:\d{1,5}$`, bindAddr); err != nil || !matched {
 		bindAddr = fmt.Sprintf("%s:9430", bindAddr)
 	}
-	logger.Sugar().Infof("BIND_ADDRESS: %s", bindAddr)
+	logger.Info(fmt.Sprintf("BIND_ADDRESS: %s", bindAddr))
 
 	managerAddress := os.Getenv("MANAGER_ADDRESS")
 	if len(managerAddress) == 0 {
 		logger.Error("MANAGER_ADDRESS have to be specified")
 		os.Exit(10)
 	}
-	logger.Sugar().Infof("MANAGER_ADDRESS: %s", managerAddress)
+	logger.Info(fmt.Sprintf("MANAGER_ADDRESS: %s", managerAddress))
 
 	sizeString := os.Getenv("SIZE")
 	if len(sizeString) == 0 {
@@ -69,13 +69,13 @@ func main() {
 		logger.Error("File System size can not be 0")
 		os.Exit(52)
 	}
-	logger.Sugar().Infof("SIZE: %s (%s Gb)", sizeString, strconv.FormatUint(size/(1024*1024*1024), 10))
+	logger.Info(fmt.Sprintf("SIZE: %s (%s Gb)", sizeString, strconv.FormatUint(size/(1024*1024*1024), 10)))
 
 	rootPath := os.Getenv("ROOT_PATH")
 	if len(rootPath) == 0 {
 		rootPath = "/opt"
 	}
-	logger.Sugar().Infof("ROOT_PATH: %s", rootPath)
+	logger.Info(fmt.Sprintf("ROOT_PATH: %s", rootPath))
 
 	m, err := filesystem.NewManager(rootPath, logger)
 	if err != nil {
@@ -97,7 +97,7 @@ func main() {
 	if cacheLimit == 0 {
 		logger.Warn("Cache is disabled")
 	} else {
-		logger.Sugar().Infof("CACHE_LIMIT: %s (%s Gb)", cacheLimitString, strconv.FormatUint(cacheLimit/(1024*1024*1024), 10))
+		logger.Info(fmt.Sprintf("CACHE_LIMIT: %s (%s Gb)", cacheLimitString, strconv.FormatUint(cacheLimit/(1024*1024*1024), 10)))
 
 		ccLifetimeString := os.Getenv("CACHE_LIFETIME")
 		if len(ccLifetimeString) == 0 {
@@ -112,7 +112,7 @@ func main() {
 			logger.Error("Cache Lifetime can not be 0")
 			os.Exit(131)
 		}
-		logger.Sugar().Infof("CACHE_LIFETIME: %s min.", ccLifetimeString)
+		logger.Info(fmt.Sprintf("CACHE_LIFETIME: %s min.", ccLifetimeString))
 	}
 
 	cc := cache.NewContainer(cacheLimit, time.Minute*time.Duration(cacheLifetime), logger)
@@ -132,7 +132,7 @@ func main() {
 	logger.Info("Waiting for handshake...")
 	if err := n.Handshake(hardwareAddr, bindAddr, size); err != nil {
 		logger.Error("Handshake is failed", zap.Error(err))
-		logger.Sugar().Infof("Data Node is starting as stand-alone on %s", bindAddr)
+		logger.Info(fmt.Sprintf("Data Node is starting as stand-alone on %s", bindAddr))
 	} else {
 		logger.Info("Handshake is successful")
 
@@ -148,7 +148,7 @@ func main() {
 				}
 			}()
 		}
-		logger.Sugar().Infof("Data Node (%s) in Cluster (%s) is starting on %s as %s", n.NodeId(), n.ClusterId(), bindAddr, mode)
+		logger.Info(fmt.Sprintf("Data Node (%s) in Cluster (%s) is starting on %s as %s", n.NodeId(), n.ClusterId(), bindAddr, mode))
 	}
 
 	if err := s.Listen(); err != nil {

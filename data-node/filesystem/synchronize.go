@@ -203,7 +203,7 @@ func (s *synchronize) Full(sourceAddr string) error {
 	s.syncMutex.Lock()
 	defer s.syncMutex.Unlock()
 
-	s.logger.Sugar().Infof("Sync is in progress...")
+	s.logger.Info("Sync is in progress...")
 
 	sourceNode, has := s.nodeCache[sourceAddr]
 	if !has {
@@ -226,7 +226,7 @@ func (s *synchronize) Full(sourceAddr string) error {
 
 	go s.syncSnapshots(sourceNode, sourceContainer)
 
-	s.logger.Sugar().Infof("Sync is completed.")
+	s.logger.Info("Sync is completed.")
 
 	return nil
 }
@@ -278,7 +278,7 @@ func (s *synchronize) syncFileItems(sourceNode cluster.DataNode, snapshotTime *t
 		return nil
 	}
 
-	s.logger.Sugar().Infof("Sync (%s) will, create: %d / delete: %d", syncLoc, len(createList), len(wipeList))
+	s.logger.Info(fmt.Sprintf("Sync (%s) will, create: %d / delete: %d", syncLoc, len(createList), len(wipeList)))
 
 	b, err := block.NewManager(dataPath, s.logger)
 	if err != nil {
@@ -303,7 +303,7 @@ func (s *synchronize) syncFileItems(sourceNode cluster.DataNode, snapshotTime *t
 }
 
 func (s *synchronize) syncSnapshots(sourceNode cluster.DataNode, sourceContainer *common.SyncContainer) {
-	s.logger.Sugar().Infof("Snapshot Sync will complete in background...")
+	s.logger.Info("Snapshot Sync will complete in background...")
 
 	completed := false
 
@@ -313,14 +313,14 @@ func (s *synchronize) syncSnapshots(sourceNode cluster.DataNode, sourceContainer
 		return
 	}
 
-	s.logger.Sugar().Infof("Snapshot Sync is in progress...")
+	s.logger.Info("Snapshot Sync is in progress...")
 	defer func() {
 		if !completed {
 			s.logger.Error("Snapshot Sync is failed.")
 			return
 		}
 
-		s.logger.Sugar().Infof("Snapshot Sync is completed.")
+		s.logger.Info("Snapshot Sync is completed.")
 	}()
 
 	if len(snapshots) == 0 && len(sourceContainer.Snapshots) == 0 {

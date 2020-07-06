@@ -38,7 +38,7 @@ func main() {
 	if len(bindAddr) == 0 {
 		bindAddr = ":9400"
 	}
-	logger.Sugar().Infof("BIND_ADDRESS: %s", bindAddr)
+	logger.Info(fmt.Sprintf("BIND_ADDRESS: %s", bindAddr))
 
 	mutexSourceAddr := bindAddr
 	if strings.Index(mutexSourceAddr, ":") == 0 {
@@ -55,7 +55,7 @@ func main() {
 		os.Exit(5)
 	}
 	if healthCheckInterval > 0 {
-		logger.Sugar().Infof("HEALTH_CHECK_INTERVAL: %s second(s)", healthCheckIntervalString)
+		logger.Info(fmt.Sprintf("HEALTH_CHECK_INTERVAL: %s second(s)", healthCheckIntervalString))
 	}
 
 	mongoConn := os.Getenv("MONGO_CONN")
@@ -63,36 +63,36 @@ func main() {
 		logger.Error("MONGO_CONN have to be specified")
 		os.Exit(10)
 	}
-	logger.Sugar().Infof("MONGO_CONN: %s", mongoConn)
+	logger.Info(fmt.Sprintf("MONGO_CONN: %s", mongoConn))
 
 	mongoDb := os.Getenv("MONGO_DATABASE")
 	if len(mongoDb) == 0 {
 		mongoDb = "kertish-dfs"
 	}
-	logger.Sugar().Infof("MONGO_DATABASE: %s", mongoDb)
+	logger.Info(fmt.Sprintf("MONGO_DATABASE: %s", mongoDb))
 
 	mongoTransaction := os.Getenv("MONGO_TRANSACTION")
-	logger.Sugar().Infof("MONGO_TRANSACTION: %t", len(mongoTransaction) > 0)
+	logger.Info(fmt.Sprintf("MONGO_TRANSACTION: %t", len(mongoTransaction) > 0))
 
 	redisConn := os.Getenv("REDIS_CONN")
 	if len(redisConn) == 0 {
 		logger.Error("REDIS_CONN have to be specified")
 		os.Exit(11)
 	}
-	logger.Sugar().Infof("REDIS_CONN: %s", redisConn)
+	logger.Info(fmt.Sprintf("REDIS_CONN: %s", redisConn))
 
 	redisPassword := os.Getenv("REDIS_PASSWORD")
-	logger.Sugar().Infof("REDIS_PASSWORD: %t", len(redisPassword) > 0)
+	logger.Info(fmt.Sprintf("REDIS_PASSWORD: %t", len(redisPassword) > 0))
 
 	redisClusterMode := os.Getenv("REDIS_CLUSTER_MODE")
-	logger.Sugar().Infof("REDIS_CLUSTER_MODE: %t", len(redisClusterMode) > 0)
+	logger.Info(fmt.Sprintf("REDIS_CLUSTER_MODE: %t", len(redisClusterMode) > 0))
 
 	mutexConn := os.Getenv("LOCKING_CENTER")
 	if len(mutexConn) == 0 {
 		logger.Error("LOCKING_CENTER have to be specified")
 		os.Exit(15)
 	}
-	logger.Sugar().Infof("LOCKING_CENTER: %s", mutexConn)
+	logger.Info(fmt.Sprintf("LOCKING_CENTER: %s", mutexConn))
 
 	m, err := mutex.NewLockingCenterWithSourceAddr(mutexConn, &mutexSourceAddr)
 	if err != nil {
