@@ -24,8 +24,8 @@ func (n *nodeRouter) handlePost(w http.ResponseWriter, r *http.Request) {
 	switch action {
 	case "handshake":
 		n.handleHandshake(w, r)
-	case "create":
-		n.handleSyncCreate(w, r)
+	case "notify":
+		n.handleNotify(w, r)
 	default:
 		w.WriteHeader(406)
 	}
@@ -55,19 +55,25 @@ func (n *nodeRouter) handleHandshake(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Master", syncSourceNodeAddr)
 }
 
-func (n *nodeRouter) handleSyncCreate(w http.ResponseWriter, r *http.Request) {
-	nodeId, fileItemList, err := n.describeCreateOptions(r)
+func (n *nodeRouter) handleNotify(w http.ResponseWriter, r *http.Request) {
+	nodeId, notificationContainerList, err := n.describeNotifyOptions(r)
 	if err != nil {
 		w.WriteHeader(422)
 		return
 	}
 
-	if err := n.manager.Notify(nodeId, fileItemList, true); err != nil {
-		if err == errors.ErrNotFound {
+	if err := n.manager.Notify(nodeId, notificationContainerList); err != nil {
+		notificationError := err.(*common.NotificationError)
+
+		if notificationError.Is(errors.ErrNotFound) {
 			w.WriteHeader(404)
 		} else {
 			w.WriteHeader(500)
 			n.logger.Error("Node sync create request is failed", zap.Error(err))
+
+			if err := json.NewEncoder(w).Encode(notificationError.ContainerList()); err != nil {
+				n.logger.Error("Response of bulk notify request result is failed", zap.Error(err))
+			}
 		}
 		return
 	}
@@ -77,7 +83,7 @@ func (n *nodeRouter) handleSyncCreate(w http.ResponseWriter, r *http.Request) {
 
 func (n *nodeRouter) validatePostAction(action string) bool {
 	switch action {
-	case "handshake", "create":
+	case "handshake", "notify":
 		return true
 	}
 	return false
@@ -97,27 +103,27 @@ func (n *nodeRouter) describeHandshakeOptions(options string) (uint64, string, s
 	return size, opts[1], opts[2], nil
 }
 
-func (n *nodeRouter) describeCreateOptions(r *http.Request) (string, common.SyncFileItemList, error) {
+func (n *nodeRouter) describeNotifyOptions(r *http.Request) (string, common.NotificationContainerList, error) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		return "", nil, err
 	}
 
 	nodeId := r.Header.Get("X-Options")
-	fileItemList := make(common.SyncFileItemList, 0)
-	if err := json.Unmarshal(body, &fileItemList); err != nil {
+	notificationContainerList := make(common.NotificationContainerList, 0)
+	if err := json.Unmarshal(body, &notificationContainerList); err != nil {
 		return "", nil, err
 	}
 
-	if len(nodeId) == 0 || len(fileItemList) == 0 {
+	if len(nodeId) == 0 || len(notificationContainerList) == 0 {
 		return "", nil, os.ErrInvalid
 	}
 
-	for _, fileItem := range fileItemList {
-		if len(fileItem.Sha512Hex) != 64 {
+	for _, notificationContainer := range notificationContainerList {
+		if len(notificationContainer.FileItem.Sha512Hex) != 64 {
 			return "", nil, os.ErrInvalid
 		}
 	}
 
-	return nodeId, fileItemList, nil
+	return nodeId, notificationContainerList, nil
 }

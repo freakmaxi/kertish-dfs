@@ -44,8 +44,6 @@ func (n *nodeRouter) manipulate(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "POST":
 		n.handlePost(w, r)
-	case "DELETE":
-		n.handleDelete(w, r)
 	default:
 		w.WriteHeader(406)
 	}

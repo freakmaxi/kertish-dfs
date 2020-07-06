@@ -13,7 +13,7 @@ const retryLimit = 10
 
 type Node interface {
 	Handshake(nodeHardwareAddr string, nodeAddress string, size uint64) (string, string, string, error)
-	Notify(nodeId string, fileItemList common.SyncFileItemList, create bool) error
+	Notify(nodeId string, notificationContainerList common.NotificationContainerList) error
 }
 
 type node struct {
@@ -81,11 +81,52 @@ func (n *node) Handshake(nodeHardwareAddr string, nodeAddress string, size uint6
 	return cluster.Id, node.Id, syncSourceAddrBind, nil
 }
 
-func (n *node) Notify(nodeId string, fileItemList common.SyncFileItemList, create bool) error {
-	if create {
-		return n.create(nodeId, fileItemList)
+func (n *node) Notify(nodeId string, notificationContainerList common.NotificationContainerList) error {
+	creatingNotificationContainerList := make(common.NotificationContainerList, 0)
+	deletingNotificationContainerList := make(common.NotificationContainerList, 0)
+
+	for len(notificationContainerList) > 0 {
+		notificationContainer := notificationContainerList[0]
+
+		if notificationContainer.Create {
+			if len(deletingNotificationContainerList) > 0 {
+				if err := n.delete(nodeId, deletingNotificationContainerList.ExportFileItemList()); err != nil {
+					deletingNotificationContainerList = append(deletingNotificationContainerList, notificationContainerList...)
+					return common.NewNotificationError(deletingNotificationContainerList, err)
+				}
+				deletingNotificationContainerList = make(common.NotificationContainerList, 0)
+			}
+
+			creatingNotificationContainerList = append(creatingNotificationContainerList, notificationContainer)
+			notificationContainerList = notificationContainerList[1:]
+			continue
+		}
+
+		if len(creatingNotificationContainerList) > 0 {
+			if err := n.create(nodeId, creatingNotificationContainerList.ExportFileItemList()); err != nil {
+				creatingNotificationContainerList = append(creatingNotificationContainerList, notificationContainerList...)
+				return common.NewNotificationError(creatingNotificationContainerList, err)
+			}
+			creatingNotificationContainerList = make(common.NotificationContainerList, 0)
+		}
+
+		deletingNotificationContainerList = append(deletingNotificationContainerList, notificationContainer)
+		notificationContainerList = notificationContainerList[1:]
 	}
-	return n.delete(nodeId, fileItemList)
+
+	if len(creatingNotificationContainerList) > 0 {
+		if err := n.create(nodeId, creatingNotificationContainerList.ExportFileItemList()); err != nil {
+			return common.NewNotificationError(creatingNotificationContainerList, err)
+		}
+	}
+
+	if len(deletingNotificationContainerList) > 0 {
+		if err := n.delete(nodeId, deletingNotificationContainerList.ExportFileItemList()); err != nil {
+			return common.NewNotificationError(deletingNotificationContainerList, err)
+		}
+	}
+
+	return nil
 }
 
 func (n *node) create(nodeId string, fileItemList common.SyncFileItemList) error {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
@@ -43,22 +44,23 @@ type node struct {
 	nodeId        string
 	masterAddress string
 
-	createNotificationChan chan common.SyncFileItem
-	createFailureChan      chan common.SyncFileItemList
-	deleteNotificationChan chan common.SyncFileItem
-	deleteFailureChan      chan common.SyncFileItemList
+	notificationChan chan common.NotificationContainer
+	failureChan      chan common.NotificationContainerList
+
+	nextProcessList map[string]*common.NotificationContainer
 }
 
 func NewNode(managerAddresses []string, nodeSize uint64, logger *zap.Logger) Node {
 	node := &node{
-		client:                 http.Client{},
-		managerAddr:            managerAddresses,
-		nodeSize:               nodeSize,
-		logger:                 logger,
-		createNotificationChan: make(chan common.SyncFileItem, notificationChannelLimit),
-		createFailureChan:      make(chan common.SyncFileItemList, notificationChannelLimit),
-		deleteNotificationChan: make(chan common.SyncFileItem, notificationChannelLimit),
-		deleteFailureChan:      make(chan common.SyncFileItemList, notificationChannelLimit),
+		client:      http.Client{},
+		managerAddr: managerAddresses,
+		nodeSize:    nodeSize,
+		logger:      logger,
+
+		notificationChan: make(chan common.NotificationContainer, notificationChannelLimit),
+		failureChan:      make(chan common.NotificationContainerList, notificationChannelLimit),
+
+		nextProcessList: make(map[string]*common.NotificationContainer),
 	}
 	node.start()
 
@@ -66,68 +68,114 @@ func NewNode(managerAddresses []string, nodeSize uint64, logger *zap.Logger) Nod
 }
 
 func (n *node) start() {
-	go n.createChannelHandler()
-	go n.deleteChannelHandler()
+	go n.channelHandler()
 }
 
-func (n *node) createChannelHandler() {
-	fileItemList := make(common.SyncFileItemList, 0)
+func (n *node) channelHandler() {
 	for {
 		select {
-		case fileItem, more := <-n.createNotificationChan:
+		case failedList, more := <-n.failureChan:
 			if !more {
 				return
 			}
 
-			fileItemList = append(fileItemList, fileItem)
-			if len(fileItemList) >= notificationBulkLimit {
-				go n.createBulk(fileItemList, 0)
-				fileItemList = make(common.SyncFileItemList, 0)
+			if len(n.nextProcessList) == 0 {
+				time.Sleep(time.Second * bulkRequestRetryInterval)
 			}
-		case failedFileItemList, more := <-n.createFailureChan:
+
+			for _, nc := range failedList {
+				if _, has := n.nextProcessList[nc.FileItem.Sha512Hex]; has {
+					continue
+				}
+				n.nextProcessList[nc.FileItem.Sha512Hex] = &nc
+			}
+			continue
+		case nc, more := <-n.notificationChan:
 			if !more {
 				return
 			}
-			go n.createBulk(failedFileItemList, time.Second*bulkRequestRetryInterval)
+
+			n.nextProcessList[nc.FileItem.Sha512Hex] = &nc
+			continue
 		default:
-			if len(fileItemList) == 0 {
+			if len(n.nextProcessList) == 0 {
 				time.Sleep(time.Millisecond * bulkRequestInterval)
 				continue
 			}
+		}
 
-			go n.createBulk(fileItemList, 0)
-			fileItemList = make(common.SyncFileItemList, 0)
+		n.notifyBulk()
+	}
+}
+
+func (n *node) createBulkGroup() []common.NotificationContainerList {
+	bulkGroups := make([]common.NotificationContainerList, 0)
+
+	notificationContainerList := make(common.NotificationContainerList, 0)
+	for _, nc := range n.nextProcessList {
+		if len(notificationContainerList) >= notificationBulkLimit {
+			bulkGroups = append(bulkGroups, notificationContainerList)
+			notificationContainerList = make(common.NotificationContainerList, 0)
+		}
+		notificationContainerList = append(notificationContainerList, *nc)
+	}
+
+	if len(notificationContainerList) > 0 {
+		bulkGroups = append(bulkGroups, notificationContainerList)
+	}
+
+	return bulkGroups
+}
+
+func (n *node) notifyBulk() {
+	if len(n.nextProcessList) == 0 {
+		return
+	}
+
+	pushFunc := func(wg *sync.WaitGroup, notificationContainerList common.NotificationContainerList) {
+		defer wg.Done()
+
+		if err := n.notify(notificationContainerList); err != nil {
+			n.logger.Warn("Bulk notification is failed", zap.Error(err))
+
+			switch et := err.(type) {
+			case *common.NotificationError:
+				failedList := et.ContainerList()
+
+				if failedList != nil && len(failedList) > 0 {
+					n.failureChan <- failedList
+				}
+			}
 		}
 	}
+
+	bulkGroups := n.createBulkGroup()
+	n.nextProcessList = make(map[string]*common.NotificationContainer)
+
+	wg := &sync.WaitGroup{}
+	for _, bG := range bulkGroups {
+		wg.Add(1)
+		go pushFunc(wg, bG)
+	}
+	wg.Wait()
 }
 
-func (n *node) createBulk(fileItemList common.SyncFileItemList, delay time.Duration) {
-	if delay > 0 {
-		time.Sleep(delay)
-	}
-
-	if err := n.create(fileItemList); err != nil {
-		n.logger.Warn("Bulk (CREATE) notification is failed", zap.Error(err))
-		n.createFailureChan <- fileItemList
-	}
-}
-
-func (n *node) create(fileItemList common.SyncFileItemList) error {
-	body, err := json.Marshal(fileItemList)
+func (n *node) notify(notificationContainerList common.NotificationContainerList) error {
+	body, err := json.Marshal(notificationContainerList)
 	if err != nil {
-		return err
+		return common.NewNotificationError(notificationContainerList, err)
 	}
 
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s%s", n.managerAddr[0], managerEndPoint), bytes.NewBuffer(body))
 	if err != nil {
-		return err
+		return common.NewNotificationError(notificationContainerList, err)
 	}
-	req.Header.Set("X-Action", "create")
+	req.Header.Set("X-Action", "notify")
 	req.Header.Set("X-Options", n.nodeId)
 
 	res, err := n.client.Do(req)
 	if err != nil {
-		return err
+		return common.NewNotificationError(notificationContainerList, err)
 	}
 	defer func() { _ = res.Body.Close() }()
 
@@ -135,78 +183,13 @@ func (n *node) create(fileItemList common.SyncFileItemList) error {
 		if res.StatusCode == 404 {
 			return fmt.Errorf("data node is not registered")
 		}
-		return fmt.Errorf("node manager request is failed (Create): %d - %s", res.StatusCode, common.NewErrorFromReader(res.Body).Message)
-	}
 
-	return nil
-}
-
-func (n *node) deleteChannelHandler() {
-	fileItemList := make(common.SyncFileItemList, 0)
-	for {
-		select {
-		case fileItem, more := <-n.deleteNotificationChan:
-			if !more {
-				return
-			}
-
-			fileItemList = append(fileItemList, fileItem)
-			if len(fileItemList) >= notificationBulkLimit {
-				go n.deleteBulk(fileItemList, 0)
-				fileItemList = make(common.SyncFileItemList, 0)
-			}
-		case failedFileItemList, more := <-n.deleteFailureChan:
-			if !more {
-				return
-			}
-			go n.deleteBulk(failedFileItemList, time.Second*bulkRequestRetryInterval)
-		default:
-			if len(fileItemList) == 0 {
-				time.Sleep(time.Millisecond * bulkRequestInterval)
-				continue
-			}
-
-			go n.deleteBulk(fileItemList, 0)
-			fileItemList = make(common.SyncFileItemList, 0)
+		var failedList common.NotificationContainerList
+		if err := json.NewDecoder(res.Body).Decode(&failedList); err != nil {
+			n.logger.Error("Decoding the response of bulk notify request result is failed", zap.Error(err))
 		}
-	}
-}
 
-func (n *node) deleteBulk(fileItemList common.SyncFileItemList, delay time.Duration) {
-	if delay > 0 {
-		time.Sleep(delay)
-	}
-
-	if err := n.delete(fileItemList); err != nil {
-		n.logger.Warn("Bulk (DELETE) notification is failed", zap.Error(err))
-		n.deleteFailureChan <- fileItemList
-	}
-}
-
-func (n *node) delete(fileItemList common.SyncFileItemList) error {
-	body, err := json.Marshal(fileItemList)
-	if err != nil {
-		return err
-	}
-
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s%s", n.managerAddr[0], managerEndPoint), bytes.NewBuffer(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("X-Action", "delete")
-	req.Header.Set("X-Options", n.nodeId)
-
-	res, err := n.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = res.Body.Close() }()
-
-	if res.StatusCode != 200 {
-		if res.StatusCode == 404 {
-			return fmt.Errorf("data node is not registered")
-		}
-		return fmt.Errorf("node manager request is failed (Delete): %d - %s", res.StatusCode, common.NewErrorFromReader(res.Body).Message)
+		return common.NewNotificationError(failedList, fmt.Errorf("node manager notify request is failed: %d - %s", res.StatusCode, common.NewErrorFromReader(res.Body).Message))
 	}
 
 	return nil
@@ -282,19 +265,15 @@ func (n *node) Handshake(hardwareAddr string, bindAddr string, size uint64) erro
 }
 
 func (n *node) Notify(sha512Hex string, usage uint16, size uint32, shadow bool, create bool) {
-	item := common.SyncFileItem{
-		Sha512Hex: sha512Hex,
-		Usage:     usage,
-		Size:      size,
-		Shadow:    shadow,
+	n.notificationChan <- common.NotificationContainer{
+		Create: create,
+		FileItem: common.SyncFileItem{
+			Sha512Hex: sha512Hex,
+			Usage:     usage,
+			Size:      size,
+			Shadow:    shadow,
+		},
 	}
-
-	if create {
-		n.createNotificationChan <- item
-		return
-	}
-
-	n.deleteNotificationChan <- item
 }
 
 func (n *node) ClusterId() string {
