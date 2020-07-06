@@ -8,7 +8,7 @@ require (
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/mux v1.7.4
 	github.com/mattn/go-runewidth v0.0.9
-	github.com/mediocregopher/radix/v3 v3.5.1
+	github.com/mediocregopher/radix/v3 v3.5.2
 	github.com/stretchr/testify v1.4.0
 	go.mongodb.org/mongo-driver v1.3.4
 	go.uber.org/zap v1.15.0
