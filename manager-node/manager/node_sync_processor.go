@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
@@ -66,55 +67,50 @@ func (d *nodeSyncProcessor) Sync(ns *nodeSync) bool {
 		return false
 	}
 
+	syncType := "DELETE"
 	if ns.create {
-		d.create(ns.sourceAddr, ns.sha512Hex, ns.targets)
-		for i := 0; i < len(ns.targets); i++ {
-			target := ns.targets[i]
-
-			if target.completed || target.counter <= 0 {
-				if !target.completed {
-					d.logger.Error(
-						"Sync is failed (CREATE)",
-						zap.String("sha512Hex", ns.sha512Hex),
-						zap.String("targetNodeId", target.node.Id),
-					)
-				}
-				ns.targets = append(ns.targets[0:i], ns.targets[i+1:]...)
-				i--
-			}
-		}
-		return len(ns.targets) == 0
+		syncType = "CREATE"
+		d.create(ns)
+	} else {
+		d.delete(ns)
 	}
 
-	d.delete(ns.sha512Hex, ns.targets)
 	for i := 0; i < len(ns.targets); i++ {
 		target := ns.targets[i]
 
-		if target.completed || target.counter <= 0 {
-			if !target.completed {
-				d.logger.Error(
-					"Sync is failed (DELETE)",
-					zap.String("sha512Hex", ns.sha512Hex),
-					zap.String("targetNodeId", target.node.Id),
-				)
-			}
+		if target.completed {
 			ns.targets = append(ns.targets[0:i], ns.targets[i+1:]...)
 			i--
+
+			continue
 		}
+
+		if target.counter > 0 {
+			continue
+		}
+
+		d.logger.Error(
+			fmt.Sprintf("Sync is failed (%s)", syncType),
+			zap.String("sha512Hex", ns.sha512Hex),
+			zap.String("targetNodeId", target.node.Id),
+		)
+		ns.targets = append(ns.targets[:i], ns.targets[i+1:]...)
+		i--
 	}
 	return len(ns.targets) == 0
 }
 
-func (d *nodeSyncProcessor) create(sourceAddress string, sha512Hex string, targets []*targetContainer) {
+func (d *nodeSyncProcessor) create(ns *nodeSync) {
 	wg := &sync.WaitGroup{}
-	for _, t := range targets {
+	for i := range ns.targets {
 		wg.Add(1)
 		go func(wg *sync.WaitGroup, target *targetContainer) {
 			defer wg.Done()
 
+			target.counter--
+
 			dn, err := d.get(target.node)
 			if err != nil {
-				target.counter--
 				d.logger.Warn(
 					"Data node connection creation is unsuccessful",
 					zap.String("targetNodeId", target.node.Id),
@@ -124,45 +120,44 @@ func (d *nodeSyncProcessor) create(sourceAddress string, sha512Hex string, targe
 				return
 			}
 
-			if !dn.SyncCreate(sha512Hex, sourceAddress) {
-				target.counter--
+			if !dn.SyncCreate(ns.sha512Hex, ns.sourceAddr) {
 				d.logger.Warn(
 					"Sync is unsuccessful (CREATE)",
-					zap.String("sha512Hex", sha512Hex),
+					zap.String("sha512Hex", ns.sha512Hex),
 					zap.String("targetNodeId", target.node.Id),
-					zap.String("sourceAddress", sourceAddress),
+					zap.String("sourceAddress", ns.sourceAddr),
 				)
 				return
 			}
 
-			if err := d.index.UpdateChunkNode(sha512Hex, target.node.Id, true); err != nil {
-				target.counter--
+			if err := d.index.UpdateChunkNode(ns.sha512Hex, target.node.Id, true); err != nil {
 				d.logger.Warn(
 					"Adding node information to the index is failed",
-					zap.String("sha512Hex", sha512Hex),
+					zap.String("sha512Hex", ns.sha512Hex),
 					zap.String("targetNodeId", target.node.Id),
-					zap.String("sourceAddress", sourceAddress),
+					zap.String("sourceAddress", ns.sourceAddr),
 					zap.Error(err),
 				)
 				return
 			}
 
 			target.completed = true
-		}(wg, t)
+		}(wg, ns.targets[i])
 	}
 	wg.Wait()
 }
 
-func (d *nodeSyncProcessor) delete(sha512Hex string, targets []*targetContainer) {
+func (d *nodeSyncProcessor) delete(ns *nodeSync) {
 	wg := &sync.WaitGroup{}
-	for _, t := range targets {
+	for i := range ns.targets {
 		wg.Add(1)
 		go func(wg *sync.WaitGroup, target *targetContainer) {
 			defer wg.Done()
 
+			target.counter--
+
 			dn, err := d.get(target.node)
 			if err != nil {
-				target.counter--
 				d.logger.Warn(
 					"Data node connection creation is unsuccessful",
 					zap.String("targetNodeId", target.node.Id),
@@ -172,18 +167,17 @@ func (d *nodeSyncProcessor) delete(sha512Hex string, targets []*targetContainer)
 				return
 			}
 
-			if !dn.SyncDelete(sha512Hex) {
-				target.counter--
+			if !dn.SyncDelete(ns.sha512Hex) {
 				d.logger.Warn(
 					"Sync is unsuccessful (DELETE)",
-					zap.String("sha512Hex", sha512Hex),
+					zap.String("sha512Hex", ns.sha512Hex),
 					zap.String("targetNodeId", target.node.Id),
 				)
 				return
 			}
 
 			target.completed = true
-		}(wg, t)
+		}(wg, ns.targets[i])
 	}
 	wg.Wait()
 }
