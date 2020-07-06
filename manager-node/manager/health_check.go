@@ -122,7 +122,7 @@ func (h *healthCheck) maintain() {
 			}
 
 			for _, cluster := range clusters {
-				if err := h.synchronize.Cluster(cluster.Id, false, false); err != nil {
+				if err := h.synchronize.Cluster(cluster.Id, false, false, false); err != nil {
 					if err == errors.ErrFrozen {
 						h.logger.Warn("Frozen cluster is skipped to maintain", zap.String("clusterId", cluster.Id))
 						continue

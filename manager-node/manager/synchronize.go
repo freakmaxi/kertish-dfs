@@ -15,7 +15,7 @@ type Synchronize interface {
 	QueueClusters(force bool) error
 	QueueCluster(clusterId string, force bool)
 
-	Cluster(clusterId string, force bool, keepFrozen bool) error
+	Cluster(clusterId string, force bool, keepFrozen bool, waitFullSync bool) error
 }
 
 type synchronize struct {
@@ -53,7 +53,7 @@ func (s *synchronize) start() {
 	go func() {
 		for so := range s.syncChan {
 			go func(so syncOrder) {
-				if err := s.startSync(so.clusterId, so.force, so.keepFrozen); err != nil {
+				if err := s.startSync(so.clusterId, so.force, so.keepFrozen, false); err != nil {
 					s.logger.Error(
 						"Cluster sync is failed",
 						zap.String("clusterId", so.clusterId),
@@ -88,11 +88,11 @@ func (s *synchronize) QueueCluster(clusterId string, force bool) {
 	}
 }
 
-func (s *synchronize) Cluster(clusterId string, force bool, keepFrozen bool) error {
-	return s.startSync(clusterId, force, keepFrozen)
+func (s *synchronize) Cluster(clusterId string, force bool, keepFrozen bool, waitFullSync bool) error {
+	return s.startSync(clusterId, force, keepFrozen, waitFullSync)
 }
 
-func (s *synchronize) startSync(clusterId string, force bool, keepFrozen bool) error {
+func (s *synchronize) startSync(clusterId string, force bool, keepFrozen bool, waitFullSync bool) error {
 	cluster, err := s.clusters.Get(clusterId)
 	if err != nil {
 		return err
@@ -215,16 +215,26 @@ func (s *synchronize) startSync(clusterId string, force bool, keepFrozen bool) e
 		return nil
 	}
 
-	s.logger.Info(
-		"Slaves will be sync concurrently in background",
-		zap.String("clusterId", clusterId),
-		zap.String("nodeId", masterNode.Id),
-		zap.String("nodeAddress", masterNode.Address),
-	)
-
-	for _, slaveNode := range slaveNodes {
-		go s.syncSlaveNode(clusterId, masterNode, slaveNode)
+	if !waitFullSync {
+		s.logger.Info(
+			"Slaves will be sync concurrently in background",
+			zap.String("clusterId", clusterId),
+			zap.String("nodeId", masterNode.Id),
+			zap.String("nodeAddress", masterNode.Address),
+		)
 	}
+
+	wg := &sync.WaitGroup{}
+	for _, slaveNode := range slaveNodes {
+		if !waitFullSync {
+			go s.syncSlaveNode(nil, clusterId, masterNode, slaveNode)
+			continue
+		}
+
+		wg.Add(1)
+		go s.syncSlaveNode(wg, clusterId, masterNode, slaveNode)
+	}
+	wg.Wait()
 
 	s.logger.Info(
 		fmt.Sprintf("Synchronization master node of cluster %s is completed", clusterId),
@@ -236,7 +246,11 @@ func (s *synchronize) startSync(clusterId string, force bool, keepFrozen bool) e
 	return nil
 }
 
-func (s *synchronize) syncSlaveNode(clusterId string, masterNode *common.Node, slaveNode *common.Node) {
+func (s *synchronize) syncSlaveNode(wg *sync.WaitGroup, clusterId string, masterNode *common.Node, slaveNode *common.Node) {
+	if wg != nil {
+		defer wg.Done()
+	}
+
 	sdn, err := cluster2.NewDataNode(slaveNode.Address)
 	if err != nil {
 		s.logger.Error(

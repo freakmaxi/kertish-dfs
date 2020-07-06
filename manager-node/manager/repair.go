@@ -158,7 +158,7 @@ func (r *repair) repairIntegrity() error {
 		go func(wg *sync.WaitGroup, clusterId string) {
 			defer wg.Done()
 
-			if err := r.synchronize.Cluster(clusterId, true, false); err != nil {
+			if err := r.synchronize.Cluster(clusterId, true, false, true); err != nil {
 				r.logger.Error("Cluster sync is failed for integrity repair",
 					zap.String("clusterId", clusterId),
 					zap.Error(err),

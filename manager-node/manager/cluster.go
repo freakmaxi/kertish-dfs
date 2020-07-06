@@ -193,7 +193,7 @@ func (c *cluster) UnRegisterNode(nodeId string) error {
 	return c.clusters.UnRegisterNode(
 		nodeId,
 		func(cluster *common.Cluster) error {
-			return c.synchronize.Cluster(cluster.Id, true, false)
+			return c.synchronize.Cluster(cluster.Id, true, false, false)
 		},
 		func(deletingNode *common.Node) error {
 			dn, err := cluster2.NewDataNode(deletingNode.Address)
@@ -383,7 +383,7 @@ func (c *cluster) MoveCluster(sourceClusterId string, targetClusterId string) (e
 
 	syncClustersFunc := func(wg *sync.WaitGroup, clusterId string, keepFrozen bool) {
 		defer wg.Done()
-		if err := c.synchronize.Cluster(clusterId, true, keepFrozen); err != nil {
+		if err := c.synchronize.Cluster(clusterId, true, keepFrozen, false); err != nil {
 			c.logger.Error(
 				"Cluster sync is failed after move operation",
 				zap.String("clusterId", clusterId),
@@ -443,7 +443,7 @@ func (c *cluster) CreateSnapshot(clusterId string) error {
 		return errors.ErrSnapshot
 	}
 
-	return c.synchronize.Cluster(cluster.Id, true, false)
+	return c.synchronize.Cluster(cluster.Id, true, false, false)
 }
 
 func (c *cluster) DeleteSnapshot(clusterId string, snapshotIndex uint64) error {
@@ -462,7 +462,7 @@ func (c *cluster) DeleteSnapshot(clusterId string, snapshotIndex uint64) error {
 		return errors.ErrSnapshot
 	}
 
-	return c.synchronize.Cluster(cluster.Id, true, false)
+	return c.synchronize.Cluster(cluster.Id, true, false, false)
 }
 
 func (c *cluster) RestoreSnapshot(clusterId string, snapshotIndex uint64) error {
@@ -481,7 +481,7 @@ func (c *cluster) RestoreSnapshot(clusterId string, snapshotIndex uint64) error 
 		return errors.ErrSnapshot
 	}
 
-	return c.synchronize.Cluster(cluster.Id, true, false)
+	return c.synchronize.Cluster(cluster.Id, true, false, false)
 }
 
 func (c *cluster) Map(sha512HexList []string, mapType common.MapType) (map[string]string, error) {
