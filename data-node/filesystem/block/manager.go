@@ -115,7 +115,7 @@ func (m *manager) Wipe() error {
 	}
 
 	for len(sha512HexList) > 0 {
-		if err := m.File(sha512HexList[0], func(file File) error {
+		if err := m.LockFile(sha512HexList[0], func(file File) error {
 			if file.Temporary() {
 				return nil
 			}

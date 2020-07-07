@@ -235,7 +235,7 @@ func (c *commander) crea(conn net.Conn) error {
 		return err
 	}
 
-	c.node.Notify(sha512Hex, blockUsage, blockSize, err == errors.ErrQuit, true)
+	<-c.node.Notify(sha512Hex, blockUsage, blockSize, err == errors.ErrQuit, true)
 
 	return err
 }
@@ -337,7 +337,7 @@ func (c *commander) dele(conn net.Conn) error {
 		return err
 	}
 
-	c.node.Notify(sha512Hex, blockUsage, blockSize, blockUsage > 0, false)
+	<-c.node.Notify(sha512Hex, blockUsage, blockSize, blockUsage > 0, false)
 
 	return nil
 }
@@ -465,7 +465,7 @@ func (c *commander) syrd(conn net.Conn) error {
 		}
 	}
 
-	return blockManager.File(sha512Hex, func(blockFile block.File) error {
+	return blockManager.LockFile(sha512Hex, func(blockFile block.File) error {
 		if blockFile.Temporary() {
 			return os.ErrNotExist
 		}

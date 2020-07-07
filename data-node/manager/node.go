@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,7 +26,7 @@ type Node interface {
 	Leave()
 	Handshake(hardwareAddr string, bindAddr string, size uint64) error
 
-	Notify(sha512Hex string, usage uint16, size uint32, shadow bool, create bool)
+	Notify(sha512Hex string, usage uint16, size uint32, shadow bool, create bool) <-chan bool
 
 	ClusterId() string
 	NodeId() string
@@ -143,9 +144,27 @@ func (n *node) notifyBulk() {
 				failedList := et.ContainerList()
 
 				if failedList != nil && len(failedList) > 0 {
+					// TODO: get rid of this bullshit code
+					for _, nc := range notificationContainerList {
+						exists := false
+						for _, f := range failedList {
+							if strings.Compare(nc.FileItem.Sha512Hex, f.FileItem.Sha512Hex) == 0 {
+								exists = true
+								break
+							}
+						}
+						if !exists {
+							nc.ResponseChan <- true
+						}
+					}
+
 					n.failureChan <- failedList
 				}
 			}
+		}
+
+		for _, nc := range notificationContainerList {
+			nc.ResponseChan <- true
 		}
 	}
 
@@ -264,7 +283,9 @@ func (n *node) Handshake(hardwareAddr string, bindAddr string, size uint64) erro
 	return nil
 }
 
-func (n *node) Notify(sha512Hex string, usage uint16, size uint32, shadow bool, create bool) {
+func (n *node) Notify(sha512Hex string, usage uint16, size uint32, shadow bool, create bool) <-chan bool {
+	responseChan := make(chan bool, 1)
+
 	n.notificationChan <- common.NotificationContainer{
 		Create: create,
 		FileItem: common.SyncFileItem{
@@ -273,7 +294,10 @@ func (n *node) Notify(sha512Hex string, usage uint16, size uint32, shadow bool, 
 			Size:      size,
 			Shadow:    shadow,
 		},
+		ResponseChan: responseChan,
 	}
+
+	return responseChan
 }
 
 func (n *node) ClusterId() string {

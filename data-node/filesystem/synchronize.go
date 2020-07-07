@@ -17,6 +17,7 @@ import (
 
 const queueSize = 5000
 const pauseDuration = time.Second * 30
+const retryCount = 10
 
 type Synchronize interface {
 	List(snapshotTime *time.Time, itemHandler func(fileItem *common.SyncFileItem) error) error
@@ -37,10 +38,11 @@ type synchronize struct {
 	snapshot Snapshot
 	logger   *zap.Logger
 
-	syncMutex sync.Mutex
-	nodeCache map[string]cluster.DataNode
+	nodeCacheMutex sync.Mutex
+	nodeCache      map[string]cluster.DataNode
 
-	queueChan chan queueItem
+	syncMutex sync.Mutex
+	syncChan  chan queueItem
 }
 
 func NewSynchronize(rootPath string, snapshot Snapshot, logger *zap.Logger) (Synchronize, error) {
@@ -49,10 +51,11 @@ func NewSynchronize(rootPath string, snapshot Snapshot, logger *zap.Logger) (Syn
 		snapshot: snapshot,
 		logger:   logger,
 
-		syncMutex: sync.Mutex{},
-		nodeCache: make(map[string]cluster.DataNode),
+		nodeCacheMutex: sync.Mutex{},
+		nodeCache:      make(map[string]cluster.DataNode),
 
-		queueChan: make(chan queueItem, queueSize),
+		syncMutex: sync.Mutex{},
+		syncChan:  make(chan queueItem, queueSize),
 	}
 	if err := s.start(); err != nil {
 		return nil, err
@@ -67,34 +70,43 @@ func (s *synchronize) start() error {
 	}
 
 	go func() {
-		for item := range s.queueChan {
-			s.syncMutex.Lock()
-			s.consumeQueueChannel(b, s.queueChan, item)
-			s.syncMutex.Unlock()
+		for nextItem := range s.syncChan {
+			s.consumeSyncQueue(b, nextItem)
 		}
 	}()
 
 	return nil
 }
 
-func (s *synchronize) consumeQueueChannel(b block.Manager, queueChan chan queueItem, firstItem queueItem) {
-	wg := &sync.WaitGroup{}
+func (s *synchronize) consumeSyncQueue(b block.Manager, firstItem queueItem) {
+	s.syncMutex.Lock()
+	defer s.syncMutex.Unlock()
 
-	wg.Add(1)
-	go s.processQueueItem(wg, b, firstItem)
+	s.processQueueItem(b, firstItem)
 
-	for len(queueChan) > 0 {
-		item := <-queueChan
-
-		wg.Add(1)
-		go s.processQueueItem(wg, b, item)
+	for len(s.syncChan) > 0 {
+		s.processQueueItem(b, <-s.syncChan)
 	}
-
-	wg.Wait()
 }
 
-func (s *synchronize) processQueueItem(wg *sync.WaitGroup, b block.Manager, item queueItem) {
-	defer wg.Done()
+func (s *synchronize) getSourceDataNode(sourceAddr string) (cluster.DataNode, error) {
+	s.nodeCacheMutex.Lock()
+	defer s.nodeCacheMutex.Unlock()
+
+	sourceNode, has := s.nodeCache[sourceAddr]
+	if !has {
+		var err error
+		sourceNode, err = cluster.NewDataNode(sourceAddr)
+		if err != nil {
+			return nil, err
+		}
+		s.nodeCache[sourceAddr] = sourceNode
+	}
+	return sourceNode, nil
+}
+
+func (s *synchronize) processQueueItem(b block.Manager, item queueItem) {
+	fmt.Printf("%+v\n", item)
 
 	if !item.create {
 		if err := s.deleteBlockFile(b, common.SyncFileItem{Sha512Hex: item.sha512Hex}, true); err != nil {
@@ -106,35 +118,32 @@ func (s *synchronize) processQueueItem(wg *sync.WaitGroup, b block.Manager, item
 		return
 	}
 
-	sourceAddr := *item.sourceAddr
-	sourceNode, has := s.nodeCache[sourceAddr]
-	if !has {
-		var err error
-		sourceNode, err = cluster.NewDataNode(sourceAddr)
+	retryCounter := retryCount
+	for retryCounter > 0 {
+		sourceNode, err := s.getSourceDataNode(*item.sourceAddr)
 		if err != nil {
 			s.logger.Warn(
 				"Unable to create source node object",
-				zap.String("masterNodeAddress", sourceAddr),
+				zap.String("masterNodeAddress", *item.sourceAddr),
 				zap.Error(err),
 			)
 
-			go func(qI queueItem) {
-				time.Sleep(pauseDuration)
+			time.Sleep(pauseDuration)
+			retryCounter--
 
-				s.queueChan <- qI
-			}(item)
-
-			return
+			continue
 		}
-		s.nodeCache[sourceAddr] = sourceNode
+
+		if err := s.createBlockFile(sourceNode, nil, b, common.SyncFileItem{Sha512Hex: item.sha512Hex}, true); err != nil {
+			s.logger.Error(
+				fmt.Sprintf("Queue sync cannot create %s", item.sha512Hex),
+				zap.Error(err),
+			)
+		}
+		return
 	}
 
-	if err := s.createBlockFile(sourceNode, nil, b, common.SyncFileItem{Sha512Hex: item.sha512Hex}, true); err != nil {
-		s.logger.Error(
-			fmt.Sprintf("Queue sync cannot create %s", item.sha512Hex),
-			zap.Error(err),
-		)
-	}
+	s.logger.Warn(fmt.Sprintf("Maximum retry count is reached for item (%s) and failed to sync. Cluster sync. or periodic maintain may recover the item state...", item.sha512Hex))
 }
 
 func (s *synchronize) List(snapshotTime *time.Time, itemHandler func(fileItem *common.SyncFileItem) error) error {
@@ -184,7 +193,7 @@ func (s *synchronize) iterateFileItems(dataPath string, headerMap HeaderMap, ite
 }
 
 func (s *synchronize) Create(sourceAddr string, sha512Hex string) {
-	s.queueChan <- queueItem{
+	s.syncChan <- queueItem{
 		sourceAddr: &sourceAddr,
 		sha512Hex:  sha512Hex,
 		create:     true,
@@ -192,7 +201,7 @@ func (s *synchronize) Create(sourceAddr string, sha512Hex string) {
 }
 
 func (s *synchronize) Delete(sha512Hex string) {
-	s.queueChan <- queueItem{
+	s.syncChan <- queueItem{
 		sourceAddr: nil,
 		sha512Hex:  sha512Hex,
 		create:     false,
@@ -433,7 +442,7 @@ func (s *synchronize) delete(wg *sync.WaitGroup, b block.Manager, wipeList commo
 }
 
 func (s *synchronize) deleteBlockFile(b block.Manager, fileItem common.SyncFileItem, queueRequest bool) error {
-	return b.File(fileItem.Sha512Hex, func(blockFile block.File) error {
+	return b.LockFile(fileItem.Sha512Hex, func(blockFile block.File) error {
 		if blockFile.Temporary() {
 			return nil
 		}
@@ -474,7 +483,7 @@ func (s *synchronize) create(wg *sync.WaitGroup, sourceNode cluster.DataNode, sn
 }
 
 func (s *synchronize) createBlockFile(sourceNode cluster.DataNode, snapshotTime *time.Time, b block.Manager, fileItem common.SyncFileItem, queueRequest bool) error {
-	return b.File(fileItem.Sha512Hex, func(blockFile block.File) error {
+	return b.LockFile(fileItem.Sha512Hex, func(blockFile block.File) error {
 		if !blockFile.Temporary() {
 			if blockFile.VerifyForce() {
 				if queueRequest {

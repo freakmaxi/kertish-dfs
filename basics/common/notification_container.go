@@ -1,8 +1,9 @@
 package common
 
 type NotificationContainer struct {
-	Create   bool         `json:"create"`
-	FileItem SyncFileItem `json:"fileItems"`
+	Create       bool         `json:"create"`
+	FileItem     SyncFileItem `json:"fileItems"`
+	ResponseChan chan bool    `json:"-"`
 }
 
 type NotificationContainerList []NotificationContainer
