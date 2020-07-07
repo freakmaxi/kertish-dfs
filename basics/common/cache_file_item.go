@@ -30,7 +30,7 @@ func NewCacheFileItem(clusterId string, nodeId string, fileItem SyncFileItem) *C
 		},
 		ClusterId: clusterId,
 		ExistsIn:  existsIn,
-		ExpiresAt: time.Now().UTC(),
+		ExpiresAt: time.Now().UTC().Add(cacheExpiresIn),
 	}
 }
 
