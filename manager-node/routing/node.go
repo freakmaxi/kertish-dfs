@@ -17,6 +17,7 @@ type nodeRouter struct {
 func NewNodeRouter(nodeManager manager.Node, logger *zap.Logger) Router {
 	pR := &nodeRouter{
 		manager:     nodeManager,
+		logger:      logger,
 		definitions: make([]*Definition, 0),
 	}
 	pR.setup()
