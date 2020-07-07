@@ -106,8 +106,6 @@ func (s *synchronize) getSourceDataNode(sourceAddr string) (cluster.DataNode, er
 }
 
 func (s *synchronize) processQueueItem(b block.Manager, item queueItem) {
-	fmt.Printf("%+v\n", item)
-
 	if !item.create {
 		if err := s.deleteBlockFile(b, common.SyncFileItem{Sha512Hex: item.sha512Hex}, true); err != nil {
 			s.logger.Error(
