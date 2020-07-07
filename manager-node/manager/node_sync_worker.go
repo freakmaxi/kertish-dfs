@@ -1,7 +1,6 @@
 package manager
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -87,8 +86,6 @@ func (c *nodeSyncWorker) process(sha512Hex string, nsCh <-chan nodeSync) {
 	}()
 
 	for ns := range nsCh {
-		fmt.Printf("%+v\n", ns)
-
 		for !c.processor.Sync(&ns) {
 			time.Sleep(pauseDuration)
 		}
