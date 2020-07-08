@@ -63,7 +63,7 @@ func (h *healthCheck) getDataNode(node *common.Node) (cluster2.DataNode, error) 
 	h.nodeCacheMutex.Lock()
 	defer h.nodeCacheMutex.Unlock()
 
-	dn, has := h.nodeCache[node.Id]
+	dn, has := h.nodeCache[node.Address]
 	if !has {
 		var err error
 		dn, err = cluster2.NewDataNode(node.Address)

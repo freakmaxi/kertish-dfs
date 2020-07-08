@@ -33,7 +33,7 @@ func (d *nodeSyncProcessor) get(node *common.Node) (cluster2.DataNode, error) {
 	d.nodeCacheMutex.Lock()
 	defer d.nodeCacheMutex.Unlock()
 
-	dn, has := d.nodeCache[node.Id]
+	dn, has := d.nodeCache[node.Address]
 	if !has {
 		var err error
 		dn, err = cluster2.NewDataNode(node.Address)
