@@ -73,7 +73,7 @@ func (c *create) process(reader io.Reader) (common.DataChunks, map[string]uint64
 		c.revert(successChan, errorChan)
 		close(errorChan)
 
-		return nil, nil, c.createBulkError(errorChan)
+		return nil, nil, c.createBulkError(errorChan, len(c.reservationMap.Clusters))
 	}
 	close(errorChan)
 
@@ -87,19 +87,23 @@ func (c *create) upload(wg *sync.WaitGroup, clusterMap common.ClusterMap, data [
 	clusterId, address, err := c.findClusterHandler(sha512Hex)
 	if err != nil {
 		if err == errors.ErrRemote {
-			errorChan <- fmt.Errorf(
-				"finding cluster communication problem, index: %d, clusterId: %s, error: %s",
-				clusterMap.Chunk.Starts(),
-				clusterMap.Id,
-				err,
+			errorChan <- errors.NewUploadError(
+				fmt.Sprintf(
+					"finding cluster communication problem, index: %d, clusterId: %s, error: %s",
+					clusterMap.Chunk.Starts(),
+					clusterMap.Id,
+					err,
+				),
 			)
 			return
 		}
 
 		if err == errors.ErrNoAvailableClusterNode {
-			errorChan <- fmt.Errorf(
-				"cluster is found for %s but does not have available node to create shadow",
-				sha512Hex,
+			errorChan <- errors.NewUploadError(
+				fmt.Sprintf(
+					"cluster is found for %s but does not have available node to create shadow",
+					sha512Hex,
+				),
 			)
 			return
 		}
@@ -111,24 +115,28 @@ func (c *create) upload(wg *sync.WaitGroup, clusterMap common.ClusterMap, data [
 
 	dn, err := c.dataNodeProviderHandler(address)
 	if err != nil {
-		errorChan <- fmt.Errorf(
-			"unable to get data node for creation, index: %d, clusterId: %s, address: %s, error: %s",
-			clusterMap.Chunk.Starts(),
-			clusterMap.Id,
-			address,
-			err,
+		errorChan <- errors.NewUploadError(
+			fmt.Sprintf(
+				"unable to get data node for creation, index: %d, clusterId: %s, address: %s, error: %s",
+				clusterMap.Chunk.Starts(),
+				clusterMap.Id,
+				address,
+				err,
+			),
 		)
 		return
 	}
 
 	exists, sha512Hex, err := dn.Create(data)
 	if err != nil {
-		errorChan <- fmt.Errorf(
-			"unable to create chunk, failure on data node, clusterId: %s, address: %s, sha512Hex: %s, error: %s",
-			clusterMap.Id,
-			address,
-			sha512Hex,
-			err,
+		errorChan <- errors.NewUploadError(
+			fmt.Sprintf(
+				"unable to create chunk, failure on data node, clusterId: %s, address: %s, sha512Hex: %s, error: %s",
+				clusterMap.Id,
+				address,
+				sha512Hex,
+				err,
+			),
 		)
 		return
 	}
@@ -196,13 +204,20 @@ func (c *create) revert(successChan chan *common.DataChunk, errorChan chan error
 	}
 }
 
-func (c *create) createBulkError(errorChan chan error) error {
+func (c *create) createBulkError(errorChan chan error, parallelUpload int) error {
 	bulkError := errors.NewBulkError()
 
+	uploadError := false
 	for err := range errorChan {
+		if _, converted := err.(*errors.UploadError); converted {
+			uploadError = true
+		}
 		bulkError.Add(err)
 	}
 
-	bulkError.Add(fmt.Errorf("possible zombie file or orphan chunk is appeared. repair may require"))
+	if uploadError && parallelUpload > 1 {
+		bulkError.Add(fmt.Errorf("possible zombie file or orphan chunk is appeared. repair may require"))
+	}
+
 	return bulkError
 }
