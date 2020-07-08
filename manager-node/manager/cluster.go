@@ -376,7 +376,7 @@ func (c *cluster) MoveCluster(sourceClusterId string, targetClusterId string) (e
 
 	var syncErr error
 	for sha512Hex := range sourceContainer.FileItems {
-		if !tmdn.SyncMove(sha512Hex, sourceMasterNode.Address) {
+		if tmdn.SyncMove(sha512Hex, sourceMasterNode.Address) != nil {
 			syncErr = errors.ErrSync
 		}
 	}

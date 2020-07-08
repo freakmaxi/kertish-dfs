@@ -120,12 +120,13 @@ func (d *nodeSyncProcessor) create(ns *nodeSync) {
 				return
 			}
 
-			if !dn.SyncCreate(ns.sha512Hex, ns.sourceAddr) {
+			if err := dn.SyncCreate(ns.sha512Hex, ns.sourceAddr); err != nil {
 				d.logger.Warn(
 					"Sync is unsuccessful (CREATE)",
 					zap.String("sha512Hex", ns.sha512Hex),
 					zap.String("targetNodeId", target.node.Id),
 					zap.String("sourceAddress", ns.sourceAddr),
+					zap.Error(err),
 				)
 				return
 			}
@@ -167,11 +168,12 @@ func (d *nodeSyncProcessor) delete(ns *nodeSync) {
 				return
 			}
 
-			if !dn.SyncDelete(ns.sha512Hex) {
+			if err := dn.SyncDelete(ns.sha512Hex); err != nil {
 				d.logger.Warn(
 					"Sync is unsuccessful (DELETE)",
 					zap.String("sha512Hex", ns.sha512Hex),
 					zap.String("targetNodeId", target.node.Id),
+					zap.Error(err),
 				)
 				return
 			}

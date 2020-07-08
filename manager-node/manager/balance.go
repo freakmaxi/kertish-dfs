@@ -88,7 +88,7 @@ func (b *balance) move(sha512Hex string, sourceAddress string, targetAddress str
 		return -1
 	}
 
-	if !tmdn.SyncMove(sha512Hex, sourceAddress) {
+	if tmdn.SyncMove(sha512Hex, sourceAddress) != nil {
 		return 0
 	}
 

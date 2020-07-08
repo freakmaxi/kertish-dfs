@@ -49,9 +49,9 @@ type DataNode interface {
 	Leave() bool
 	Wipe() bool
 
-	SyncCreate(sha512Hex string, sourceNodeAddr string) bool
-	SyncDelete(sha512Hex string) bool
-	SyncMove(sha512Hex string, sourceNodeAddr string) bool
+	SyncCreate(sha512Hex string, sourceNodeAddr string) error
+	SyncDelete(sha512Hex string) error
+	SyncMove(sha512Hex string, sourceNodeAddr string) error
 	SyncList(snapshotTime *time.Time) (*common.SyncContainer, error)
 	SyncFull(sourceNodeAddr string) bool
 
@@ -355,10 +355,10 @@ func (d *dataNode) Wipe() bool {
 	}) == nil
 }
 
-func (d *dataNode) SyncCreate(sha512Hex string, sourceNodeAddr string) bool {
+func (d *dataNode) SyncCreate(sha512Hex string, sourceNodeAddr string) error {
 	sha512Sum, err := hex.DecodeString(sha512Hex)
 	if err != nil {
-		return false
+		return err
 	}
 
 	return d.connect(func(conn *net.TCPConn) error {
@@ -384,13 +384,13 @@ func (d *dataNode) SyncCreate(sha512Hex string, sourceNodeAddr string) bool {
 		}
 
 		return nil
-	}) == nil
+	})
 }
 
-func (d *dataNode) SyncDelete(sha512Hex string) bool {
+func (d *dataNode) SyncDelete(sha512Hex string) error {
 	sha512Sum, err := hex.DecodeString(sha512Hex)
 	if err != nil {
-		return false
+		return err
 	}
 
 	return d.connect(func(conn *net.TCPConn) error {
@@ -407,13 +407,13 @@ func (d *dataNode) SyncDelete(sha512Hex string) bool {
 		}
 
 		return nil
-	}) == nil
+	})
 }
 
-func (d *dataNode) SyncMove(sha512Hex string, sourceNodeAddr string) bool {
+func (d *dataNode) SyncMove(sha512Hex string, sourceNodeAddr string) error {
 	sha512Sum, err := hex.DecodeString(sha512Hex)
 	if err != nil {
-		return false
+		return err
 	}
 
 	return d.connect(func(conn *net.TCPConn) error {
@@ -439,7 +439,7 @@ func (d *dataNode) SyncMove(sha512Hex string, sourceNodeAddr string) bool {
 		}
 
 		return nil
-	}) == nil
+	})
 }
 
 func (d *dataNode) SyncList(snapshotTime *time.Time) (*common.SyncContainer, error) {
