@@ -22,6 +22,7 @@ import (
 
 const commandBuffer = 4             // 4b
 const defaultTransferSpeed = 625000 // bytes/s
+const notificationWaitDuration = time.Second * 30
 
 type Commander interface {
 	Handler(net.Conn)
@@ -235,7 +236,24 @@ func (c *commander) crea(conn net.Conn) error {
 		return err
 	}
 
-	<-c.node.Notify(sha512Hex, blockUsage, blockSize, err == errors.ErrQuit, true)
+	select {
+	case <-time.After(notificationWaitDuration):
+		if err == nil {
+			c.logger.Warn(
+				fmt.Sprintf(
+					"Notification timeout is reached for %s. You may have an orphan chunk file. Repair can fix the issue",
+					sha512Hex,
+				),
+			)
+		} else {
+			c.logger.Warn(
+				fmt.Sprintf("Notification timeout is reached for %s (CREATE). System will fix it later or run cluster sync. operation for immidiate consistancy recovery.",
+					sha512Hex,
+				),
+			)
+		}
+	case <-c.node.Notify(sha512Hex, blockUsage, blockSize, err == errors.ErrQuit, true):
+	}
 
 	return err
 }
@@ -337,9 +355,26 @@ func (c *commander) dele(conn net.Conn) error {
 		return err
 	}
 
-	<-c.node.Notify(sha512Hex, blockUsage, blockSize, blockUsage > 0, false)
-
-	return nil
+	select {
+	case <-time.After(notificationWaitDuration):
+		if blockUsage == 0 {
+			c.logger.Warn(
+				fmt.Sprintf(
+					"Notification timeout is reached for %s. You may have a zombie file. Repair can fix the issue",
+					sha512Hex,
+				),
+			)
+		} else {
+			c.logger.Warn(
+				fmt.Sprintf("Notification timeout is reached for %s (DELETE). System will fix it later or run cluster sync. operation for immidiate consistancy recovery.",
+					sha512Hex,
+				),
+			)
+		}
+		return nil
+	case <-c.node.Notify(sha512Hex, blockUsage, blockSize, blockUsage > 0, false):
+		return nil
+	}
 }
 
 func (c *commander) hwid(conn net.Conn) error {
