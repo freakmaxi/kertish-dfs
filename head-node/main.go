@@ -78,7 +78,7 @@ func main() {
 		logger.Error("Mutex Setup is failed", zap.Error(err))
 		os.Exit(14)
 	}
-	m.ResetBySource(nil)
+	m.ResetBySource(&mutexSourceAddr)
 
 	conn, err := data.NewConnection(mongoConn, len(mongoTransaction) > 0)
 	if err != nil {
