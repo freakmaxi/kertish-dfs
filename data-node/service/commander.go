@@ -236,6 +236,8 @@ func (c *commander) crea(conn net.Conn) error {
 		return err
 	}
 
+	_ = conn.SetDeadline(time.Now().Add(notificationWaitDuration * 2))
+
 	select {
 	case <-time.After(notificationWaitDuration):
 		if err == nil {
@@ -354,6 +356,8 @@ func (c *commander) dele(conn net.Conn) error {
 		}
 		return err
 	}
+
+	_ = conn.SetDeadline(time.Now().Add(notificationWaitDuration * 2))
 
 	select {
 	case <-time.After(notificationWaitDuration):
