@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -86,9 +85,10 @@ func (n *node) channelHandler() {
 
 			for _, nc := range failedList {
 				if _, has := n.nextProcessList[nc.FileItem.Sha512Hex]; has {
+					nc.ResponseChan <- true
 					continue
 				}
-				n.nextProcessList[nc.FileItem.Sha512Hex] = &nc
+				n.nextProcessList[nc.FileItem.Sha512Hex] = nc
 			}
 			continue
 		case nc, more := <-n.notificationChan:
@@ -118,7 +118,7 @@ func (n *node) createBulkGroup() []common.NotificationContainerList {
 			bulkGroups = append(bulkGroups, notificationContainerList)
 			notificationContainerList = make(common.NotificationContainerList, 0)
 		}
-		notificationContainerList = append(notificationContainerList, *nc)
+		notificationContainerList = append(notificationContainerList, nc)
 	}
 
 	if len(notificationContainerList) > 0 {
@@ -143,23 +143,27 @@ func (n *node) notifyBulk() {
 			case *common.NotificationError:
 				failedList := et.ContainerList()
 
-				if failedList != nil && len(failedList) > 0 {
-					// TODO: get rid of this bullshit code
-					for _, nc := range notificationContainerList {
-						exists := false
-						for _, f := range failedList {
-							if strings.Compare(nc.FileItem.Sha512Hex, f.FileItem.Sha512Hex) == 0 {
-								exists = true
-								break
-							}
-						}
-						if !exists {
-							nc.ResponseChan <- true
-						}
-					}
-
-					n.failureChan <- failedList
+				if failedList == nil || len(failedList) == 0 {
+					break
 				}
+
+				failedListMap := make(map[string]bool)
+				for _, f := range failedList {
+					failedListMap[f.FileItem.Sha512Hex] = true
+				}
+
+				failedNotificationContainerList := make(common.NotificationContainerList, 0)
+
+				for _, nc := range notificationContainerList {
+					if _, has := failedListMap[nc.FileItem.Sha512Hex]; !has {
+						nc.ResponseChan <- true
+						continue
+					}
+					failedNotificationContainerList = append(failedNotificationContainerList, nc)
+				}
+
+				n.failureChan <- failedNotificationContainerList
+				return
 			}
 		}
 

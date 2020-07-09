@@ -6,7 +6,7 @@ type NotificationContainer struct {
 	ResponseChan chan bool    `json:"-"`
 }
 
-type NotificationContainerList []NotificationContainer
+type NotificationContainerList []*NotificationContainer
 
 func (n NotificationContainerList) ExportFileItemList() SyncFileItemList {
 	fileItemList := make(SyncFileItemList, 0)
