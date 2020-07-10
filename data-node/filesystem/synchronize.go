@@ -174,14 +174,14 @@ func (s *synchronize) iterateFileItems(dataPath string, headerMap HeaderMap, ite
 				return err
 			}
 
-			usage, has := headerMap[info.Name()]
+			usage, has := headerMap[file.Id()]
 			if !has {
 				usage = file.Usage()
 			}
 
 			return itemHandler(
 				&common.SyncFileItem{
-					Sha512Hex: info.Name(),
+					Sha512Hex: file.Id(),
 					Usage:     usage,
 					Size:      size,
 				},
@@ -368,13 +368,13 @@ func (s *synchronize) syncSnapshots(sourceNode cluster.DataNode, sourceContainer
 		sourceSnapshot := sourceContainer.Snapshots[0]
 
 		if currentSnapshot.Equal(sourceSnapshot) {
-			targetContainer, err := sourceNode.SyncList(&sourceSnapshot)
+			sourceContainer, err := sourceNode.SyncList(&sourceSnapshot)
 			if err != nil {
 				s.logger.Error("request for snapshot sync list is failed", zap.Error(err))
 				return
 			}
 
-			if err = s.syncFileItems(sourceNode, &sourceSnapshot, targetContainer.FileItems); err != nil {
+			if err = s.syncFileItems(sourceNode, &sourceSnapshot, sourceContainer.FileItems); err != nil {
 				return
 			}
 
