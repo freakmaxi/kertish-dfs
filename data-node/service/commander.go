@@ -610,33 +610,30 @@ func (c *commander) syls(conn net.Conn) error {
 		})
 	}
 
-	var snapshots common.Snapshots
-	if err := c.fs.Snapshot(func(snapshot filesystem.Snapshot) error {
-		var err error
-		snapshots, err = snapshot.Dates()
-		return err
-	}); err != nil {
-		return err
-	}
-
-	if err := c.writeWithTimeout(conn, []byte{'+'}); err != nil {
-		return err
-	}
-
-	snapshotsLength := uint64(len(snapshots))
-	if err := c.writeBinaryWithTimeout(conn, snapshotsLength); err != nil {
-		return err
-	}
-
-	for _, snapshot := range snapshots {
-		var snapshotTimeUint uint64
-		_ = c.fs.Snapshot(func(s filesystem.Snapshot) error {
-			snapshotTimeUint = s.ToUint(snapshot)
-			return nil
-		})
-		if err := c.writeBinaryWithTimeout(conn, snapshotTimeUint); err != nil {
+	if err := c.fs.Snapshot(func(s filesystem.Snapshot) error {
+		snapshots, err := s.Dates()
+		if err != nil {
 			return err
 		}
+
+		if err := c.writeWithTimeout(conn, []byte{'+'}); err != nil {
+			return err
+		}
+
+		snapshotsLength := uint64(len(snapshots))
+		if err := c.writeBinaryWithTimeout(conn, snapshotsLength); err != nil {
+			return err
+		}
+
+		for _, snapshot := range snapshots {
+			if err := c.writeBinaryWithTimeout(conn, s.ToUint(snapshot)); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	if err := c.fs.Sync(func(sync filesystem.Synchronize) error {
