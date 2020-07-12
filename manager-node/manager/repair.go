@@ -3,6 +3,8 @@ package manager
 import (
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
@@ -124,16 +126,44 @@ func (r *repair) repairStructure() error {
 }
 
 func (r *repair) repairIntegrity() error {
-	r.logger.Info("Integrity repairing requires cluster synchronisation.")
-
 	clusters, err := r.clusters.GetAll()
 	if err != nil {
 		return err
 	}
 
-	syncFailure := false
+	r.logger.Info("Integrity repairing requires cluster synchronisation.")
+
+	r.metadata.Lock()
+
+	clusterIndexMap, err := r.createClusterIndexMap(clusters)
+	if err != nil {
+		return err
+	}
 
 	clusterMap := make(map[string]*common.Cluster)
+
+	for _, cluster := range clusters {
+		clusterMap[cluster.Id] = cluster
+	}
+
+	r.logger.Info("Phase 1: Repairing metadata usage alignment...")
+	if err := r.repairIntegrityPhase1(clusterIndexMap, clusterMap); err != nil {
+		return err
+	}
+
+	r.metadata.Unlock()
+
+	r.logger.Info("Phase 2: Repairing metadata chunk integrity...")
+	if err := r.repairIntegrityPhase2(clusterIndexMap, clusterMap); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *repair) createClusterIndexMap(clusters common.Clusters) (map[string]map[string]string, error) {
+	syncFailure := false
+
 	clusterIndexMap := make(map[string]map[string]string)
 
 	mapMutex := sync.Mutex{}
@@ -143,17 +173,9 @@ func (r *repair) repairIntegrity() error {
 
 		clusterIndexMap[clusterId] = indexMap
 	}
-	deleteFromIndexMapFunc := func(clusterId string, sha512Hex string) {
-		mapMutex.Lock()
-		defer mapMutex.Unlock()
-
-		delete(clusterIndexMap[clusterId], sha512Hex)
-	}
 
 	wg := &sync.WaitGroup{}
 	for _, cluster := range clusters {
-		clusterMap[cluster.Id] = cluster
-
 		wg.Add(1)
 		go func(wg *sync.WaitGroup, clusterId string) {
 			defer wg.Done()
@@ -184,7 +206,178 @@ func (r *repair) repairIntegrity() error {
 	wg.Wait()
 
 	if syncFailure {
-		return errors.ErrSync
+		return nil, errors.ErrSync
+	}
+
+	return clusterIndexMap, nil
+}
+
+func (r *repair) repairIntegrityPhase1(clusterIndexMap map[string]map[string]string, clusterMap map[string]*common.Cluster) error {
+	indexUsageMap := make(map[string]string)
+
+	r.logger.Info("Normalizing cluster indices")
+
+	// Normalize
+	for _, chunkIndexMap := range clusterIndexMap {
+		for sha512Hex, indexValue := range chunkIndexMap {
+			indexUsageMap[sha512Hex] = indexValue
+		}
+	}
+
+	metadataUsageMapMutex := sync.Mutex{}
+	metadataUsageMap := make(map[string]uint16)
+	increaseUsageMapFunc := func(sha512Hex string) {
+		metadataUsageMapMutex.Lock()
+		defer metadataUsageMapMutex.Unlock()
+
+		if _, has := metadataUsageMap[sha512Hex]; !has {
+			metadataUsageMap[sha512Hex] = 0
+		}
+		metadataUsageMap[sha512Hex]++
+	}
+
+	r.logger.Info("Start traversing metadata entries for usage alignment cache")
+
+	if err := r.metadata.Cursor(func(folder *common.Folder) (bool, error) {
+		if len(folder.Files) == 0 {
+			return false, nil
+		}
+
+		for _, file := range folder.Files {
+			for _, chunk := range file.Chunks {
+				increaseUsageMapFunc(chunk.Hash)
+			}
+
+			// Cache missing hashes in case of index matching
+			for _, chunk := range file.Missing {
+				increaseUsageMapFunc(chunk.Hash)
+			}
+		}
+
+		return false, nil
+	}, parallelRepair); err != nil {
+		return err
+	}
+
+	r.logger.Info("Examine usages of metadata entries with data nodes")
+
+	mismatchedUsageMap := make(map[string]map[string]uint16)
+
+	for sha512Hex, metadataUsage := range metadataUsageMap {
+		indexValue, has := indexUsageMap[sha512Hex]
+		if !has {
+			r.logger.Warn(
+				fmt.Sprintf("Found a possible zombie file (%s), phase 2 may fix...", sha512Hex),
+				zap.String("sha512Hex", sha512Hex),
+			)
+			continue
+		}
+
+		pipeIdx := strings.Index(indexValue, "|")
+		if pipeIdx == -1 {
+			return fmt.Errorf("faulty index entry for %s", sha512Hex)
+		}
+
+		indexUsage, err := strconv.ParseUint(indexValue[pipeIdx+1:], 10, 16)
+		if err != nil {
+			return err
+		}
+
+		if metadataUsage == uint16(indexUsage) {
+			continue
+		}
+
+		indexClusterId := indexValue[:pipeIdx]
+		cluster, has := clusterMap[indexClusterId]
+		if !has {
+			r.logger.Error(
+				"Metadata chunk is registered but cluster does not exists.",
+				zap.String("sha512Hex", sha512Hex),
+				zap.String("clusterId", indexClusterId),
+			)
+			continue
+		}
+
+		if _, has := mismatchedUsageMap[cluster.Id]; !has {
+			mismatchedUsageMap[cluster.Id] = make(map[string]uint16)
+		}
+		mismatchedUsageMap[cluster.Id][sha512Hex] = metadataUsage
+
+		r.logger.Warn(
+			fmt.Sprintf("Found mismatching usage for %s, expected: %d, found: %d", sha512Hex, metadataUsage, indexUsage),
+			zap.String("sha512Hex", sha512Hex),
+			zap.Uint16("metadataUsage", metadataUsage),
+			zap.Uint16("indexUsage", uint16(indexUsage)),
+		)
+	}
+
+	if len(mismatchedUsageMap) == 0 {
+		r.logger.Info("Metadata and data nodes are perfectly aligned, nothing to do here...")
+		return nil
+	}
+
+	r.logger.Info("Start usage resetting on clusters")
+
+	// Make Chunk Usage Update
+	errCh := make(chan error, len(mismatchedUsageMap))
+	wg := &sync.WaitGroup{}
+	for clusterId, usageMap := range mismatchedUsageMap {
+		masterNode := clusterMap[clusterId].Master()
+
+		wg.Add(1)
+		go r.fixUsage(wg, clusterId, masterNode, usageMap, errCh)
+	}
+	wg.Wait()
+	close(errCh)
+
+	if len(errCh) > 0 {
+		bulkError := errors.NewBulkError()
+		for err := range errCh {
+			bulkError.Add(err)
+		}
+		bulkError.Add(fmt.Errorf("resetting usage is failed"))
+		return bulkError
+	}
+
+	return nil
+}
+
+func (r *repair) fixUsage(wg *sync.WaitGroup, clusterId string, masterNode *common.Node, usageMap map[string]uint16, errCh chan error) {
+	defer wg.Done()
+
+	mdn, err := cluster2.NewDataNode(masterNode.Address)
+	if err != nil {
+		r.logger.Error(
+			"Unable to make connection to master data node for usage reset",
+			zap.String("clusterId", clusterId),
+			zap.String("nodeId", masterNode.Id),
+			zap.String("nodeAddress", masterNode.Address),
+			zap.Error(err),
+		)
+		errCh <- err
+		return
+	}
+
+	if err := mdn.SyncUsage(usageMap); err != nil {
+		r.logger.Error(
+			"Resetting usage on master data node is failed",
+			zap.String("clusterId", clusterId),
+			zap.String("nodeId", masterNode.Id),
+			zap.String("nodeAddress", masterNode.Address),
+			zap.Error(err),
+		)
+		errCh <- err
+		return
+	}
+}
+
+func (r *repair) repairIntegrityPhase2(clusterIndexMap map[string]map[string]string, clusterMap map[string]*common.Cluster) error {
+	clusterIndexMapMutex := sync.Mutex{}
+	deleteFromIndexMapFunc := func(clusterId string, sha512Hex string) {
+		clusterIndexMapMutex.Lock()
+		defer clusterIndexMapMutex.Unlock()
+
+		delete(clusterIndexMap[clusterId], sha512Hex)
 	}
 
 	r.logger.Info("Start traversing metadata entries for integrity check up")
@@ -255,6 +448,7 @@ func (r *repair) repairIntegrity() error {
 	r.logger.Info("Start orphan chunk cleanup on clusters")
 
 	// Make Orphan File Chunk Cleanup
+	wg := &sync.WaitGroup{}
 	for clusterId, indexMap := range clusterIndexMap {
 		masterNode := clusterMap[clusterId].Master()
 

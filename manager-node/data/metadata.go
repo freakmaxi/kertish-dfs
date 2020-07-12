@@ -20,6 +20,9 @@ import (
 type Metadata interface {
 	Cursor(folderHandler func(folder *common.Folder) (bool, error), parallelSize uint8) error
 	LockTree(folderHandler func(folders []*common.Folder) ([]*common.Folder, error)) error
+
+	Lock()
+	Unlock()
 }
 
 const metadataCollection = "metadata"
@@ -108,9 +111,15 @@ func (m *metadata) updateOne(parentContext context.Context, folder common.Folder
 	return err
 }
 
-func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error), parallelSize uint8) error {
-	m.mutex.Wait(metadataLockKey)
+func (m *metadata) Lock() {
+	m.mutex.Lock(metadataLockKey)
+}
 
+func (m *metadata) Unlock() {
+	m.mutex.Unlock(metadataLockKey)
+}
+
+func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error), parallelSize uint8) error {
 	semaphoreChan := make(chan bool, parallelSize)
 	for i := 0; i < cap(semaphoreChan); i++ {
 		semaphoreChan <- true

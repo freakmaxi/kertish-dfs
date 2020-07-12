@@ -145,6 +145,8 @@ func (c *commander) process(command string, conn net.Conn) error {
 		return c.syls(conn)
 	case "SYFL":
 		return c.syfl(conn)
+	case "SYUS":
+		return c.syus(conn)
 	case "SSCR":
 		return c.sscr()
 	case "SSDE":
@@ -695,6 +697,34 @@ func (c *commander) syfl(conn net.Conn) error {
 	c.cache.Invalidate()
 
 	return nil
+}
+
+func (c *commander) syus(conn net.Conn) error {
+	for {
+		sha512Hex, err := c.hashAsHex(conn)
+		if err != nil {
+			return err
+		}
+
+		if strings.Compare(sha512Hex, common.NullSha512Hex) == 0 {
+			return nil
+		}
+
+		var usage uint16
+		if err := c.readBinaryWithTimeout(conn, &usage); err != nil {
+			return err
+		}
+
+		if err := c.fs.Block().LockFile(sha512Hex, func(blockFile block.File) error {
+			return blockFile.ResetUsage(usage)
+		}); err != nil {
+			return err
+		}
+
+		if err := c.writeWithTimeout(conn, []byte("+")); err != nil {
+			return err
+		}
+	}
 }
 
 func (c *commander) sscr() error {

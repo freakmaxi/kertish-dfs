@@ -28,6 +28,7 @@ const (
 	commandSyncMove        = "SYMV"
 	commandSyncList        = "SYLS"
 	commandSyncFull        = "SYFL"
+	commandSyncUsage       = "SYUS"
 	commandSnapshotCreate  = "SSCR"
 	commandSnapshotDelete  = "SSDE"
 	commandSnapshotRestore = "SSRS"
@@ -54,6 +55,7 @@ type DataNode interface {
 	SyncMove(sha512Hex string, sourceNodeAddr string) error
 	SyncList(snapshotTime *time.Time) (*common.SyncContainer, error)
 	SyncFull(sourceNodeAddr string) bool
+	SyncUsage(usageMap map[string]uint16) error
 
 	SnapshotCreate() bool
 	SnapshotDelete(snapshotIndex uint64) bool
@@ -543,6 +545,46 @@ func (d *dataNode) SyncFull(sourceNodeAddr string) bool {
 
 		return nil
 	}) == nil
+}
+
+func (d *dataNode) SyncUsage(usageMap map[string]uint16) error {
+	return d.connect(func(conn *net.TCPConn) error {
+		if _, err := conn.Write([]byte(commandSyncUsage)); err != nil {
+			return err
+		}
+
+		for sha512Hex, usage := range usageMap {
+			sha512Sum, err := hex.DecodeString(sha512Hex)
+			if err != nil {
+				return err
+			}
+			if _, err := conn.Write(sha512Sum); err != nil {
+				return err
+			}
+
+			if err := binary.Write(conn, binary.LittleEndian, usage); err != nil {
+				return err
+			}
+
+			if !d.result(conn) {
+				return fmt.Errorf("sync usage command is failed on data node")
+			}
+		}
+
+		sha512Sum, err := hex.DecodeString(common.NullSha512Hex)
+		if err != nil {
+			return err
+		}
+		if _, err := conn.Write(sha512Sum); err != nil {
+			return err
+		}
+
+		if !d.result(conn) {
+			return fmt.Errorf("sync usage command is failed on data node")
+		}
+
+		return nil
+	})
 }
 
 func (d *dataNode) SnapshotCreate() bool {
