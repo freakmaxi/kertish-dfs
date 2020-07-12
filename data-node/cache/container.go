@@ -1,11 +1,14 @@
 package cache
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
 	"go.uber.org/zap"
 )
+
+const autoReportDuration = time.Minute
 
 type Container interface {
 	Query(sha512Hex string) []byte
@@ -55,7 +58,9 @@ func NewContainer(limit uint64, lifetime time.Duration, logger *zap.Logger) Cont
 	if limit == 0 {
 		return container
 	}
+
 	container.start()
+	container.autoReport()
 
 	return container
 }
@@ -69,6 +74,30 @@ func (c *container) start() {
 			c.logger.Info("Purging Cache...")
 			c.Purge()
 			c.logger.Info("Cache Purging is completed")
+		}
+	}()
+}
+
+func (c *container) autoReport() {
+	limit := c.limit / (1024 * 1024)
+
+	usageBackup := uint64(0)
+	freeBackup := uint64(0)
+
+	go func() {
+		for {
+			usage := c.usage / (1024 * 1024)
+			free := c.limit - c.usage
+			free /= 1024 * 1024
+
+			if usageBackup != usage || freeBackup != free {
+				c.logger.Info(fmt.Sprintf("Data Node Memory: %dM Used, %dM Free, %dM Total", usage, free, limit))
+
+				usageBackup = usage
+				freeBackup = free
+			}
+
+			time.Sleep(autoReportDuration)
 		}
 	}()
 }
