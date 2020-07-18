@@ -143,7 +143,7 @@ Default: `false`
 - `500`: Operational failures
 - `503`: Not available for reservation (Frozen or Paralysed cluster/node)
 - `524`: Zombie file or folder has zombie file(s)
-- `200`: Accepted
+- `200`: Successful
 ---
 - `DELETE` is used to delete folders/files in file storage.
 **CAUTION: Deletion operation is applied immediately**
@@ -161,5 +161,5 @@ Default: `false`
 - `524`: Zombie file or folder has zombie file(s)
 - `525`: Zombie file or folder is still alive, try again to kill
 - `526`: Require consistency repair
-- `200`: Accepted
+- `200`: Successful
 
