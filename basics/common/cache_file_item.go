@@ -66,24 +66,6 @@ func (c *CacheFileItem) Export() map[string]string {
 	return export
 }
 
-func (c *CacheFileItem) KeyValues() []string {
-	keyValues := make([]string, 0)
-	for k, v := range c.Export() {
-		keyValues = append(keyValues, k)
-		keyValues = append(keyValues, v)
-	}
-	return keyValues
-}
-
-func (c *CacheFileItem) NodesKeyValues() []string {
-	keyValues := make([]string, 0)
-	for k, v := range c.ExistsIn {
-		keyValues = append(keyValues, k)
-		keyValues = append(keyValues, strconv.FormatBool(v))
-	}
-	return keyValues
-}
-
 func (c *CacheFileItem) Expired() bool {
 	return time.Now().UTC().After(c.ExpiresAt)
 }

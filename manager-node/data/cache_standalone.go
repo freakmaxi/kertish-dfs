@@ -70,24 +70,20 @@ func (r cacheStandalone) HGetAll(key string) (map[string]string, error) {
 }
 
 func (r cacheStandalone) HMSet(key string, values map[string]string) error {
-	args := make([]string, 0)
-	args = append(args, key)
+	commands := make([]radix.CmdAction, 0)
 	for k, v := range values {
-		args = append(args, k)
-		args = append(args, v)
-
-		if len(args) > multiSetStepLimit {
-			if err := r.client.Do(radix.Cmd(nil, "HMSET", args...)); err != nil {
+		commands = append(commands, radix.Cmd(nil, "HSET", key, k, v))
+		if len(commands) > multiSetStepLimit {
+			if err := r.Pipeline(commands); err != nil {
 				return err
 			}
-			args = make([]string, 0)
-			args = append(args, key)
+			commands = make([]radix.CmdAction, 0)
 		}
 	}
-	if len(args) == 1 {
+	if len(commands) == 0 {
 		return nil
 	}
-	return r.client.Do(radix.Cmd(nil, "HMSET", args...))
+	return r.Pipeline(commands)
 }
 
 func (r cacheStandalone) Pipeline(commands []radix.CmdAction) error {

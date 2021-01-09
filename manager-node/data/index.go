@@ -71,19 +71,15 @@ func (i *index) replaceCommand(item *common.CacheFileItem) []radix.CmdAction {
 
 	commands := make([]radix.CmdAction, 0)
 
-	chunkArgs := make([]string, 0)
-	chunkArgs = append(chunkArgs, chunkKey)
-	chunkArgs = append(chunkArgs, item.KeyValues()...)
-
-	commands = append(commands, radix.Cmd(nil, "HMSET", chunkArgs...))
+	for k, v := range item.Export() {
+		commands = append(commands, radix.Cmd(nil, "HSET", chunkKey, k, v))
+	}
 	commands = append(commands,
 		radix.Cmd(nil, "EXPIREAT", chunkKey, strconv.FormatInt(item.ExpiresAt.Unix(), 10)))
 
-	chunkNodeArgs := make([]string, 0)
-	chunkNodeArgs = append(chunkNodeArgs, chunkNodesKey)
-	chunkNodeArgs = append(chunkNodeArgs, item.NodesKeyValues()...)
-
-	commands = append(commands, radix.Cmd(nil, "HMSET", chunkNodeArgs...))
+	for k, v := range item.ExistsIn {
+		commands = append(commands, radix.Cmd(nil, "HSET", chunkNodesKey, k, strconv.FormatBool(v)))
+	}
 	commands = append(commands,
 		radix.Cmd(nil, "EXPIREAT", chunkNodesKey, strconv.FormatInt(item.ExpiresAt.Unix(), 10)))
 
