@@ -84,6 +84,19 @@ func main() {
 	redisPassword := os.Getenv("REDIS_PASSWORD")
 	logger.Info(fmt.Sprintf("REDIS_PASSWORD: %t", len(redisPassword) > 0))
 
+	redisTimeoutString := os.Getenv("REDIS_TIMEOUT")
+	if len(redisTimeoutString) == 0 {
+		redisTimeoutString = "10"
+	}
+	redisTimeout, err := strconv.ParseUint(redisTimeoutString, 10, 64)
+	if err != nil || redisTimeout < 0 {
+		logger.Error("Redis timeout value is wrong", zap.Error(err))
+		os.Exit(12)
+	}
+	if redisTimeout > 0 {
+		logger.Info(fmt.Sprintf("REDIS_TIMEOUT: %s second(s)", redisTimeoutString))
+	}
+
 	redisClusterMode := os.Getenv("REDIS_CLUSTER_MODE")
 	logger.Info(fmt.Sprintf("REDIS_CLUSTER_MODE: %t", len(redisClusterMode) > 0))
 
@@ -115,9 +128,9 @@ func main() {
 
 	var cacheClient data.CacheClient
 	if len(redisClusterMode) == 0 {
-		cacheClient, err = data.NewCacheStandaloneClient(redisConn, redisPassword)
+		cacheClient, err = data.NewCacheStandaloneClient(redisConn, redisPassword, redisTimeout)
 	} else {
-		cacheClient, err = data.NewCacheClusterClient(strings.Split(redisConn, ","), redisPassword)
+		cacheClient, err = data.NewCacheClusterClient(strings.Split(redisConn, ","), redisPassword, redisTimeout)
 	}
 	if err != nil {
 		logger.Error("Cache Client Setup is failed", zap.Error(err))

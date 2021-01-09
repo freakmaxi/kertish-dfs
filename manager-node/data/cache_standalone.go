@@ -1,17 +1,22 @@
 package data
 
-import "github.com/mediocregopher/radix/v3"
+import (
+	"time"
+
+	"github.com/mediocregopher/radix/v3"
+)
 
 type cacheStandalone struct {
 	client *radix.Pool
 }
 
-func NewCacheStandaloneClient(address string, password string) (CacheClient, error) {
+func NewCacheStandaloneClient(address string, password string, timeout uint64) (CacheClient, error) {
 	connFunc := func(network string, addr string) (radix.Conn, error) {
 		return radix.Dial(
 			network,
 			addr,
 			radix.DialAuthPass(password),
+			radix.DialTimeout(time.Duration(timeout)*time.Second),
 		)
 	}
 	client, err := radix.NewPool("tcp", address, 10, radix.PoolConnFunc(connFunc))

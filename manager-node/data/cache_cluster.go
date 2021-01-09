@@ -1,17 +1,22 @@
 package data
 
-import "github.com/mediocregopher/radix/v3"
+import (
+	"time"
+
+	"github.com/mediocregopher/radix/v3"
+)
 
 type cacheCluster struct {
 	cluster *radix.Cluster
 }
 
-func NewCacheClusterClient(addresses []string, password string) (CacheClient, error) {
+func NewCacheClusterClient(addresses []string, password string, timeout uint64) (CacheClient, error) {
 	connFunc := func(network string, addr string) (radix.Conn, error) {
 		return radix.Dial(
 			network,
 			addr,
 			radix.DialAuthPass(password),
+			radix.DialTimeout(time.Duration(timeout)*time.Second),
 		)
 	}
 	poolFunc := func(network, addr string) (radix.Client, error) {
