@@ -2,7 +2,7 @@ package data
 
 import "github.com/mediocregopher/radix/v3"
 
-const multiSetStepLimit = 50000
+const multiSetStepLimit = 5000
 
 type CacheClient interface {
 	Del(keys ...string) error
