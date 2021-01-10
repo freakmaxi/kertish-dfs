@@ -86,10 +86,10 @@ func main() {
 
 	redisTimeoutString := os.Getenv("REDIS_TIMEOUT")
 	if len(redisTimeoutString) == 0 {
-		redisTimeoutString = "10"
+		redisTimeoutString = "0"
 	}
 	redisTimeout, err := strconv.ParseUint(redisTimeoutString, 10, 64)
-	if err != nil || redisTimeout < 0 {
+	if err != nil {
 		logger.Error("Redis timeout value is wrong", zap.Error(err))
 		os.Exit(12)
 	}

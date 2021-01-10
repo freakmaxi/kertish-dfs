@@ -12,12 +12,14 @@ type cacheCluster struct {
 
 func NewCacheClusterClient(addresses []string, password string, timeout uint64) (CacheClient, error) {
 	connFunc := func(network string, addr string) (radix.Conn, error) {
-		return radix.Dial(
-			network,
-			addr,
-			radix.DialAuthPass(password),
-			radix.DialTimeout(time.Duration(timeout)*time.Second),
-		)
+		opts := make([]radix.DialOpt, 0)
+		if len(password) != 0 {
+			opts = append(opts, radix.DialAuthPass(password))
+		}
+		if timeout > 0 {
+			opts = append(opts, radix.DialTimeout(time.Duration(timeout)*time.Second))
+		}
+		return radix.Dial(network, addr, opts...)
 	}
 	poolFunc := func(network, addr string) (radix.Client, error) {
 		return radix.NewPool(network, addr, 10, radix.PoolConnFunc(connFunc))
