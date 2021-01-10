@@ -182,6 +182,13 @@ func (s *synchronize) startSync(clusterId string, force bool, keepFrozen bool, w
 	)
 
 	if err := s.index.DropMap(clusterId); err != nil {
+		s.logger.Error(
+			"Index drop error",
+			zap.String("clusterId", clusterId),
+			zap.String("nodeId", masterNode.Id),
+			zap.String("nodeAddress", masterNode.Address),
+			zap.Error(err),
+		)
 		return errors.ErrSync
 	}
 
