@@ -13,7 +13,7 @@ import (
 	"github.com/mediocregopher/radix/v3"
 )
 
-const bulkOperationLimit = 50000
+const bulkOperationLimit = 5000
 const semaphoreLimit = 10
 
 type Index interface {
