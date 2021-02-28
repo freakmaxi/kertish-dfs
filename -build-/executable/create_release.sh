@@ -7,7 +7,9 @@ echo "Creating folders..."
 mkdir releases
 mkdir -p releases/linux/arm64
 mkdir -p releases/linux/amd64
+mkdir -p releases/macosx/arm64
 mkdir -p releases/macosx/amd64
+mkdir -p releases/windows/arm64
 mkdir -p releases/windows/amd64
 
 major=$(date +%y)
@@ -21,6 +23,8 @@ echo "  > compiling linux arm64 release"
 GOOS=linux GOARCH=arm64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/linux/arm64/kertish-dfs
 echo "  > compiling linux amd64 release"
 GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/linux/amd64/kertish-dfs
+echo "  > compiling macosx arm64 release"
+GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/macosx/arm64/kertish-dfs
 echo "  > compiling macosx amd64 release"
 GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/macosx/amd64/kertish-dfs
 echo "  > compiling windows amd64 release"
@@ -33,6 +37,8 @@ echo "  > compiling linux arm64 release"
 GOOS=linux GOARCH=arm64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/linux/arm64/kertish-admin
 echo "  > compiling linux amd64 release"
 GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/linux/amd64/kertish-admin
+echo "  > compiling macosx arm64 release"
+GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/macosx/arm64/kertish-admin
 echo "  > compiling macosx amd64 release"
 GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/macosx/amd64/kertish-admin
 echo "  > compiling windows amd64 release"
@@ -45,6 +51,8 @@ echo "  > compiling linux arm64 release"
 GOOS=linux GOARCH=arm64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/linux/arm64/kertish-manager
 echo "  > compiling linux amd64 release"
 GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/linux/amd64/kertish-manager
+echo "  > compiling macosx arm64 release"
+GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/macosx/arm64/kertish-manager
 echo "  > compiling macosx amd64 release"
 GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/macosx/amd64/kertish-manager
 
@@ -55,6 +63,8 @@ echo "  > compiling linux arm64 release"
 GOOS=linux GOARCH=arm64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/linux/arm64/kertish-head
 echo "  > compiling linux amd64 release"
 GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/linux/amd64/kertish-head
+echo "  > compiling macosx arm64 release"
+GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/macosx/arm64/kertish-head
 echo "  > compiling macosx amd64 release"
 GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/macosx/amd64/kertish-head
 
@@ -65,5 +75,7 @@ echo "  > compiling linux arm64 release"
 GOOS=linux GOARCH=arm64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/linux/arm64/kertish-data
 echo "  > compiling linux amd64 release"
 GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/linux/amd64/kertish-data
+echo "  > compiling macosx arm64 release"
+GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/macosx/arm64/kertish-data
 echo "  > compiling macosx amd64 release"
 GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/macosx/amd64/kertish-data
