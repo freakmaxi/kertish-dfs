@@ -1,8 +1,11 @@
 package manager
 
 import (
+	"crypto/sha512"
+	"encoding/hex"
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,9 +22,10 @@ const parallelRepair = 10
 type RepairType int
 
 const (
-	RT_Full      RepairType = 1
-	RT_Structure RepairType = 2
-	RT_Integrity RepairType = 3
+	RT_Full        RepairType = 1
+	RT_Structure   RepairType = 2
+	RT_IntegrityL1 RepairType = 3
+	RT_IntegrityL2 RepairType = 4
 )
 
 type Repair interface {
@@ -71,8 +75,10 @@ func (r *repair) Start(repairType RepairType) error {
 		switch repairType {
 		case RT_Structure:
 			zapRepairType = zap.String("repairType", "structure")
-		case RT_Integrity:
+		case RT_IntegrityL1:
 			zapRepairType = zap.String("repairType", "integrity")
+		case RT_IntegrityL2:
+			zapRepairType = zap.String("repairType", "integrity with checksum calculation")
 		}
 		r.logger.Info("Consistency repair is started...", zapRepairType)
 
@@ -90,7 +96,7 @@ func (r *repair) Start(repairType RepairType) error {
 
 func (r *repair) start(repairType RepairType) error {
 	repairStructure := repairType == RT_Full || repairType == RT_Structure
-	repairIntegrity := repairType == RT_Full || repairType == RT_Integrity
+	repairIntegrity := repairType == RT_Full || repairType == RT_IntegrityL1 || repairType == RT_IntegrityL2
 
 	if repairStructure {
 		r.logger.Info("Repairing metadata structure consistency...")
@@ -102,7 +108,7 @@ func (r *repair) start(repairType RepairType) error {
 
 	if repairIntegrity {
 		r.logger.Info("Repairing metadata integrity...")
-		if err := r.repairIntegrity(); err != nil {
+		if err := r.repairIntegrity(repairType == RT_IntegrityL2); err != nil {
 			return err
 		}
 		r.logger.Info("Metadata integrity repair is completed")
@@ -125,7 +131,7 @@ func (r *repair) repairStructure() error {
 	})
 }
 
-func (r *repair) repairIntegrity() error {
+func (r *repair) repairIntegrity(calculateChecksum bool) error {
 	clusters, err := r.clusters.GetAll()
 	if err != nil {
 		return err
@@ -154,7 +160,7 @@ func (r *repair) repairIntegrity() error {
 	r.metadata.Unlock()
 
 	r.logger.Info("Phase 2: Repairing metadata chunk integrity...")
-	if err := r.repairIntegrityPhase2(clusterIndexMap, clusterMap); err != nil {
+	if err := r.repairIntegrityPhase2(calculateChecksum, clusterIndexMap, clusterMap); err != nil {
 		return err
 	}
 
@@ -371,7 +377,7 @@ func (r *repair) fixUsage(wg *sync.WaitGroup, clusterId string, masterNode *comm
 	}
 }
 
-func (r *repair) repairIntegrityPhase2(clusterIndexMap map[string]map[string]string, clusterMap map[string]*common.Cluster) error {
+func (r *repair) repairIntegrityPhase2(calculateChecksum bool, clusterIndexMap map[string]map[string]string, clusterMap map[string]*common.Cluster) error {
 	clusterIndexMapMutex := sync.Mutex{}
 	deleteFromIndexMapFunc := func(clusterId string, sha512Hex string) {
 		clusterIndexMapMutex.Lock()
@@ -404,7 +410,9 @@ func (r *repair) repairIntegrityPhase2(clusterIndexMap map[string]map[string]str
 			}
 
 			deletionResult := common.NewDeletionResult()
+			sha512Hash := sha512.New512_256()
 
+			sort.Sort(file.Chunks)
 			for _, chunk := range file.Chunks {
 				cacheFileItem, err := r.index.Get(chunk.Hash)
 				if err != nil {
@@ -426,6 +434,41 @@ func (r *repair) repairIntegrityPhase2(clusterIndexMap map[string]map[string]str
 					continue
 				}
 
+				if !calculateChecksum {
+					deletionResult.Untouched = append(deletionResult.Untouched, chunk.Hash)
+					deleteFromIndexMapFunc(cacheFileItem.ClusterId, cacheFileItem.FileItem.Sha512Hex)
+
+					continue
+				}
+
+				masterNode := clusterMap[cacheFileItem.ClusterId].Master()
+				mdn, err := cluster2.NewDataNode(masterNode.Address)
+				if err != nil {
+					r.logger.Error(
+						"Unable to make connection to master data node for checksum calculation",
+						zap.String("clusterId", cacheFileItem.ClusterId),
+						zap.String("nodeId", masterNode.Id),
+						zap.String("nodeAddress", masterNode.Address),
+						zap.Error(err),
+					)
+					deletionResult.Missing = append(deletionResult.Missing, chunk.Hash)
+					continue
+				}
+
+				if err := mdn.Read(chunk.Hash, func(data []byte) error {
+					_, err := sha512Hash.Write(data)
+					return err
+				}); err != nil {
+					r.logger.Error(
+						fmt.Sprintf("Reading chunk %s from %s is failed for checksum calculation", chunk.Hash, cacheFileItem.ClusterId),
+						zap.String("clusterId", cacheFileItem.ClusterId),
+						zap.String("sha512Hex", chunk.Hash),
+						zap.Error(err),
+					)
+					deletionResult.Missing = append(deletionResult.Missing, chunk.Hash)
+					continue
+				}
+
 				deletionResult.Untouched = append(deletionResult.Untouched, chunk.Hash)
 				deleteFromIndexMapFunc(cacheFileItem.ClusterId, cacheFileItem.FileItem.Sha512Hex)
 			}
@@ -437,6 +480,11 @@ func (r *repair) repairIntegrityPhase2(clusterIndexMap map[string]map[string]str
 					zap.String("filePath", folder.Full),
 					zap.String("fileName", file.Name),
 				)
+				continue
+			}
+
+			if calculateChecksum {
+				file.Checksum = hex.EncodeToString(sha512Hash.Sum(nil))
 			}
 		}
 
