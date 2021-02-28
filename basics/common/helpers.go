@@ -1,12 +1,18 @@
 package common
 
 import (
+	"crypto/sha512"
+	"encoding/hex"
 	"fmt"
 	"path"
 	"strings"
 )
 
 const pathSeparator = "/"
+
+func EmptyChecksum() string {
+	return hex.EncodeToString(sha512.New512_256().Sum(nil))
+}
 
 func CorrectPaths(paths []string) []string {
 	for i := range paths {

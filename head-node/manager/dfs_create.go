@@ -64,7 +64,7 @@ func (d *dfs) CreateFile(path string, mime string, size uint64, overwrite bool, 
 		return err
 	}
 
-	chunks, err := d.cluster.Create(size, contentReader)
+	creationResult, err := d.cluster.Create(size, contentReader)
 	if err != nil {
 		if errUpdate := d.update(path, nil); errUpdate != nil {
 			d.logger.Error(
@@ -77,7 +77,8 @@ func (d *dfs) CreateFile(path string, mime string, size uint64, overwrite bool, 
 	}
 
 	file.Reset(mime, size)
-	file.Chunks = append(file.Chunks, chunks...)
+	file.Checksum = creationResult.Checksum
+	file.Chunks = append(file.Chunks, creationResult.Chunks...)
 	file.Lock.Cancel()
 
 	err = d.update(path, file)

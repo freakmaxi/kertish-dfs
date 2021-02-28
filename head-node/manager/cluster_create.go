@@ -45,7 +45,9 @@ func (c *create) calculateHash(data []byte) string {
 	return hex.EncodeToString(hash.Sum(nil))
 }
 
-func (c *create) process(reader io.Reader) (common.DataChunks, map[string]uint64, error) {
+func (c *create) process(reader io.Reader) (*common.CreationResult, map[string]uint64, error) {
+	sha512Hash := sha512.New512_256()
+
 	successChan := make(chan *common.DataChunk, len(c.reservationMap.Clusters))
 	errorChan := make(chan error, len(c.reservationMap.Clusters))
 
@@ -57,6 +59,12 @@ func (c *create) process(reader io.Reader) (common.DataChunks, map[string]uint64
 
 		buffer := make([]byte, clusterMap.Chunk.Size)
 		_, err := io.ReadAtLeast(reader, buffer, len(buffer))
+		if err != nil {
+			errorChan <- err
+			break
+		}
+
+		_, err = sha512Hash.Write(buffer)
 		if err != nil {
 			errorChan <- err
 			break
@@ -77,7 +85,9 @@ func (c *create) process(reader io.Reader) (common.DataChunks, map[string]uint64
 	}
 	close(errorChan)
 
-	return c.complete(successChan), c.clusterUsage, nil
+	sha512Hex := hex.EncodeToString(sha512Hash.Sum(nil))
+
+	return c.complete(sha512Hex, successChan), c.clusterUsage, nil
 }
 
 func (c *create) upload(wg *sync.WaitGroup, clusterMap common.ClusterMap, data []byte, successChan chan *common.DataChunk, errorChan chan error) {
@@ -160,12 +170,15 @@ func (c *create) updateClusterUsage(clusterId string, size uint64) {
 	c.clusterUsage[clusterId] += size
 }
 
-func (c *create) complete(successChan chan *common.DataChunk) common.DataChunks {
-	chunks := make(common.DataChunks, 0)
+func (c *create) complete(sha512Hex string, successChan chan *common.DataChunk) *common.CreationResult {
+	creationResult := common.NewCreationResult()
+	creationResult.Checksum = sha512Hex
+
 	for dataChunk := range successChan {
-		chunks = append(chunks, dataChunk)
+		creationResult.Chunks = append(creationResult.Chunks, dataChunk)
 	}
-	return chunks
+
+	return &creationResult
 }
 
 func (c *create) revert(successChan chan *common.DataChunk, errorChan chan error) {

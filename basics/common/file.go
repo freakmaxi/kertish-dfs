@@ -14,6 +14,7 @@ type File struct {
 	Name     string     `json:"name"`
 	Mime     string     `json:"mime"`
 	Size     uint64     `json:"size"`
+	Checksum string     `json:"checksum"`
 	Created  time.Time  `json:"created"`
 	Modified time.Time  `json:"modified"`
 	Chunks   DataChunks `json:"chunks"`
@@ -76,6 +77,7 @@ func newFile(name string) *File {
 	return &File{
 		Name:     name,
 		Mime:     "application/octet-stream",
+		Checksum: EmptyChecksum(),
 		Size:     0,
 		Created:  time.Now().UTC(),
 		Modified: time.Now().UTC(),
@@ -168,6 +170,7 @@ func (f *File) Locked() bool {
 func (f *File) Reset(mime string, size uint64) {
 	f.Mime = mime
 	f.Size = size
+	f.Checksum = EmptyChecksum()
 	f.Created = time.Now().UTC()
 	f.Modified = time.Now().UTC()
 	f.Chunks = make(DataChunks, 0)
@@ -183,6 +186,7 @@ func (f *File) CloneInto(target *File) {
 
 	target.Mime = f.Mime
 	target.Size = f.Size
+	target.Checksum = f.Checksum
 	target.Lock = f.Lock
 
 	target.Chunks = make(DataChunks, 0)

@@ -22,7 +22,7 @@ import (
 const managerEndPoint = "/client/manager"
 
 type Cluster interface {
-	Create(size uint64, reader io.Reader) (common.DataChunks, error)
+	Create(size uint64, reader io.Reader) (*common.CreationResult, error)
 	CreateShadow(chunks common.DataChunks) error
 	Read(chunks common.DataChunks) (func(w io.Writer, begins int64, ends int64) error, error)
 	Delete(chunks common.DataChunks) (*common.DeletionResult, error)
@@ -68,14 +68,14 @@ func (c *cluster) getDataNode(address string) (cluster2.DataNode, error) {
 	return dn, nil
 }
 
-func (c *cluster) Create(size uint64, reader io.Reader) (common.DataChunks, error) {
+func (c *cluster) Create(size uint64, reader io.Reader) (*common.CreationResult, error) {
 	reservation, err := c.makeReservation(size)
 	if err != nil {
 		return nil, err
 	}
 
 	create := NewCreate(reservation, c.getDataNode, c.findCluster, c.logger)
-	chunks, clusterUsageMap, err := create.process(reader)
+	creationResult, clusterUsageMap, err := create.process(reader)
 	if err != nil {
 		if err := c.discardReservation(reservation.Id); err != nil {
 			c.logger.Error(
@@ -95,7 +95,7 @@ func (c *cluster) Create(size uint64, reader io.Reader) (common.DataChunks, erro
 		)
 	}
 
-	return chunks, nil
+	return creationResult, nil
 }
 
 func (c *cluster) CreateShadow(chunks common.DataChunks) error {
