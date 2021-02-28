@@ -267,7 +267,7 @@ Ex: clusterId=192.168.0.1:9430,192.168.0.2:9430`)
 	set.StringVar(&unFreeze, `unfreeze`, "", `Unfreeze the frozen clusters to accept data. Provide cluster ids to unfreeze or leave empty to apply all clusters in the setup. Ex: clusterId,clusterId`)
 
 	var repairConsistency string
-	set.StringVar(&repairConsistency, `repair-consistency`, "", `Repair file chunk node distribution consistency in metadata and data nodes and mark as zombie for the broken ones. Provide repair model for consistency repairing operation or leave empty to run full repair. Possible repair models (full, structure, integrity)`)
+	set.StringVar(&repairConsistency, `repair-consistency`, "", `Repair file chunk node distribution consistency in metadata and data nodes and mark as zombie for the broken ones. Provide repair model for consistency repairing operation or leave empty to run full repair. Possible repair models (full, structure, integrity, integrity+checksum)`)
 
 	var createSnapshot string
 	set.StringVar(&createSnapshot, `create-snapshot`, "", `Creates snapshot on a cluster. Provide cluster id to create snapshot.`)
