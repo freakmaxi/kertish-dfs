@@ -26,6 +26,8 @@ const (
 	RT_Structure   RepairType = 2
 	RT_IntegrityL1 RepairType = 3
 	RT_IntegrityL2 RepairType = 4
+	RT_ChecksumL1  RepairType = 5
+	RT_ChecksumL2  RepairType = 6
 )
 
 type Repair interface {
@@ -78,7 +80,11 @@ func (r *repair) Start(repairType RepairType) error {
 		case RT_IntegrityL1:
 			zapRepairType = zap.String("repairType", "integrity")
 		case RT_IntegrityL2:
-			zapRepairType = zap.String("repairType", "integrity with checksum calculation")
+			zapRepairType = zap.String("repairType", "integrity with rebuilding checksum calculation")
+		case RT_ChecksumL1:
+			zapRepairType = zap.String("repairType", "checksum calculation")
+		case RT_ChecksumL2:
+			zapRepairType = zap.String("repairType", "rebuilding checksum calculation")
 		}
 		r.logger.Info("Consistency repair is started...", zapRepairType)
 
@@ -97,6 +103,7 @@ func (r *repair) Start(repairType RepairType) error {
 func (r *repair) start(repairType RepairType) error {
 	repairStructure := repairType == RT_Full || repairType == RT_Structure
 	repairIntegrity := repairType == RT_Full || repairType == RT_IntegrityL1 || repairType == RT_IntegrityL2
+	repairChecksum := repairType == RT_ChecksumL1 || repairType == RT_ChecksumL2
 
 	if repairStructure {
 		r.logger.Info("Repairing metadata structure consistency...")
@@ -108,10 +115,18 @@ func (r *repair) start(repairType RepairType) error {
 
 	if repairIntegrity {
 		r.logger.Info("Repairing metadata integrity...")
-		if err := r.repairIntegrity(repairType == RT_IntegrityL2); err != nil {
+		if err := r.repairIntegrity(repairType == RT_Full || repairType == RT_IntegrityL2); err != nil {
 			return err
 		}
 		r.logger.Info("Metadata integrity repair is completed")
+	}
+
+	if repairChecksum {
+		r.logger.Info("Repairing metadata file checksum...")
+		if err := r.repairChecksum(repairType == RT_ChecksumL2); err != nil {
+			return err
+		}
+		r.logger.Info("Metadata file checksum repair is completed")
 	}
 
 	return nil
@@ -462,7 +477,7 @@ func (r *repair) repairIntegrityPhase2(calculateChecksum bool, clusterIndexMap m
 					return err
 				}); err != nil {
 					r.logger.Error(
-						fmt.Sprintf("Reading chunk %s from %s is failed for checksum calculation", chunk.Hash, cacheFileItem.ClusterId),
+						fmt.Sprintf("Reading chunk %s from %s is failed, skipping checksum calculation for %s.", chunk.Hash, cacheFileItem.ClusterId, file.Name),
 						zap.String("clusterId", cacheFileItem.ClusterId),
 						zap.String("sha512Hex", chunk.Hash),
 						zap.Error(err),
@@ -484,9 +499,9 @@ func (r *repair) repairIntegrityPhase2(calculateChecksum bool, clusterIndexMap m
 			if calculateChecksum {
 				if sha512Failed {
 					r.logger.Warn(
-						fmt.Sprintf("Updating checksum of %s is skipped because of the failure(s) on calculation operation", file.Name),
+						fmt.Sprintf("Updating checksum of %s is not possible because of the failure(s) on calculation operation", file.Name),
+						zap.String("filePath", folder.Full),
 						zap.String("filename", file.Name),
-						zap.String("full", folder.Full),
 					)
 					continue
 				}
@@ -574,6 +589,150 @@ func (r *repair) cleanupOrphan(wg *sync.WaitGroup, clusterId string, masterNode 
 
 	// Schedule sync cluster for snapshot sync
 	r.synchronize.QueueCluster(clusterId, true)
+}
+
+func (r *repair) repairChecksum(rebuildChecksum bool) error {
+	clusters, err := r.clusters.GetAll()
+	if err != nil {
+		return err
+	}
+
+	r.logger.Info("Checksum repairing requires cluster synchronisation.")
+
+	r.metadata.Lock()
+
+	if _, err := r.createClusterIndexMap(clusters); err != nil {
+		return err
+	}
+
+	clusterMap := make(map[string]*common.Cluster)
+
+	for _, cluster := range clusters {
+		clusterMap[cluster.Id] = cluster
+	}
+
+	r.metadata.Unlock()
+
+	r.logger.Info("Repairing metadata file checksum...")
+	if err := r.repairChecksumCalculation(rebuildChecksum, clusterMap); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *repair) repairChecksumCalculation(rebuildChecksum bool, clusterMap map[string]*common.Cluster) error {
+	r.logger.Info("Start traversing metadata entries for checksum check up")
+
+	if err := r.metadata.Cursor(func(folder *common.Folder) (bool, error) {
+		if len(folder.Files) == 0 {
+			return false, nil
+		}
+
+		updatedChecksum := 0
+		for _, file := range folder.Files {
+			if !rebuildChecksum && len(file.Checksum) > 0 {
+				continue
+			}
+
+			if len(file.Chunks) == 0 {
+				r.logger.Warn(
+					"Every file should have at least one chunk entry, this file does not.",
+					zap.String("filePath", folder.Full),
+					zap.String("fileName", file.Name),
+				)
+				continue
+			}
+
+			sha512Failed := false
+			sha512Hash := sha512.New512_256()
+
+			sort.Sort(file.Chunks)
+			for _, chunk := range file.Chunks {
+				cacheFileItem, err := r.index.Get(chunk.Hash)
+				if err != nil {
+					if err != os.ErrNotExist {
+						return false, err
+					}
+					r.logger.Error(
+						fmt.Sprintf("File chunk is missing, skipping checksum calculation for %s.", file.Name),
+						zap.String("filePath", folder.Full),
+						zap.String("fileName", file.Name),
+					)
+					sha512Failed = true
+					break
+				}
+
+				if cacheFileItem.FileItem.Size != chunk.Size {
+					r.logger.Error(
+						fmt.Sprintf("File size mismatched, skipping checksum calculation for %s.", file.Name),
+						zap.String("filePath", folder.Full),
+						zap.String("fileName", file.Name),
+					)
+					sha512Failed = true
+					break
+				}
+
+				_, has := clusterMap[cacheFileItem.ClusterId]
+				if !has {
+					r.logger.Error(
+						fmt.Sprintf("Chunk cluster is not exists, skipping checksum calculation for %s.", file.Name),
+						zap.String("clusterId", cacheFileItem.ClusterId),
+						zap.String("filePath", folder.Full),
+						zap.String("fileName", file.Name),
+					)
+					sha512Failed = true
+					break
+				}
+
+				masterNode := clusterMap[cacheFileItem.ClusterId].Master()
+				mdn, err := cluster2.NewDataNode(masterNode.Address)
+				if err != nil {
+					r.logger.Error(
+						"Unable to make connection to master data node for checksum calculation",
+						zap.String("clusterId", cacheFileItem.ClusterId),
+						zap.String("nodeId", masterNode.Id),
+						zap.String("nodeAddress", masterNode.Address),
+						zap.Error(err),
+					)
+					sha512Failed = true
+					break
+				}
+
+				if err := mdn.Read(chunk.Hash, func(data []byte) error {
+					_, err := sha512Hash.Write(data)
+					return err
+				}); err != nil {
+					r.logger.Error(
+						fmt.Sprintf("Reading chunk %s from %s is failed, skipping checksum calculation for %s.", chunk.Hash, cacheFileItem.ClusterId, file.Name),
+						zap.String("clusterId", cacheFileItem.ClusterId),
+						zap.String("sha512Hex", chunk.Hash),
+						zap.Error(err),
+					)
+					sha512Failed = true
+					break
+				}
+			}
+
+			if sha512Failed {
+				r.logger.Warn(
+					fmt.Sprintf("Updating checksum of %s is not possible because of the failure(s) on calculation operation", file.Name),
+					zap.String("filePath", folder.Full),
+					zap.String("filename", file.Name),
+				)
+				continue
+			}
+
+			file.Checksum = hex.EncodeToString(sha512Hash.Sum(nil))
+			updatedChecksum++
+		}
+
+		return updatedChecksum > 0, nil
+	}, parallelRepair); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 var _ Repair = &repair{}
