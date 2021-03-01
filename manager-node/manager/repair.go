@@ -410,6 +410,8 @@ func (r *repair) repairIntegrityPhase2(calculateChecksum bool, clusterIndexMap m
 			}
 
 			deletionResult := common.NewDeletionResult()
+
+			sha512Failed := false
 			sha512Hash := sha512.New512_256()
 
 			sort.Sort(file.Chunks)
@@ -434,10 +436,10 @@ func (r *repair) repairIntegrityPhase2(calculateChecksum bool, clusterIndexMap m
 					continue
 				}
 
-				if !calculateChecksum {
-					deletionResult.Untouched = append(deletionResult.Untouched, chunk.Hash)
-					deleteFromIndexMapFunc(cacheFileItem.ClusterId, cacheFileItem.FileItem.Sha512Hex)
+				deletionResult.Untouched = append(deletionResult.Untouched, chunk.Hash)
+				deleteFromIndexMapFunc(cacheFileItem.ClusterId, cacheFileItem.FileItem.Sha512Hex)
 
+				if !calculateChecksum {
 					continue
 				}
 
@@ -451,7 +453,7 @@ func (r *repair) repairIntegrityPhase2(calculateChecksum bool, clusterIndexMap m
 						zap.String("nodeAddress", masterNode.Address),
 						zap.Error(err),
 					)
-					deletionResult.Missing = append(deletionResult.Missing, chunk.Hash)
+					sha512Failed = true
 					continue
 				}
 
@@ -465,12 +467,8 @@ func (r *repair) repairIntegrityPhase2(calculateChecksum bool, clusterIndexMap m
 						zap.String("sha512Hex", chunk.Hash),
 						zap.Error(err),
 					)
-					deletionResult.Missing = append(deletionResult.Missing, chunk.Hash)
-					continue
+					sha512Failed = true
 				}
-
-				deletionResult.Untouched = append(deletionResult.Untouched, chunk.Hash)
-				deleteFromIndexMapFunc(cacheFileItem.ClusterId, cacheFileItem.FileItem.Sha512Hex)
 			}
 			file.IngestDeletion(deletionResult)
 
@@ -484,6 +482,14 @@ func (r *repair) repairIntegrityPhase2(calculateChecksum bool, clusterIndexMap m
 			}
 
 			if calculateChecksum {
+				if sha512Failed {
+					r.logger.Warn(
+						fmt.Sprintf("Updating checksum of %s is skipped because of the failure(s) on calculation operation", file.Name),
+						zap.String("filename", file.Name),
+						zap.String("full", folder.Full),
+					)
+					continue
+				}
 				file.Checksum = hex.EncodeToString(sha512Hash.Sum(nil))
 			}
 		}
