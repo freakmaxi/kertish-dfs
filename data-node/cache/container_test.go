@@ -125,6 +125,6 @@ func TestContainer_PurgeV3(t *testing.T) {
 	runtime.ReadMemStats(mem)
 	result := mem.Alloc - allocated
 
-	assert.Equal(t, int64(5227520), int64(container.usage))
+	assert.Equal(t, int64(4184064), int64(container.usage))
 	assert.Less(t, int64(result), int64(container.limit))
 }
