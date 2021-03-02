@@ -143,8 +143,9 @@ func (c *container) Upsert(sha512Hex string, data []byte) {
 	dataSize := uint64(len(data))
 
 	if c.limit < c.usage+dataSize {
-		size := int(c.usage + dataSize - c.limit)
-		c.trimUnsafe(size)
+		// if system caching is its limit, it is better to trim the 1/4 of its usage
+		// for system performance and efficiency.
+		c.trimUnsafe(c.usage / 4)
 	}
 
 	item := indexItem{
@@ -225,7 +226,7 @@ func (c *container) Purge() {
 	}
 }
 
-func (c *container) trimUnsafe(size int) {
+func (c *container) trimUnsafe(size uint64) {
 	if c.limit == 0 {
 		return
 	}
@@ -239,10 +240,10 @@ func (c *container) trimUnsafe(size int) {
 			return
 		}
 
-		dataSize := len(indexItem.data)
+		dataSize := uint64(len(indexItem.data))
 
 		c.sortedIndex[i] = nil
-		c.usage -= uint64(dataSize)
+		c.usage -= dataSize
 		delete(c.index, indexItem.sha512Hex)
 
 		size -= dataSize
