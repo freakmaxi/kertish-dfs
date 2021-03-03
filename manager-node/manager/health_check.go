@@ -113,6 +113,11 @@ func (h *healthCheck) maintain() {
 	for {
 		time.Sleep(maintainInterval)
 
+		if h.repair.Status().Processing {
+			h.logger.Warn("Skipping Maintaining Clusters because one repair operation is in action...")
+			continue
+		}
+
 		h.logger.Info("Maintaining Clusters...")
 		// Fire Forget
 		go func() {
