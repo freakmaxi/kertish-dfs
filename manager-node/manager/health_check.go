@@ -114,7 +114,7 @@ func (h *healthCheck) maintain() {
 		time.Sleep(maintainInterval)
 
 		if h.repair.Status().Processing {
-			h.logger.Warn("Skipping Maintaining Clusters because one repair operation is in action...")
+			h.logger.Warn("Skipping cluster maintain because one repair operation is in action...")
 			continue
 		}
 
