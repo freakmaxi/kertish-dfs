@@ -20,29 +20,29 @@ echo ""
 echo "Building FileSystem command-line tool (v$RELEASE_VERSION)"
 cd ../../fs-tool
 echo "  > compiling linux arm64 release"
-GOOS=linux GOARCH=arm64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/linux/arm64/kertish-dfs
+GOOS=linux GOARCH=arm64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/linux/arm64/krtfs
 echo "  > compiling linux amd64 release"
-GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/linux/amd64/kertish-dfs
+GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/linux/amd64/krtfs
 echo "  > compiling macosx arm64 release"
-GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/macosx/arm64/kertish-dfs
+GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/macosx/arm64/krtfs
 echo "  > compiling macosx amd64 release"
-GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/macosx/amd64/kertish-dfs
+GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/macosx/amd64/krtfs
 echo "  > compiling windows amd64 release"
-GOOS=windows GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/windows/amd64/kertish-dfs.exe
+GOOS=windows GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/windows/amd64/krtfs.exe
 
 echo ""
 echo "Building Administrative command-line tool (v$RELEASE_VERSION)"
 cd ../admin-tool
 echo "  > compiling linux arm64 release"
-GOOS=linux GOARCH=arm64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/linux/arm64/kertish-admin
+GOOS=linux GOARCH=arm64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/linux/arm64/krtadm
 echo "  > compiling linux amd64 release"
-GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/linux/amd64/kertish-admin
+GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/linux/amd64/krtadm
 echo "  > compiling macosx arm64 release"
-GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/macosx/arm64/kertish-admin
+GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/macosx/arm64/krtadm
 echo "  > compiling macosx amd64 release"
-GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/macosx/amd64/kertish-admin
+GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/macosx/amd64/krtadm
 echo "  > compiling windows amd64 release"
-GOOS=windows GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/windows/amd64/kertish-admin.exe
+GOOS=windows GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/windows/amd64/krtadm.exe
 
 echo ""
 echo "Building Manager Node service executable (v$RELEASE_VERSION)"
