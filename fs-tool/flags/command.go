@@ -46,9 +46,10 @@ func (c *Command) printUsage() {
 	fmt.Printf("   %s [options] command [arguments] parameters\n", c.filename)
 	fmt.Println()
 	fmt.Println("options:")
-	fmt.Println("  --head-address   Points the end point of head node to work with. Default: localhost:4000")
-	fmt.Println("  --help           Prints this usage documentation")
-	fmt.Println("  --version        Prints release version")
+	fmt.Println("  --head-address   (DEPRECATED) The end point of head node to work with. Default: localhost:4000")
+	fmt.Println("  -t --target      The end point of head node to work with. Default: localhost:4000")
+	fmt.Println("  -h --help        Prints this usage documentation")
+	fmt.Println("  -v --version     Prints release version")
 	fmt.Println()
 	fmt.Println("commands:")
 	fmt.Println("  mkdir   Create folders.")
@@ -70,9 +71,9 @@ func (c *Command) Parse() bool {
 		arg := c.args[i]
 
 		switch arg {
-		case "--head-address":
+		case "--head-address", "--target", "-t":
 			if i+1 == len(c.args) {
-				fmt.Println("--head-address requires value")
+				fmt.Printf("%s requires value\n", arg)
 				fmt.Println()
 				c.printUsage()
 				return false
@@ -81,10 +82,10 @@ func (c *Command) Parse() bool {
 			i++
 			c.headAddress = c.args[i]
 			continue
-		case "--help":
+		case "--help", "-h":
 			c.printUsage()
 			return false
-		case "--version":
+		case "--version", "-v":
 			fmt.Printf("%s\n", c.version)
 			return false
 		}
