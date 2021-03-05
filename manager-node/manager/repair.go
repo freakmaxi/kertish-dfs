@@ -156,7 +156,7 @@ func (r *repair) repairIntegrity(calculateChecksum bool) error {
 
 	r.metadata.Lock()
 
-	clusterIndexMap, err := r.createClusterIndexMap(clusters)
+	clusterIndexMap, err := r.createClusterIndexMap(clusters, true)
 	if err != nil {
 		return err
 	}
@@ -182,7 +182,7 @@ func (r *repair) repairIntegrity(calculateChecksum bool) error {
 	return nil
 }
 
-func (r *repair) createClusterIndexMap(clusters common.Clusters) (map[string]map[string]string, error) {
+func (r *repair) createClusterIndexMap(clusters common.Clusters, waitFullSync bool) (map[string]map[string]string, error) {
 	syncFailure := false
 
 	clusterIndexMap := make(map[string]map[string]string)
@@ -201,7 +201,7 @@ func (r *repair) createClusterIndexMap(clusters common.Clusters) (map[string]map
 		go func(wg *sync.WaitGroup, clusterId string) {
 			defer wg.Done()
 
-			if err := r.synchronize.Cluster(clusterId, true, false, true); err != nil {
+			if err := r.synchronize.Cluster(clusterId, true, false, waitFullSync); err != nil {
 				r.logger.Error("Cluster sync is failed for integrity repair",
 					zap.String("clusterId", clusterId),
 					zap.Error(err),
@@ -601,7 +601,7 @@ func (r *repair) repairChecksum(rebuildChecksum bool) error {
 
 	r.metadata.Lock()
 
-	if _, err := r.createClusterIndexMap(clusters); err != nil {
+	if _, err := r.createClusterIndexMap(clusters, false); err != nil {
 		return err
 	}
 
