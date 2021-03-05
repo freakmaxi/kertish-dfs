@@ -159,10 +159,9 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 
 		folder, err := m.findOne(bson.M{"_id": id})
 		if err != nil {
-			if err == os.ErrNotExist {
-				return
+			if err != os.ErrNotExist {
+				errorChan <- err
 			}
-			errorChan <- err
 			return
 		}
 
@@ -187,10 +186,10 @@ func (m *metadata) Cursor(folderHandler func(folder *common.Folder) (bool, error
 	for {
 		raw, err := m.nextRaw(cursor)
 		if err != nil {
-			if err == io.EOF {
-				break
+			if err != io.EOF {
+				errorChan <- err
 			}
-			return err
+			break
 		}
 
 		id := raw.Lookup("_id").ObjectID()
