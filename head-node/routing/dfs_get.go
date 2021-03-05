@@ -107,6 +107,7 @@ func (d *dfsRouter) prepareResponseHeaders(w http.ResponseWriter, file *common.F
 		if download {
 			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", file.Name))
 		}
+		w.Header().Set("X-Checksum", file.Checksum)
 		return true, begins, ends
 	}
 
