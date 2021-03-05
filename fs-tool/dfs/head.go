@@ -40,6 +40,10 @@ func List(headAddresses []string, source string, usage bool) (*common.Folder, er
 		return nil, fmt.Errorf("%s should be an absolute path", source)
 	case 500:
 		return nil, fmt.Errorf("unable to list %s", source)
+	default:
+		if res.StatusCode != 200 {
+			return nil, fmt.Errorf("dfs head returned with an unrecognisable status code: %d", res.StatusCode)
+		}
 	}
 
 	var folder *common.Folder
@@ -71,9 +75,11 @@ func MakeFolder(headAddresses []string, target string) error {
 		return fmt.Errorf("%s should be an absolute path", target)
 	case 500:
 		return fmt.Errorf("unable to create %s", target)
+	case 202:
+		return nil
+	default:
+		return fmt.Errorf("dfs head returned with an unrecognisable status code: %d", res.StatusCode)
 	}
-
-	return nil
 }
 
 func Change(headAddresses []string, sources []string, target string, overwrite bool, copy bool) error {
@@ -115,9 +121,11 @@ func Change(headAddresses []string, sources []string, target string, overwrite b
 			action = "copy"
 		}
 		return fmt.Errorf("unable to %s from %s to %s", action, sourcesErrorString(sources), target)
+	case 200:
+		return nil
+	default:
+		return fmt.Errorf("dfs head returned with an unrecognisable status code: %d", res.StatusCode)
 	}
-
-	return nil
 }
 
 func Delete(headAddresses []string, target string, killZombies bool) error {
@@ -152,9 +160,11 @@ func Delete(headAddresses []string, target string, killZombies bool) error {
 		return fmt.Errorf("%s is/has still alive zombie, try again to kill", target)
 	case 526:
 		return fmt.Errorf("inconsistency detected, repair is required to fix the problem")
+	case 200:
+		return nil
+	default:
+		return fmt.Errorf("dfs head returned with an unrecognisable status code: %d", res.StatusCode)
 	}
-
-	return nil
 }
 
 func Put(headAddresses []string, source string, target string, overwrite bool) error {
@@ -233,9 +243,11 @@ func PutFile(headAddresses []string, source string, target string, overwrite boo
 		return fmt.Errorf("insufficient space")
 	case 500:
 		return fmt.Errorf("unable to create %s", target)
+	case 202:
+		return nil
+	default:
+		return fmt.Errorf("dfs head returned with an unrecognisable status code: %d", res.StatusCode)
 	}
-
-	return nil
 }
 
 func contentDetails(source string) (string, int64, error) {
@@ -296,6 +308,10 @@ func Pull(headAddresses []string, sources []string, target string, readRange *co
 		return fmt.Errorf("%s is locked or has locked file(s)", sourcesErrorString(sources))
 	case 524:
 		return fmt.Errorf("%s is zombie or has zombie", sourcesErrorString(sources))
+	default:
+		if res.StatusCode != 200 {
+			return fmt.Errorf("dfs head returned with an unrecognisable status code: %d", res.StatusCode)
+		}
 	}
 
 	if isFile {
