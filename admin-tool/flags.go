@@ -234,7 +234,21 @@ func defineFlags(v string) *flagContainer {
 	set := flag.NewFlagSet("dfs", flag.ContinueOnError)
 
 	var managerAddress string
-	set.StringVar(&managerAddress, `manager-address`, "localhost:9400", `Points the end point of manager to work with.`)
+	set.StringVar(&managerAddress, `manager-address`, "localhost:9400", `(DEPRECATED) The end point of manager to work with.`)
+
+	var targetAddress string
+	set.StringVar(&targetAddress, `target`, "localhost:9400", `The end point of manager to work with.`)
+
+	var t string
+	set.StringVar(&t, `t`, "localhost:9400", `The end point of manager to work with.`)
+
+	if len(managerAddress) == 0 {
+		managerAddress = targetAddress
+	}
+
+	if len(managerAddress) == 0 {
+		managerAddress = t
+	}
 
 	var createCluster string
 	set.StringVar(&createCluster, `create-cluster`, "", `Creates data nodes cluster. Provide data node binding addresses to create cluster. Node Manager will decide which data node will be master and which others are slave.
@@ -287,7 +301,9 @@ Ex: clusterId=snapshotIndex`)
 	set.Bool(`clusters-report`, false, `Gets clusters health report.`)
 	set.Bool(`force`, false, `Force to apply the given command`)
 	set.Bool(`help`, false, `Print this usage documentation`)
+	set.Bool(`h`, false, `Print this usage documentation`)
 	set.Bool(`version`, false, `Print release version`)
+	set.Bool(`v`, false, `Print release version`)
 
 	args := os.Args[1:]
 	for i, arg := range args {
@@ -374,8 +390,8 @@ Ex: clusterId=snapshotIndex`)
 		getCluster:         getCluster,
 		getClusters:        strings.Contains(joinedArgs, "get-clusters"),
 		force:              strings.Contains(joinedArgs, "-force"),
-		help:               strings.Contains(joinedArgs, "-help"),
-		version:            strings.Contains(joinedArgs, "-version"),
+		help:               strings.Contains(joinedArgs, "-help") || strings.Contains(joinedArgs, "-h"),
+		version:            strings.Contains(joinedArgs, "-version") || strings.Contains(joinedArgs, "-v"),
 	}
 
 	switch fc.Define(v) {

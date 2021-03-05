@@ -18,7 +18,7 @@ func main() {
 	fc := defineFlags(version)
 
 	switch fc.active {
-	case "version":
+	case "version", "v":
 		fmt.Println(version)
 	case "createCluster":
 		if err := manager.CreateCluster([]string{fc.managerAddress}, fc.createCluster); err != nil {
