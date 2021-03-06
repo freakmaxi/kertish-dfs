@@ -31,6 +31,9 @@ func CreateCluster(managerAddr []string, addresses []string) error {
 	if res.StatusCode != 200 {
 		var e common.Error
 		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
+			if _, ok := err.(*json.SyntaxError); ok {
+				return fmt.Errorf("dfs manager returned with an unrecognisable status code: %d", res.StatusCode)
+			}
 			return err
 		}
 		return fmt.Errorf(e.Message)
@@ -69,6 +72,9 @@ func DeleteCluster(managerAddr []string, clusterId string) error {
 	if res.StatusCode != 200 {
 		var e common.Error
 		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
+			if _, ok := err.(*json.SyntaxError); ok {
+				return fmt.Errorf("dfs manager returned with an unrecognisable status code: %d", res.StatusCode)
+			}
 			return err
 		}
 		return fmt.Errorf(e.Message)
@@ -100,6 +106,9 @@ func MoveCluster(managerAddr []string, clusterIds []string) error {
 
 		var e common.Error
 		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
+			if _, ok := err.(*json.SyntaxError); ok {
+				return fmt.Errorf("dfs manager returned with an unrecognisable status code: %d", res.StatusCode)
+			}
 			return err
 		}
 		return fmt.Errorf(e.Message)
@@ -129,6 +138,9 @@ func BalanceClusters(managerAddr []string, clusterIds []string) error {
 
 		var e common.Error
 		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
+			if _, ok := err.(*json.SyntaxError); ok {
+				return fmt.Errorf("dfs manager returned with an unrecognisable status code: %d", res.StatusCode)
+			}
 			return err
 		}
 		return fmt.Errorf(e.Message)
@@ -154,6 +166,9 @@ func AddNode(managerAddr []string, clusterId string, addresses []string) error {
 	if res.StatusCode != 200 {
 		var e common.Error
 		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
+			if _, ok := err.(*json.SyntaxError); ok {
+				return fmt.Errorf("dfs manager returned with an unrecognisable status code: %d", res.StatusCode)
+			}
 			return err
 		}
 		return fmt.Errorf(e.Message)
@@ -192,6 +207,9 @@ func RemoveNode(managerAddr []string, nodeId string) error {
 	if res.StatusCode != 200 {
 		var e common.Error
 		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
+			if _, ok := err.(*json.SyntaxError); ok {
+				return fmt.Errorf("dfs manager returned with an unrecognisable status code: %d", res.StatusCode)
+			}
 			return err
 		}
 		return fmt.Errorf(e.Message)
@@ -219,6 +237,9 @@ func Unfreeze(managerAddr []string, clusterIds []string) error {
 	if res.StatusCode != 200 {
 		var e common.Error
 		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
+			if _, ok := err.(*json.SyntaxError); ok {
+				return fmt.Errorf("dfs manager returned with an unrecognisable status code: %d", res.StatusCode)
+			}
 			return err
 		}
 		return fmt.Errorf(e.Message)
@@ -250,6 +271,9 @@ func CreateSnapshot(managerAddr []string, clusterId string) error {
 
 		var e common.Error
 		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
+			if _, ok := err.(*json.SyntaxError); ok {
+				return fmt.Errorf("dfs manager returned with an unrecognisable status code: %d", res.StatusCode)
+			}
 			return err
 		}
 		return fmt.Errorf(e.Message)
@@ -279,6 +303,9 @@ func DeleteSnapshot(managerAddr []string, clusterId string, snapshotIndex uint64
 
 		var e common.Error
 		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
+			if _, ok := err.(*json.SyntaxError); ok {
+				return fmt.Errorf("dfs manager returned with an unrecognisable status code: %d", res.StatusCode)
+			}
 			return err
 		}
 		return fmt.Errorf(e.Message)
@@ -308,6 +335,9 @@ func RestoreSnapshot(managerAddr []string, clusterId string, snapshotIndex uint6
 
 		var e common.Error
 		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
+			if _, ok := err.(*json.SyntaxError); ok {
+				return fmt.Errorf("dfs manager returned with an unrecognisable status code: %d", res.StatusCode)
+			}
 			return err
 		}
 		return fmt.Errorf(e.Message)
@@ -333,6 +363,9 @@ func SyncClusters(managerAddr []string, clusterId string, force bool) error {
 	if res.StatusCode != 202 {
 		var e common.Error
 		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
+			if _, ok := err.(*json.SyntaxError); ok {
+				return fmt.Errorf("dfs manager returned with an unrecognisable status code: %d", res.StatusCode)
+			}
 			return err
 		}
 		return fmt.Errorf(e.Message)
@@ -358,6 +391,9 @@ func RepairConsistency(managerAddr []string, repairModel string) error {
 	if res.StatusCode != 202 {
 		var e common.Error
 		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
+			if _, ok := err.(*json.SyntaxError); ok {
+				return fmt.Errorf("dfs manager returned with an unrecognisable status code: %d", res.StatusCode)
+			}
 			return err
 		}
 		return fmt.Errorf(e.Message)
@@ -383,6 +419,9 @@ func GetClusters(managerAddr []string, clusterId string) error {
 	if res.StatusCode != 200 {
 		var e common.Error
 		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
+			if _, ok := err.(*json.SyntaxError); ok {
+				return fmt.Errorf("dfs manager returned with an unrecognisable status code: %d", res.StatusCode)
+			}
 			return err
 		}
 		return fmt.Errorf(e.Message)
@@ -473,6 +512,9 @@ func GetReport(managerAddr []string) error {
 	if res.StatusCode != 200 {
 		var e common.Error
 		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
+			if _, ok := err.(*json.SyntaxError); ok {
+				return fmt.Errorf("dfs manager returned with an unrecognisable status code: %d", res.StatusCode)
+			}
 			return err
 		}
 		return fmt.Errorf(e.Message)
