@@ -242,14 +242,6 @@ func defineFlags(v string) *flagContainer {
 	var t string
 	set.StringVar(&t, `t`, "localhost:9400", `The end point of manager to work with.`)
 
-	if len(managerAddress) == 0 {
-		managerAddress = targetAddress
-	}
-
-	if len(managerAddress) == 0 {
-		managerAddress = t
-	}
-
 	var createCluster string
 	set.StringVar(&createCluster, `create-cluster`, "", `Creates data nodes cluster. Provide data node binding addresses to create cluster. Node Manager will decide which data node will be master and which others are slave.
 Ex: 192.168.0.1:9430,192.168.0.2:9430`)
@@ -342,6 +334,14 @@ Ex: clusterId=snapshotIndex`)
 		break
 	}
 	_ = set.Parse(args)
+
+	if strings.Compare(managerAddress, "localhost:9400") == 0 {
+		managerAddress = targetAddress
+	}
+
+	if strings.Compare(managerAddress, "localhost:9400") == 0 {
+		managerAddress = t
+	}
 
 	cc := strings.Split(createCluster, ",")
 	if len(cc) > 0 && len(cc[0]) == 0 {
