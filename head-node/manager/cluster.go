@@ -172,6 +172,9 @@ func (c *cluster) Read(chunks common.DataChunks) (func(w io.Writer, begins int64
 			}
 
 			if err := dn.Read(chunk.Hash, func(buffer []byte) error {
+				if int64(len(buffer)) < endPoint {
+					return errors.ErrRepair
+				}
 				_, err := w.Write(buffer[startPoint:endPoint])
 				if errors2.Is(err, syscall.EPIPE) {
 					return nil
