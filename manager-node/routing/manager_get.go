@@ -79,7 +79,9 @@ func (m *managerRouter) handleRepairConsistency(w http.ResponseWriter, r *http.R
 	var repairType manager.RepairType
 	switch repairOption {
 	case "structure":
-		repairType = manager.RT_Structure
+		repairType = manager.RT_StructureL1
+	case "structure+integrity":
+		repairType = manager.RT_StructureL2
 	case "integrity":
 		repairType = manager.RT_IntegrityL1
 	case "integrity+checksum":

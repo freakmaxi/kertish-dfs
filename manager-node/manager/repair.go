@@ -23,11 +23,12 @@ type RepairType int
 
 const (
 	RT_Full        RepairType = 1
-	RT_Structure   RepairType = 2
-	RT_IntegrityL1 RepairType = 3
-	RT_IntegrityL2 RepairType = 4
-	RT_ChecksumL1  RepairType = 5
-	RT_ChecksumL2  RepairType = 6
+	RT_StructureL1 RepairType = 2
+	RT_StructureL2 RepairType = 3
+	RT_IntegrityL1 RepairType = 4
+	RT_IntegrityL2 RepairType = 5
+	RT_ChecksumL1  RepairType = 6
+	RT_ChecksumL2  RepairType = 7
 )
 
 type Repair interface {
@@ -75,8 +76,10 @@ func (r *repair) Start(repairType RepairType) error {
 	go func() {
 		zapRepairType := zap.String("repairType", "full")
 		switch repairType {
-		case RT_Structure:
+		case RT_StructureL1:
 			zapRepairType = zap.String("repairType", "structure")
+		case RT_StructureL2:
+			zapRepairType = zap.String("repairType", "structure with integrity")
 		case RT_IntegrityL1:
 			zapRepairType = zap.String("repairType", "integrity")
 		case RT_IntegrityL2:
@@ -101,8 +104,8 @@ func (r *repair) Start(repairType RepairType) error {
 }
 
 func (r *repair) start(repairType RepairType) error {
-	repairStructure := repairType == RT_Full || repairType == RT_Structure
-	repairIntegrity := repairType == RT_Full || repairType == RT_IntegrityL1 || repairType == RT_IntegrityL2
+	repairStructure := repairType == RT_Full || repairType == RT_StructureL1 || repairType == RT_StructureL2
+	repairIntegrity := repairType == RT_Full || repairType == RT_StructureL2 || repairType == RT_IntegrityL1 || repairType == RT_IntegrityL2
 	repairChecksum := repairType == RT_ChecksumL1 || repairType == RT_ChecksumL2
 
 	if repairStructure {
