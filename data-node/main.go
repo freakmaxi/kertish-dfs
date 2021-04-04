@@ -82,7 +82,7 @@ func main() {
 		logger.Error("File System Manager creation is failed", zap.Error(err))
 		os.Exit(80)
 	}
-	n := manager.NewNode(strings.Split(managerAddress, ","), size, logger)
+	n := manager.NewNode(hardwareAddr, bindAddr, size, strings.Split(managerAddress, ","), logger)
 
 	cacheLifetime := 360
 	cacheLimitString := os.Getenv("CACHE_LIMIT")
@@ -117,20 +117,14 @@ func main() {
 
 	cc := cache.NewContainer(cacheLimit, time.Minute*time.Duration(cacheLifetime), logger)
 
-	c, err := service.NewCommander(m, cc, n, logger, hardwareAddr)
+	c, err := service.NewCommander(m, cc, n, logger)
 	if err != nil {
 		logger.Error("Commander creation is failed", zap.Error(err))
 		os.Exit(200)
 	}
 
-	s, err := service.NewServer(bindAddr, c, logger)
-	if err != nil {
-		logger.Error("Server creation is failed", zap.Error(err))
-		os.Exit(300)
-	}
-
 	logger.Info("Waiting for handshake...")
-	if err := n.Handshake(hardwareAddr, bindAddr, size); err != nil {
+	if err := n.Handshake(); err != nil {
 		logger.Error("Handshake is failed", zap.Error(err))
 		logger.Info(fmt.Sprintf("Data Node is starting as stand-alone on %s", bindAddr))
 	} else {
@@ -149,6 +143,12 @@ func main() {
 			}()
 		}
 		logger.Info(fmt.Sprintf("Data Node (%s) in Cluster (%s) is starting on %s as %s", n.NodeId(), n.ClusterId(), bindAddr, mode))
+	}
+
+	s, err := service.NewServer(bindAddr, c, logger)
+	if err != nil {
+		logger.Error("Server creation is failed", zap.Error(err))
+		os.Exit(300)
 	}
 
 	if err := s.Listen(); err != nil {

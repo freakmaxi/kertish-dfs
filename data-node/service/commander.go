@@ -33,17 +33,14 @@ type commander struct {
 	cache  cache.Container
 	node   manager.Node
 	logger *zap.Logger
-
-	hardwareAddr string
 }
 
-func NewCommander(fs filesystem.Manager, cc cache.Container, node manager.Node, logger *zap.Logger, hardwareAddr string) (Commander, error) {
+func NewCommander(fs filesystem.Manager, cc cache.Container, node manager.Node, logger *zap.Logger) (Commander, error) {
 	return &commander{
-		fs:           fs,
-		cache:        cc,
-		node:         node,
-		logger:       logger,
-		hardwareAddr: hardwareAddr,
+		fs:     fs,
+		cache:  cc,
+		node:   node,
+		logger: logger,
 	}, nil
 }
 
@@ -159,6 +156,8 @@ func (c *commander) process(command string, conn net.Conn) error {
 		return c.size(conn)
 	case "USED":
 		return c.used(conn)
+	case "RQHS":
+		return c.rqhs(conn)
 	case "PING":
 		return nil
 	default:
@@ -388,12 +387,12 @@ func (c *commander) hwid(conn net.Conn) error {
 		return err
 	}
 
-	hardwareIdLength := byte(len(c.hardwareAddr))
+	hardwareIdLength := byte(len(c.node.HardwareAddr()))
 	if err := c.writeBinaryWithTimeout(conn, hardwareIdLength); err != nil {
 		return err
 	}
 
-	if err := c.writeWithTimeout(conn, []byte(c.hardwareAddr)); err != nil {
+	if err := c.writeWithTimeout(conn, []byte(c.node.HardwareAddr())); err != nil {
 		return err
 	}
 
@@ -808,6 +807,14 @@ func (c *commander) used(conn net.Conn) error {
 	}
 
 	return c.writeBinaryWithTimeout(conn, used)
+}
+
+func (c *commander) rqhs(conn net.Conn) error {
+	if err := c.node.Handshake(); err != nil {
+		return err
+	}
+
+	return c.writeWithTimeout(conn, []byte{'+'})
 }
 
 var _ Commander = &commander{}

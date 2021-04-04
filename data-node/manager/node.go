@@ -23,7 +23,7 @@ type Node interface {
 	Join(clusterId string, nodeId string, masterAddress string)
 	Mode(master bool)
 	Leave()
-	Handshake(hardwareAddr string, bindAddr string, size uint64) error
+	Handshake() error
 
 	Notify(sha512Hex string, usage uint16, size uint32, shadow bool, create bool) <-chan bool
 
@@ -31,13 +31,18 @@ type Node interface {
 	NodeId() string
 	MasterAddress() string
 
+	HardwareAddr() string
+	BindAddr() string
 	NodeSize() uint64
 }
 
 type node struct {
+	hardwareAddr string
+	bindAddr     string
+	nodeSize     uint64
+
 	client      http.Client
 	managerAddr []string
-	nodeSize    uint64
 	logger      *zap.Logger
 
 	clusterId     string
@@ -50,11 +55,14 @@ type node struct {
 	nextProcessList map[string]*common.NotificationContainer
 }
 
-func NewNode(managerAddresses []string, nodeSize uint64, logger *zap.Logger) Node {
+func NewNode(hardwareAddr string, bindAddr string, nodeSize uint64, managerAddresses []string, logger *zap.Logger) Node {
 	node := &node{
+		hardwareAddr: hardwareAddr,
+		bindAddr:     bindAddr,
+		nodeSize:     nodeSize,
+
 		client:      http.Client{},
 		managerAddr: managerAddresses,
-		nodeSize:    nodeSize,
 		logger:      logger,
 
 		notificationChan: make(chan common.NotificationContainer, notificationChannelLimit),
@@ -256,13 +264,13 @@ func (n *node) Leave() {
 	n.masterAddress = ""
 }
 
-func (n *node) Handshake(hardwareAddr string, bindAddr string, size uint64) error {
+func (n *node) Handshake() error {
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s%s", n.managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("X-Action", "handshake")
-	req.Header.Set("X-Options", fmt.Sprintf("%s,%s,%s", strconv.FormatUint(size, 10), hardwareAddr, bindAddr))
+	req.Header.Set("X-Options", fmt.Sprintf("%s,%s,%s", strconv.FormatUint(n.nodeSize, 10), n.hardwareAddr, n.bindAddr))
 
 	res, err := n.client.Do(req)
 	if err != nil {
@@ -277,12 +285,18 @@ func (n *node) Handshake(hardwareAddr string, bindAddr string, size uint64) erro
 		return fmt.Errorf("node manager request is failed (Handshake): %d - %s", res.StatusCode, common.NewErrorFromReader(res.Body).Message)
 	}
 
+	initialHandshake := len(n.clusterId) == 0 && len(n.nodeId) == 0
+
 	n.clusterId = res.Header.Get("X-Cluster-Id")
 	n.nodeId = res.Header.Get("X-Node-Id")
 	if len(n.clusterId) == 0 || len(n.nodeId) == 0 {
 		return fmt.Errorf("node manager response wrong for handshake")
 	}
 	n.masterAddress = res.Header.Get("X-Master")
+
+	if !initialHandshake {
+		n.Mode(len(n.masterAddress) == 0)
+	}
 
 	return nil
 }
@@ -314,6 +328,14 @@ func (n *node) NodeId() string {
 
 func (n *node) MasterAddress() string {
 	return n.masterAddress
+}
+
+func (n *node) HardwareAddr() string {
+	return n.hardwareAddr
+}
+
+func (n *node) BindAddr() string {
+	return n.bindAddr
 }
 
 func (n *node) NodeSize() uint64 {
