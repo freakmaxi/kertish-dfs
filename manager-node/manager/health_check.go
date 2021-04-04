@@ -215,20 +215,19 @@ func (h *healthCheck) checkHealth(wg *sync.WaitGroup, cluster *common.Cluster) {
 		return
 	}
 
-	cluster.Paralyzed = false
-
 	if h.checkMasterAlive(cluster) {
+		cluster.Paralyzed = false
 		h.prioritizeNodesByConnectionQuality(cluster)
 		_ = h.clusters.UpdateNodes(cluster)
 
 		return
 	}
 
+	cluster.Paralyzed = true
+	_ = h.clusters.UpdateNodes(cluster)
+
 	newMaster := h.findNextMasterCandidate(cluster)
 	if newMaster == nil {
-		cluster.Paralyzed = true
-		_ = h.clusters.UpdateNodes(cluster)
-
 		return
 	}
 
@@ -239,6 +238,7 @@ func (h *healthCheck) checkHealth(wg *sync.WaitGroup, cluster *common.Cluster) {
 		}
 	}
 
+	cluster.Paralyzed = false
 	h.prioritizeNodesByConnectionQuality(cluster)
 	_ = h.clusters.UpdateNodes(cluster)
 }
