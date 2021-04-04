@@ -14,8 +14,8 @@ type Cluster struct {
 	Used         uint64            `json:"used"`
 	Nodes        NodeList          `json:"nodes"`
 	Reservations map[string]uint64 `json:"reservations"`
-	Paralyzed    bool              `json:"paralyzed"`
-	Frozen       bool              `json:"frozen"`
+	Paralyzed    bool              `json:"paralyzed"` // If none of the cluster nodes are reachable or not have sync. content in slaves to be master
+	Frozen       bool              `json:"frozen"`    // Available for Read but Not Create and Delete
 	Snapshots    Snapshots         `json:"snapshots"`
 }
 
