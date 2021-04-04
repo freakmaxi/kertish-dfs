@@ -297,7 +297,7 @@ func (h *healthCheck) findNextMasterCandidate(cluster *common.Cluster) *common.N
 }
 
 func (h *healthCheck) prioritizeNodesByConnectionQuality(cluster *common.Cluster) {
-	qualityDisabled := int64(^uint(0) >> 1)
+	qualityDisabled := int64(^uint64(0) >> 1)
 
 	for _, node := range cluster.Nodes {
 		dn, err := h.getDataNode(node)
