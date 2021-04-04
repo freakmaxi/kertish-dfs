@@ -51,14 +51,16 @@ func NewHealthTracker(
 	}
 
 	return &healthCheck{
-		clusters:       clusters,
-		index:          index,
-		synchronize:    synchronize,
-		repair:         repair,
-		logger:         logger,
-		interval:       interval,
-		nodeCacheMutex: sync.Mutex{},
-		nodeCache:      make(map[string]cluster2.DataNode),
+		clusters:         clusters,
+		index:            index,
+		synchronize:      synchronize,
+		repair:           repair,
+		logger:           logger,
+		interval:         interval,
+		clusterLockMutex: sync.Mutex{},
+		clusterLock:      make(map[string]bool),
+		nodeCacheMutex:   sync.Mutex{},
+		nodeCache:        make(map[string]cluster2.DataNode),
 	}
 }
 
