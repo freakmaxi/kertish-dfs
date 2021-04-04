@@ -30,6 +30,9 @@ type healthCheck struct {
 	logger      *zap.Logger
 	interval    time.Duration
 
+	clusterLockMutex sync.Mutex
+	clusterLock      map[string]bool
+
 	nodeCacheMutex sync.Mutex
 	nodeCache      map[string]cluster2.DataNode
 }
@@ -76,6 +79,32 @@ func (h *healthCheck) getDataNode(node *common.Node) (cluster2.DataNode, error) 
 	return dn, nil
 }
 
+func (h *healthCheck) clusterLocking(clusterId string, lock bool) bool {
+	h.clusterLockMutex.Lock()
+	defer h.clusterLockMutex.Unlock()
+
+	locked, has := h.clusterLock[clusterId]
+	if !has {
+		h.clusterLock[clusterId] = lock
+		return true
+	}
+
+	if locked && lock {
+		return false
+	}
+
+	h.clusterLock[clusterId] = lock
+	return true
+}
+
+func (h *healthCheck) clusterLocked(clusterId string) bool {
+	h.clusterLockMutex.Lock()
+	defer h.clusterLockMutex.Unlock()
+
+	locked, has := h.clusterLock[clusterId]
+	return has && locked
+}
+
 func (h *healthCheck) Start() {
 	go h.maintain()
 	go h.health()
@@ -119,29 +148,36 @@ func (h *healthCheck) maintain() {
 		}
 
 		h.logger.Info("Maintaining Clusters...")
-		// Fire Forget
-		go func() {
-			clusters, err := h.clusters.GetAll()
-			if err != nil {
-				return
+
+		clusters, err := h.clusters.GetAll()
+		if err != nil {
+			h.logger.Error(
+				"Unable to get cluster list for maintaining",
+				zap.Error(err),
+			)
+			continue
+		}
+
+		for _, cluster := range clusters {
+			if h.clusterLocked(cluster.Id) {
+				h.logger.Warn("Cluster is locked to prevent maintain, skipping...", zap.String("clusterId", cluster.Id))
+				continue
 			}
 
-			for _, cluster := range clusters {
-				if err := h.synchronize.Cluster(cluster.Id, false, false, false); err != nil {
-					if err == errors.ErrFrozen {
-						h.logger.Warn("Frozen cluster is skipped to maintain", zap.String("clusterId", cluster.Id))
-						continue
-					}
-
-					h.logger.Error(
-						"Syncing cluster in maintain is failed",
-						zap.String("clusterId", cluster.Id),
-						zap.Error(err),
-					)
+			if err := h.synchronize.Cluster(cluster.Id, false, false, false); err != nil {
+				if err == errors.ErrFrozen {
+					h.logger.Warn("Frozen cluster is skipped to maintain", zap.String("clusterId", cluster.Id))
+					continue
 				}
+
+				h.logger.Error(
+					"Syncing cluster in maintain is failed",
+					zap.String("clusterId", cluster.Id),
+					zap.Error(err),
+				)
 			}
-			h.logger.Info("Maintain is completed")
-		}()
+		}
+		h.logger.Info("Maintain is completed")
 	}
 }
 
@@ -160,11 +196,6 @@ func (h *healthCheck) health() {
 
 		wg := &sync.WaitGroup{}
 		for _, cluster := range clusters {
-			if cluster.Frozen {
-				h.logger.Warn("Frozen cluster is skipped for health check", zap.String("clusterId", cluster.Id))
-				continue
-			}
-
 			wg.Add(1)
 			go h.checkHealth(wg, cluster)
 		}
@@ -175,24 +206,37 @@ func (h *healthCheck) health() {
 func (h *healthCheck) checkHealth(wg *sync.WaitGroup, cluster *common.Cluster) {
 	defer wg.Done()
 
+	if cluster.Frozen {
+		h.prioritizeNodesByConnectionQuality(cluster)
+		_ = h.clusters.UpdateNodes(cluster)
+
+		return
+	}
+
 	cluster.Paralyzed = false
 
-	if !h.checkMasterAlive(cluster) {
-		newMaster := h.findNextMasterCandidate(cluster)
-		if newMaster == nil {
-			cluster.Paralyzed = true
-			_ = h.clusters.UpdateNodes(cluster)
+	if h.checkMasterAlive(cluster) {
+		h.prioritizeNodesByConnectionQuality(cluster)
+		_ = h.clusters.UpdateNodes(cluster)
 
-			return
-		}
+		return
+	}
 
-		if strings.Compare(newMaster.Id, cluster.Master().Id) != 0 {
-			if err := h.clusters.SetNewMaster(cluster.Id, newMaster.Id); err == nil {
-				_ = cluster.SetMaster(newMaster.Id)
-				h.notifyNewMasterInCluster(cluster)
-			}
+	newMaster := h.findNextMasterCandidate(cluster)
+	if newMaster == nil {
+		cluster.Paralyzed = true
+		_ = h.clusters.UpdateNodes(cluster)
+
+		return
+	}
+
+	if strings.Compare(newMaster.Id, cluster.Master().Id) != 0 {
+		if err := h.clusters.SetNewMaster(cluster.Id, newMaster.Id); err == nil {
+			_ = cluster.SetMaster(newMaster.Id)
+			h.notifyNewMasterInCluster(cluster)
 		}
 	}
+
 	h.prioritizeNodesByConnectionQuality(cluster)
 	_ = h.clusters.UpdateNodes(cluster)
 }
@@ -215,6 +259,11 @@ func (h *healthCheck) checkMasterAlive(cluster *common.Cluster) bool {
 }
 
 func (h *healthCheck) findNextMasterCandidate(cluster *common.Cluster) *common.Node {
+	if !h.clusterLocking(cluster.Id, true) {
+		return nil
+	}
+	defer h.clusterLocking(cluster.Id, false)
+
 	for _, node := range cluster.Nodes {
 		dn, err := h.getDataNode(node)
 		if err != nil {
@@ -248,6 +297,8 @@ func (h *healthCheck) findNextMasterCandidate(cluster *common.Cluster) *common.N
 }
 
 func (h *healthCheck) prioritizeNodesByConnectionQuality(cluster *common.Cluster) {
+	qualityDisabled := int64(^uint(0) >> 1)
+
 	for _, node := range cluster.Nodes {
 		dn, err := h.getDataNode(node)
 		if err != nil {
@@ -258,16 +309,21 @@ func (h *healthCheck) prioritizeNodesByConnectionQuality(cluster *common.Cluster
 				zap.Error(err),
 			)
 
-			node.Quality = int64(^uint(0) >> 1)
+			node.Quality = qualityDisabled
 			continue
 		}
 
 		pr := dn.Ping()
 
 		if pr == -1 {
-			node.Quality = int64(^uint(0) >> 1)
+			node.Quality = qualityDisabled
 			continue
 		}
+
+		if node.Quality == qualityDisabled && !dn.RequestHandshake() {
+			continue
+		}
+
 		node.Quality = pr
 	}
 }
