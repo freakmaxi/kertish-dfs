@@ -15,26 +15,27 @@ import (
 )
 
 const (
-	commandCreate          = "CREA"
-	commandRead            = "READ"
-	commandDelete          = "DELE"
-	commandHardwareId      = "HWID"
-	commandJoin            = "JOIN"
-	commandMode            = "MODE"
-	commandLeave           = "LEAV"
-	commandWipe            = "WIPE"
-	commandSyncCreate      = "SYCR"
-	commandSyncDelete      = "SYDE"
-	commandSyncMove        = "SYMV"
-	commandSyncList        = "SYLS"
-	commandSyncFull        = "SYFL"
-	commandSyncUsage       = "SYUS"
-	commandSnapshotCreate  = "SSCR"
-	commandSnapshotDelete  = "SSDE"
-	commandSnapshotRestore = "SSRS"
-	commandPing            = "PING"
-	commandSize            = "SIZE"
-	commandUsed            = "USED"
+	commandCreate           = "CREA"
+	commandRead             = "READ"
+	commandDelete           = "DELE"
+	commandHardwareId       = "HWID"
+	commandJoin             = "JOIN"
+	commandMode             = "MODE"
+	commandLeave            = "LEAV"
+	commandWipe             = "WIPE"
+	commandSyncCreate       = "SYCR"
+	commandSyncDelete       = "SYDE"
+	commandSyncMove         = "SYMV"
+	commandSyncList         = "SYLS"
+	commandSyncFull         = "SYFL"
+	commandSyncUsage        = "SYUS"
+	commandSnapshotCreate   = "SSCR"
+	commandSnapshotDelete   = "SSDE"
+	commandSnapshotRestore  = "SSRS"
+	commandPing             = "PING"
+	commandSize             = "SIZE"
+	commandUsed             = "USED"
+	commandRequestHandshake = "RQHS"
 )
 
 const pingWaitDuration = time.Second * 10
@@ -64,6 +65,8 @@ type DataNode interface {
 	Ping() int64
 	Size() (uint64, error)
 	Used() (uint64, error)
+
+	RequestHandshake() bool
 }
 
 type dataNode struct {
@@ -705,6 +708,20 @@ func (d *dataNode) Used() (used uint64, usedErr error) {
 		return nil
 	})
 	return
+}
+
+func (d *dataNode) RequestHandshake() bool {
+	return d.connect(func(conn *net.TCPConn) error {
+		if _, err := conn.Write([]byte(commandRequestHandshake)); err != nil {
+			return err
+		}
+
+		if !d.result(conn) {
+			return fmt.Errorf("data node refused the request of handshake request")
+		}
+
+		return nil
+	}) == nil
 }
 
 var _ DataNode = &dataNode{}
