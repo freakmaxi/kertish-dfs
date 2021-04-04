@@ -13,7 +13,7 @@ import (
 )
 
 const healthCheckInterval = time.Second * 10
-const maintainInterval = time.Hour * 16
+const maintainInterval = time.Hour * 24
 
 type HealthReport map[string]common.NodeList
 
