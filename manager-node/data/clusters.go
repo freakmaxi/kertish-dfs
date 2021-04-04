@@ -319,7 +319,6 @@ func (c *clusters) UpdateNodes(cluster *common.Cluster) error {
 
 	filter := bson.M{
 		"clusterId": cluster.Id,
-		"frozen":    false,
 	}
 	update := bson.M{
 		"$set": bson.M{
