@@ -228,6 +228,10 @@ func (h *healthCheck) checkHealth(wg *sync.WaitGroup, cluster *common.Cluster) {
 
 	newMaster := h.findNextMasterCandidate(cluster)
 	if newMaster == nil {
+		h.logger.Error(
+			"There is no master node candidate, current master must be up. Cluster will be kept as paralyzed",
+			zap.String("clusterId", cluster.Id),
+		)
 		return
 	}
 
