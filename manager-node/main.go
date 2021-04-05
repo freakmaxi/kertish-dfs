@@ -28,9 +28,7 @@ func main() {
 	logger, console := log.NewLogger("manager")
 	defer func() { _ = logger.Sync() }()
 
-	if console {
-		printWelcome()
-	}
+	printWelcome(console)
 
 	logger.Info("---------- Starting Manager Node -----------")
 
@@ -177,7 +175,13 @@ func main() {
 	os.Exit(0)
 }
 
-func printWelcome() {
+func printWelcome(console bool) {
+	if !console {
+		fmt.Printf("Kertish DFS, version %s\n", version)
+		fmt.Printf("Visit: https://github.com/freakmaxi/kertish-dfs\n")
+		return
+	}
+
 	fmt.Println()
 	fmt.Println("     'o@@@@@@o,  o@@@@@@o")
 	fmt.Println("   'o@@@@o/-\\@@|@@/--\\@@@o             __ _  ____  ____  ____  __  ____  _  _")
