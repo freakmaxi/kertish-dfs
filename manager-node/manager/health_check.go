@@ -13,6 +13,8 @@ import (
 )
 
 const healthCheckInterval = time.Second * 10
+
+// has CacheFileItem Expire relation
 const maintainInterval = time.Hour * 24
 
 type HealthReport map[string]common.NodeList
