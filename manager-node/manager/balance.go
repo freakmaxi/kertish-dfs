@@ -191,12 +191,13 @@ func (b *balance) Balance(clusterIds []string) error {
 		atomicSizeFunc(emptiestCluster.Id, uint64(sourceCacheFileItem.FileItem.Size), true)
 		atomicSizeFunc(fullestCluster.Id, uint64(sourceCacheFileItem.FileItem.Size), false)
 
-		<-getSemaphoreFunc(emptiestCluster.Id)
+		semaphoreChan := getSemaphoreFunc(emptiestCluster.Id)
+		<-semaphoreChan
 
 		wg.Add(1)
-		go func(wg *sync.WaitGroup, emptiestCluster common.Cluster, fullestCluster common.Cluster, cacheFileItem common.CacheFileItem) {
+		go func(wg *sync.WaitGroup, emptiestCluster common.Cluster, fullestCluster common.Cluster, cacheFileItem common.CacheFileItem, semaphoreChan chan bool) {
 			defer wg.Done()
-			defer func() { getSemaphoreFunc(emptiestCluster.Id) <- true }()
+			defer func() { semaphoreChan <- true }()
 
 			// -1 = Connectivity Problem, 0 = Unsuccessful Move Operation (Read error or Deleted file), 1 = Successful
 			if result := b.move(cacheFileItem.FileItem.Sha512Hex, fullestCluster.Master().Address, emptiestCluster.Master().Address); result < 1 {
@@ -210,7 +211,7 @@ func (b *balance) Balance(clusterIds []string) error {
 				atomicSizeFunc(fullestCluster.Id, uint64(cacheFileItem.FileItem.Size), true)
 			}
 			b.moved(emptiestCluster.Id, emptiestCluster.Master().Id, cacheFileItem.FileItem)
-		}(wg, *emptiestCluster, *fullestCluster, *sourceCacheFileItem)
+		}(wg, *emptiestCluster, *fullestCluster, *sourceCacheFileItem, semaphoreChan)
 	}
 	wg.Wait()
 

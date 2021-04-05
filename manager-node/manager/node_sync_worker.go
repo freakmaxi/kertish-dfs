@@ -79,10 +79,11 @@ func (c *nodeSyncWorker) processingChan(sha512Hex string) chan bool {
 }
 
 func (c *nodeSyncWorker) process(sha512Hex string, nsCh <-chan nodeSync) {
-	c.processingChan(sha512Hex) <- true
+	processingChan := c.processingChan(sha512Hex)
+	processingChan <- true
 	defer func() {
 		c.semaphoreChan <- true
-		<-c.processingChan(sha512Hex)
+		<-processingChan
 	}()
 
 	for ns := range nsCh {
