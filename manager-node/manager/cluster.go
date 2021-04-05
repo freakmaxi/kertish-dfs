@@ -154,7 +154,7 @@ func (c *cluster) prepareNodes(nodeAddresses []string, clusterSize uint64) (comm
 		}
 
 		nodeId := newNodeId(hardwareId, nodeAddress, clusterSize)
-		if _, err := c.clusters.ClusterIdOf(nodeId); err == nil || err != errors.ErrNotFound {
+		if _, err := c.clusters.GetByNodeId(nodeId); err == nil || err != errors.ErrNotFound {
 			if err == nil {
 				err = errors.ErrRegistered
 			}

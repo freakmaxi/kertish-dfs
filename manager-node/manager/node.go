@@ -62,12 +62,7 @@ func (n *node) makeTargetContainerList(nodes common.NodeList) []*targetContainer
 func (n *node) Handshake(nodeHardwareAddr string, nodeAddress string, size uint64) (string, string, string, error) {
 	nodeId := newNodeId(nodeHardwareAddr, nodeAddress, size)
 
-	clusterId, err := n.clusters.ClusterIdOf(nodeId)
-	if err != nil {
-		return "", "", "", err
-	}
-
-	cluster, err := n.clusters.Get(clusterId)
+	cluster, err := n.clusters.GetByNodeId(nodeId)
 	if err != nil {
 		return "", "", "", err
 	}
@@ -130,14 +125,9 @@ func (n *node) Notify(nodeId string, notificationContainerList common.Notificati
 }
 
 func (n *node) create(nodeId string, fileItemList common.SyncFileItemList) error {
-	clusterId, err := n.clusters.ClusterIdOf(nodeId)
+	cluster, err := n.clusters.GetByNodeId(nodeId)
 	if err != nil {
-		return err
-	}
-
-	cluster, err := n.clusters.Get(clusterId)
-	if err != nil {
-		return fmt.Errorf("getting cluster is failed. clusterId: %s, error: %s", clusterId, err)
+		return fmt.Errorf("getting cluster by node id is failed. nodeId: %s, error: %s", nodeId, err)
 	}
 
 	sourceNode := cluster.Node(nodeId)
@@ -150,7 +140,7 @@ func (n *node) create(nodeId string, fileItemList common.SyncFileItemList) error
 	nodeSyncItems := make([]*nodeSync, 0)
 
 	for _, fileItem := range fileItemList {
-		cacheFileItems[fileItem.Sha512Hex] = common.NewCacheFileItem(clusterId, nodeId, fileItem)
+		cacheFileItems[fileItem.Sha512Hex] = common.NewCacheFileItem(cluster.Id, nodeId, fileItem)
 
 		if len(targetNodes) == 0 {
 			continue
@@ -167,7 +157,7 @@ func (n *node) create(nodeId string, fileItemList common.SyncFileItemList) error
 	}
 
 	if err := n.index.ReplaceBulk(cacheFileItems); err != nil {
-		return fmt.Errorf("adding to index failed. clusterId: %s, error: %s", clusterId, err)
+		return fmt.Errorf("adding to index failed. clusterId: %s, error: %s", cluster.Id, err)
 	}
 
 	n.nodeSyncManager.QueueMany(nodeSyncItems)
@@ -176,12 +166,12 @@ func (n *node) create(nodeId string, fileItemList common.SyncFileItemList) error
 }
 
 func (n *node) delete(nodeId string, fileItemList common.SyncFileItemList) error {
-	clusterId, err := n.clusters.ClusterIdOf(nodeId)
+	cluster, err := n.clusters.GetByNodeId(nodeId)
 	if err != nil {
-		return err
+		return fmt.Errorf("getting cluster by node id is failed. nodeId: %s, error: %s", nodeId, err)
 	}
 
-	return n.clusters.Save(clusterId, func(cluster *common.Cluster) error {
+	return n.clusters.Save(cluster.Id, func(cluster *common.Cluster) error {
 		sourceNode := cluster.Node(nodeId)
 		targetNodes := cluster.Others(nodeId)
 		if targetNodes == nil {

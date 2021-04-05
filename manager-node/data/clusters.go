@@ -22,6 +22,7 @@ type Clusters interface {
 	UnRegisterNode(nodeId string, syncHandler func(cluster *common.Cluster) error, unregisteredNodeHandler func(deletingNode *common.Node) error, masterChangedHandler func(newMaster *common.Node) error) error
 
 	Get(clusterId string) (*common.Cluster, error)
+	GetByNodeId(nodeId string) (*common.Cluster, error)
 	GetAll() (common.Clusters, error)
 
 	Save(clusterId string, saveHandler func(cluster *common.Cluster) error) error
@@ -31,8 +32,6 @@ type Clusters interface {
 	UpdateNodes(cluster *common.Cluster) error
 	ResetStats(cluster *common.Cluster) error
 	SetFreeze(clusterId string, frozen bool) error
-
-	ClusterIdOf(nodeId string) (string, error)
 }
 
 const clusterCollection = "cluster"
@@ -133,7 +132,7 @@ func (c *clusters) UnRegisterCluster(clusterId string, clusterHandler func(clust
 }
 
 func (c *clusters) RegisterNodeTo(clusterId string, node *common.Node) error {
-	_, err := c.getClusterByNodeId(node.Id)
+	_, err := c.GetByNodeId(node.Id)
 	if err == nil {
 		return errors.ErrRegistered
 	} else {
@@ -153,19 +152,19 @@ func (c *clusters) RegisterNodeTo(clusterId string, node *common.Node) error {
 }
 
 func (c *clusters) UnRegisterNode(nodeId string, syncHandler func(cluster *common.Cluster) error, unregisteredNodeHandler func(deletingNode *common.Node) error, masterChangedHandler func(newMaster *common.Node) error) error {
-	nodeCluster, err := c.getClusterByNodeId(nodeId)
+	cluster, err := c.GetByNodeId(nodeId)
 	if err != nil {
 		return err
 	}
-	deletingNode := nodeCluster.Node(nodeId)
+	deletingNode := cluster.Node(nodeId)
 
 	if deletingNode.Master {
-		if err := syncHandler(nodeCluster); err != nil {
+		if err := syncHandler(cluster); err != nil {
 			return err
 		}
 	}
 
-	return c.Save(nodeCluster.Id, func(cluster *common.Cluster) error {
+	return c.Save(cluster.Id, func(cluster *common.Cluster) error {
 		others := cluster.Others(nodeId)
 		if len(others) == 0 {
 			return errors.ErrLastNode
@@ -197,6 +196,20 @@ func (c *clusters) Get(clusterId string) (*common.Cluster, error) {
 		return nil, err
 	}
 
+	return cluster, nil
+}
+
+func (c *clusters) GetByNodeId(nodeId string) (*common.Cluster, error) {
+	ctx, cancelFunc := c.context(context.Background())
+	defer cancelFunc()
+
+	var cluster *common.Cluster
+	if err := c.col.FindOne(ctx, bson.M{"nodes.id": nodeId}).Decode(&cluster); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, errors.ErrNotFound
+		}
+		return nil, err
+	}
 	return cluster, nil
 }
 
@@ -373,28 +386,6 @@ func (c *clusters) SetFreeze(clusterId string, frozen bool) error {
 		return err
 	}
 	return nil
-}
-
-func (c *clusters) ClusterIdOf(nodeId string) (string, error) {
-	cluster, err := c.getClusterByNodeId(nodeId)
-	if err != nil {
-		return "", err
-	}
-	return cluster.Id, nil
-}
-
-func (c *clusters) getClusterByNodeId(nodeId string) (*common.Cluster, error) {
-	ctx, cancelFunc := c.context(context.Background())
-	defer cancelFunc()
-
-	var cluster *common.Cluster
-	if err := c.col.FindOne(ctx, bson.M{"nodes.id": nodeId}).Decode(&cluster); err != nil {
-		if err == mongo.ErrNoDocuments {
-			return nil, errors.ErrNotFound
-		}
-		return nil, err
-	}
-	return cluster, nil
 }
 
 func (c *clusters) overwrite(clusters common.Clusters) error {
