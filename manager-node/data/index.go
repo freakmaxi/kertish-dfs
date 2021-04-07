@@ -84,7 +84,7 @@ func (i *index) commandExecutor() {
 					continue
 				}
 
-				if count = i.executeCommandSlots(commandSlotsMap); count == 0 {
+				if count = i.executeCommandSlots(commandSlotsMap); count == 0 && len(i.commandChan) == 0 {
 					i.logger.Info("Execution of cache pipeline is completed")
 				}
 			}
