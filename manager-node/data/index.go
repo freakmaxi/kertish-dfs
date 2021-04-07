@@ -55,7 +55,7 @@ func NewIndex(client CacheClient, keyPrefix string, logger *zap.Logger) Index {
 		client:              client,
 		keyPrefix:           keyPrefix,
 		logger:              logger,
-		commandChan:         make(chan radix.CmdAction, bulkOperationLimit),
+		commandChan:         make(chan radix.CmdAction, bulkOperationLimit*semaphoreLimit),
 		queueCompletionCond: sync.NewCond(&sync.Mutex{}),
 	}
 	go i.commandExecutor()
