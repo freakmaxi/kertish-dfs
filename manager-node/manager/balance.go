@@ -99,6 +99,8 @@ func (b *balance) complete(balancingClusters common.Clusters) {
 }
 
 func (b *balance) Balance(clusterIds []string) error {
+	b.logger.Info("Cluster balancing is started...")
+
 	clusters, err := b.clusters.GetAll()
 	if err != nil {
 		return err
@@ -211,6 +213,8 @@ func (b *balance) Balance(clusterIds []string) error {
 		}(wg, *emptiestCluster, *fullestCluster, *sourceCacheFileItem, semaphoreChan)
 	}
 	wg.Wait()
+
+	b.logger.Info("Balancing will be completed after the sync of clusters")
 
 	b.complete(balancingClusters)
 
