@@ -31,17 +31,6 @@ func (s SyncFileItemList) ShadowItems() SyncFileItemList {
 	return shadowFileItemList
 }
 
-func (s SyncFileItemList) PhysicalFiles() []string {
-	glows := make([]string, 0)
-	for _, fileItem := range s {
-		if fileItem.Shadow {
-			continue
-		}
-		glows = append(glows, fileItem.Sha512Hex)
-	}
-	return glows
-}
-
 func (s SyncFileItemList) PhysicalSize() uint64 {
 	total := uint64(0)
 	for _, fileItem := range s {
