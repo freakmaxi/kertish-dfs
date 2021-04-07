@@ -59,10 +59,7 @@ func (b *balance) nextChunk(sourceCluster *common.Cluster) (*common.CacheFileIte
 			return nil, err
 		}
 
-		if err := b.index.Drop(sourceCluster.Id, sha512Hex); err != nil {
-			return nil, err
-		}
-
+		b.index.QueueDrop(sourceCluster.Id, sha512Hex)
 		delete(fileItemMap, sha512Hex)
 
 		return c, nil
@@ -79,7 +76,7 @@ func (b *balance) moved(targetClusterId string, masterNodeId string, movedFileIt
 
 	b.indexingMap[targetClusterId][movedFileItem.Sha512Hex] = "moved"
 	// if it fails, let the cluster sync fix it. till that moment, file will be zombie
-	_ = b.index.Replace(*cacheFileItem)
+	b.index.QueueUpsert(cacheFileItem)
 }
 
 func (b *balance) move(sha512Hex string, sourceAddress string, targetAddress string) int {

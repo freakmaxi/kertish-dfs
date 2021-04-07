@@ -159,12 +159,6 @@ func (s *synchronize) startSync(clusterId string, force bool, keepFrozen bool, w
 		return errors.ErrPing
 	}
 
-	// this changes will save in reset stats
-	cluster.Reservations = make(map[string]uint64)
-	cluster.Used, _ = mdn.Used()
-	cluster.Snapshots = container.Snapshots
-	// ---
-
 	s.logger.Info(
 		"Resetting cluster stats",
 		zap.String("clusterId", clusterId),
@@ -172,49 +166,23 @@ func (s *synchronize) startSync(clusterId string, force bool, keepFrozen bool, w
 		zap.String("nodeAddress", masterNode.Address),
 	)
 
+	cluster.Reservations = make(map[string]uint64)
+	cluster.Used, _ = mdn.Used()
+	cluster.Snapshots = container.Snapshots
+
 	_ = s.clusters.ResetStats(cluster)
 
 	s.logger.Info(
-		"Dropping cluster index map",
+		"Queueing cluster index map updates",
 		zap.String("clusterId", clusterId),
 		zap.String("nodeId", masterNode.Id),
 		zap.String("nodeAddress", masterNode.Address),
 	)
-
-	if err := s.index.DropMap(clusterId); err != nil {
-		s.logger.Error(
-			"Index drop error",
-			zap.String("clusterId", clusterId),
-			zap.String("nodeId", masterNode.Id),
-			zap.String("nodeAddress", masterNode.Address),
-			zap.Error(err),
-		)
-		return errors.ErrSync
-	}
-
-	cacheFileItems := make(common.CacheFileItemMap)
 
 	for _, fileItem := range container.FileItems {
-		cacheFileItems[fileItem.Sha512Hex] = common.NewCacheFileItem(clusterId, masterNode.Id, fileItem)
+		s.index.QueueUpsert(common.NewCacheFileItem(clusterId, masterNode.Id, fileItem))
 	}
-
-	s.logger.Info(
-		"Replacing cluster index map",
-		zap.String("clusterId", clusterId),
-		zap.String("nodeId", masterNode.Id),
-		zap.String("nodeAddress", masterNode.Address),
-	)
-
-	if err := s.index.ReplaceBulk(cacheFileItems); err != nil {
-		s.logger.Error(
-			"Index replacement error",
-			zap.String("clusterId", clusterId),
-			zap.String("nodeId", masterNode.Id),
-			zap.String("nodeAddress", masterNode.Address),
-			zap.Error(err),
-		)
-		return errors.ErrPing
-	}
+	s.index.WaitQueueCompletion()
 
 	slaveNodes := cluster.Slaves()
 
@@ -313,20 +281,10 @@ func (s *synchronize) syncSlaveNode(wg *sync.WaitGroup, clusterId string, master
 		zap.String("nodeAddress", slaveNode.Address),
 	)
 
-	sha512HexList := make([]string, 0)
 	for sha512Hex := range container.FileItems {
-		sha512HexList = append(sha512HexList, sha512Hex)
+		s.index.QueueUpsertChunkNode(sha512Hex, slaveNode.Id)
 	}
-
-	if err := s.index.UpdateChunkNodeBulk(sha512HexList, slaveNode.Id, true); err != nil {
-		s.logger.Error(
-			"Index update error",
-			zap.String("clusterId", clusterId),
-			zap.String("nodeId", slaveNode.Id),
-			zap.String("nodeAddress", slaveNode.Address),
-			zap.Error(err),
-		)
-	}
+	s.index.WaitQueueCompletion()
 
 	s.logger.Info(
 		fmt.Sprintf("Synchronization slave node %s of cluster %s is completed", slaveNode.Id, clusterId),

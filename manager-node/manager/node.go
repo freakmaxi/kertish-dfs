@@ -136,11 +136,10 @@ func (n *node) create(nodeId string, fileItemList common.SyncFileItemList) error
 		return fmt.Errorf("node id didn't match to get others: %s", nodeId)
 	}
 
-	cacheFileItems := make(common.CacheFileItemMap)
 	nodeSyncItems := make([]*nodeSync, 0)
 
 	for _, fileItem := range fileItemList {
-		cacheFileItems[fileItem.Sha512Hex] = common.NewCacheFileItem(cluster.Id, nodeId, fileItem)
+		n.index.QueueUpsert(common.NewCacheFileItem(cluster.Id, nodeId, fileItem))
 
 		if len(targetNodes) == 0 {
 			continue
@@ -154,10 +153,6 @@ func (n *node) create(nodeId string, fileItemList common.SyncFileItemList) error
 			sha512Hex:  fileItem.Sha512Hex,
 			targets:    n.makeTargetContainerList(targetNodes),
 		})
-	}
-
-	if err := n.index.ReplaceBulk(cacheFileItems); err != nil {
-		return fmt.Errorf("adding to index failed. clusterId: %s, error: %s", cluster.Id, err)
 	}
 
 	n.nodeSyncManager.QueueMany(nodeSyncItems)
@@ -178,12 +173,9 @@ func (n *node) delete(nodeId string, fileItemList common.SyncFileItemList) error
 			return fmt.Errorf("node id didn't match to get others: %s\n", nodeId)
 		}
 
-		if err := n.index.UpdateUsageInMap(cluster.Id, fileItemList.ShadowItems()); err != nil {
-			return fmt.Errorf("updating index failed: error: %s", err)
-		}
-
-		if err := n.index.DropBulk(cluster.Id, fileItemList.PhysicalFiles()); err != nil {
-			return fmt.Errorf("removing from index failed: error: %s", err)
+		n.index.QueueUpsertUsageInMap(cluster.Id, fileItemList.ShadowItems())
+		for _, fileItem := range fileItemList {
+			n.index.QueueDrop(cluster.Id, fileItem.Sha512Hex)
 		}
 		cluster.Used -= fileItemList.PhysicalSize()
 

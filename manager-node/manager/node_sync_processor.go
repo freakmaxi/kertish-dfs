@@ -131,16 +131,7 @@ func (d *nodeSyncProcessor) create(ns *nodeSync) {
 				return
 			}
 
-			if err := d.index.UpdateChunkNode(ns.sha512Hex, target.node.Id, true); err != nil {
-				d.logger.Warn(
-					"Adding node information to the index is failed",
-					zap.String("sha512Hex", ns.sha512Hex),
-					zap.String("targetNodeId", target.node.Id),
-					zap.String("sourceAddress", ns.sourceAddr),
-					zap.Error(err),
-				)
-				return
-			}
+			d.index.QueueUpsertChunkNode(ns.sha512Hex, target.node.Id)
 
 			target.completed = true
 		}(wg, ns.targets[i])

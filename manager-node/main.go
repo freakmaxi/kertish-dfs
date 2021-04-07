@@ -134,7 +134,7 @@ func main() {
 		logger.Error("Cache Client Setup is failed", zap.Error(err))
 		os.Exit(23)
 	}
-	index := data.NewIndex(m, cacheClient, strings.ReplaceAll(mongoDb, " ", "_"))
+	index := data.NewIndex(cacheClient, strings.ReplaceAll(mongoDb, " ", "_"), logger)
 	operation := data.NewOperation(cacheClient, strings.ReplaceAll(mongoDb, " ", "_"))
 
 	metadata, err := data.NewMetadata(m, conn, mongoDb)

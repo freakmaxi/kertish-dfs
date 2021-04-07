@@ -242,9 +242,13 @@ func (r *repair) repairIntegrityPhase1(clusterIndexMap map[string]map[string]str
 	r.logger.Info("Normalizing cluster indices")
 
 	// Normalize
-	for _, chunkIndexMap := range clusterIndexMap {
+	for clusterId, chunkIndexMap := range clusterIndexMap {
 		for sha512Hex, indexValue := range chunkIndexMap {
-			indexUsageMap[sha512Hex] = indexValue
+			pipeIdx := strings.Index(indexValue, "|")
+			if pipeIdx == -1 {
+				return fmt.Errorf("faulty index entry for %s", sha512Hex)
+			}
+			indexUsageMap[sha512Hex] = fmt.Sprintf("%s|%s", indexValue[:pipeIdx], clusterId)
 		}
 	}
 
@@ -302,7 +306,7 @@ func (r *repair) repairIntegrityPhase1(clusterIndexMap map[string]map[string]str
 			return fmt.Errorf("faulty index entry for %s", sha512Hex)
 		}
 
-		indexUsage, err := strconv.ParseUint(indexValue[pipeIdx+1:], 10, 16)
+		indexUsage, err := strconv.ParseUint(indexValue[:pipeIdx], 10, 16)
 		if err != nil {
 			return err
 		}
@@ -311,7 +315,7 @@ func (r *repair) repairIntegrityPhase1(clusterIndexMap map[string]map[string]str
 			continue
 		}
 
-		indexClusterId := indexValue[:pipeIdx]
+		indexClusterId := indexValue[pipeIdx+1:]
 		cluster, has := clusterMap[indexClusterId]
 		if !has {
 			r.logger.Error(
