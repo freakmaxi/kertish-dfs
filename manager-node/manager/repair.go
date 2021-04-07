@@ -161,6 +161,7 @@ func (r *repair) repairIntegrity(calculateChecksum bool) error {
 
 	clusterIndexMap, err := r.createClusterIndexMap(clusters, true)
 	if err != nil {
+		r.metadata.Unlock()
 		return err
 	}
 
@@ -172,6 +173,7 @@ func (r *repair) repairIntegrity(calculateChecksum bool) error {
 
 	r.logger.Info("Phase 1: Repairing metadata usage alignment...")
 	if err := r.repairIntegrityPhase1(clusterIndexMap, clusterMap); err != nil {
+		r.metadata.Unlock()
 		return err
 	}
 
