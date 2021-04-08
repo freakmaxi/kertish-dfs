@@ -139,7 +139,7 @@ func (n *node) create(nodeId string, fileItemList common.SyncFileItemList) error
 	nodeSyncItems := make([]*nodeSync, 0)
 
 	for _, fileItem := range fileItemList {
-		n.index.QueueUpsert(common.NewCacheFileItem(cluster.Id, nodeId, fileItem))
+		n.index.QueueUpsert(common.NewCacheFileItem(cluster.Id, nodeId, fileItem), nil)
 
 		if len(targetNodes) == 0 {
 			continue

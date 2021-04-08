@@ -22,7 +22,7 @@ const commandExecutorWaitDuration = time.Millisecond * 50
 type Index interface {
 	WaitQueueCompletion()
 
-	QueueUpsert(item *common.CacheFileItem)
+	QueueUpsert(item *common.CacheFileItem, syncTime *time.Time)
 	QueueDrop(clusterId string, sha512Hex string)
 	QueueUpsertChunkNode(sha512Hex string, nodeId string)
 	QueueUpsertUsageInMap(clusterId string, items common.SyncFileItemList)
@@ -165,7 +165,7 @@ func (i *index) key(name string, suffix keySuffix) string {
 	return fmt.Sprintf("%s_%s", key, suffix)
 }
 
-func (i *index) replaceCommand(item *common.CacheFileItem) []radix.CmdAction {
+func (i *index) replaceCommand(item *common.CacheFileItem, syncTime *time.Time) []radix.CmdAction {
 	chunkKey := i.key(item.FileItem.Sha512Hex, ksChunk)
 	chunkNodesKey := i.key(item.FileItem.Sha512Hex, ksChunkNodes)
 	clusterKey := i.key(item.ClusterId, ksCluster)
@@ -187,8 +187,10 @@ func (i *index) replaceCommand(item *common.CacheFileItem) []radix.CmdAction {
 	commands = append(commands,
 		radix.Cmd(nil, "EXPIREAT", chunkNodesKey, strconv.FormatInt(item.ExpiresAt.Unix(), 10)))
 
-	commands = append(commands,
-		radix.Cmd(nil, "HSET", clusterKey, updatedAtKey, currentTime))
+	if syncTime != nil {
+		commands = append(commands,
+			radix.Cmd(nil, "HSET", clusterKey, updatedAtKey, syncTime.Format(time.RFC3339)))
+	}
 	commands = append(commands,
 		radix.Cmd(nil, "HSET", clusterKey, item.FileItem.Sha512Hex,
 			fmt.Sprintf("%d|%s", item.FileItem.Usage, currentTime),
@@ -209,12 +211,12 @@ func (i *index) dropCommand(clusterId string, sha512Hex string) []radix.CmdActio
 	return commands
 }
 
-func (i *index) QueueUpsert(item *common.CacheFileItem) {
+func (i *index) QueueUpsert(item *common.CacheFileItem, syncTime *time.Time) {
 	if item == nil {
 		return
 	}
 
-	for _, c := range i.replaceCommand(item) {
+	for _, c := range i.replaceCommand(item, syncTime) {
 		i.commandChan <- c
 	}
 }

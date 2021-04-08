@@ -3,6 +3,7 @@ package manager
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
@@ -179,8 +180,9 @@ func (s *synchronize) startSync(clusterId string, force bool, keepFrozen bool, w
 		zap.String("nodeAddress", masterNode.Address),
 	)
 
+	syncTime := time.Now().UTC()
 	for _, fileItem := range container.FileItems {
-		s.index.QueueUpsert(common.NewCacheFileItem(clusterId, masterNode.Id, fileItem))
+		s.index.QueueUpsert(common.NewCacheFileItem(clusterId, masterNode.Id, fileItem), &syncTime)
 	}
 	s.index.WaitQueueCompletion()
 

@@ -76,7 +76,7 @@ func (b *balance) moved(targetClusterId string, masterNodeId string, movedFileIt
 
 	b.indexingMap[targetClusterId][movedFileItem.Sha512Hex] = "moved"
 	// if it fails, let the cluster sync fix it. till that moment, file will be zombie
-	b.index.QueueUpsert(cacheFileItem)
+	b.index.QueueUpsert(cacheFileItem, nil)
 }
 
 func (b *balance) move(sha512Hex string, sourceAddress string, targetAddress string) int {
