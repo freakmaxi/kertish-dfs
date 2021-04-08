@@ -83,20 +83,14 @@ func (i *index) commandExecutor() {
 				if count < bulkOperationLimit {
 					continue
 				}
-
-				if count = i.executeCommandSlots(commandSlotsMap); count == 0 && len(i.commandChan) == 0 {
-					i.logger.Info("Execution of cache pipeline is completed")
-				}
+				count = i.executeCommandSlots(commandSlotsMap)
 			}
 		case <-time.After(commandExecutorWaitDuration):
 			if count == 0 {
 				i.queueCompletionCond.Broadcast()
 				continue
 			}
-
-			if count = i.executeCommandSlots(commandSlotsMap); count == 0 {
-				i.logger.Info("Execution of cache pipeline is completed")
-			}
+			count = i.executeCommandSlots(commandSlotsMap)
 		}
 	}
 }
@@ -160,7 +154,7 @@ func (i *index) WaitQueueCompletion() {
 	defer i.queueCompletionCond.L.Unlock()
 
 	i.queueCompletionCond.Wait()
-
+	i.logger.Info("Execution of cache pipeline is completed")
 }
 
 func (i *index) key(name string, suffix keySuffix) string {
