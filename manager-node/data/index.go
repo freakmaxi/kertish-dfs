@@ -65,7 +65,7 @@ func NewIndex(client CacheClient, keyPrefix string, logger *zap.Logger) Index {
 
 func (i *index) commandExecutor() {
 	commandSlotsMap := make(map[uint16][]radix.CmdAction)
-	count := 0
+	max := 0
 
 	for {
 		select {
@@ -78,19 +78,22 @@ func (i *index) commandExecutor() {
 				}
 
 				commandSlotsMap[slot] = append(commandSlotsMap[slot], command)
-				count++
+				slotCount := len(commandSlotsMap[slot])
+				if slotCount > max {
+					max = slotCount
+				}
 
-				if count < bulkOperationLimit {
+				if max < bulkOperationLimit {
 					continue
 				}
-				count = i.executeCommandSlots(commandSlotsMap)
+				max = i.executeCommandSlots(commandSlotsMap)
 			}
 		case <-time.After(commandExecutorWaitDuration):
-			if count == 0 {
+			if max == 0 {
 				i.queueCompletionCond.Broadcast()
 				continue
 			}
-			count = i.executeCommandSlots(commandSlotsMap)
+			max = i.executeCommandSlots(commandSlotsMap)
 		}
 	}
 }
@@ -142,11 +145,14 @@ func (i *index) executeCommandSlots(commandSlotsMap map[uint16][]radix.CmdAction
 	}
 	wg.Wait()
 
-	count := 0
+	max := 0
 	for _, c := range commandSlotsMap {
-		count += len(c)
+		slotCount := len(c)
+		if slotCount > max {
+			max = slotCount
+		}
 	}
-	return count
+	return max
 }
 
 func (i *index) WaitQueueCompletion() {
