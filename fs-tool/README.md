@@ -3,7 +3,7 @@
 ```
 Kertish-dfs (vXX.X.XXXX) usage: 
 
-   kertish-dfs [options] command [arguments] parameters
+   krtfs [options] command [arguments] parameters
 
 options:
   --head-address   Points the end point of head node to work with. Default: localhost:4000

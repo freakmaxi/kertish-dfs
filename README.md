@@ -199,14 +199,14 @@ Download setup script from [https://github.com/freakmaxi/kertish-dfs/blob/master
 
 Your Kertish-dfs farm is ready to go.
 
-Put any file using `kertish-dfs` file storage tool. Ex:
+Put any file using `krtfs` file storage tool. Ex:
 
-`./kertish-dfs cp local:~/Downloads/demo.mov /demo.mov`
+`./krtfs cp local:~/Downloads/demo.mov /demo.mov`
 
 Just change the path and file after `local:` according to the file in your system. Try to choose a file more than 70 Mb
 to see file chunk distribution between clusters. If file size is smaller than 32 Mb, it will be placed only in a cluster.
 
-`./kertish-dfs ls -l` will give you an output similar like below
+`./krtfs ls -l` will give you an output similar like below
 
 ```
 processing... ok.
@@ -325,10 +325,10 @@ different sized hard-drives. You should use the `SIZE` environment variable to a
 the server that has the smallest hard-drive size
 
  
-- Copy `kertish-admin` executable to `/usr/local/bin` folder on the system.
-- Give execution permission to the file `sudo chmod +x /usr/local/bin/kertish-admin`
+- Copy `krtadm` executable to `/usr/local/bin` folder on the system.
+- Give execution permission to the file `sudo chmod +x /usr/local/bin/krtadm`
 - Enter the following command
-`kertish-admin -create-cluster 127.0.0.1:9430,127.0.0.1:9431`
+`krtadm -create-cluster 127.0.0.1:9430,127.0.0.1:9431`
 - If everything went right, you should see an output like
 ```
 Cluster Details: eddd204e4cd23a14cb2f20c84299ee81
@@ -338,7 +338,7 @@ Cluster Details: eddd204e4cd23a14cb2f20c84299ee81
 ok.
 ```
 - Enter the following command to create the one another cluster
-`kertish-admin -create-cluster 127.0.0.1:9432,127.0.0.1:9433`
+`krtadm -create-cluster 127.0.0.1:9432,127.0.0.1:9433`
 - If everything went right, you should see something like this
 ```
 Cluster Details: 8f0e2bc02811f346d6cbb542c92d118d
@@ -350,28 +350,28 @@ ok.
 ---
 ##### Manipulating File Storage
 
-- Copy `kertish-dfs` executable to `/usr/local/bin` folder on the system.
-- Give execution permission to the file `sudo chmod +x /usr/local/bin/kertish-dfs`
+- Copy `krtfs` executable to `/usr/local/bin` folder on the system.
+- Give execution permission to the file `sudo chmod +x /usr/local/bin/krtfs`
 - Enter the following command
-`kertish-dfs ls -l`
+`krtfs ls -l`
 output: 
 ```
 processing... ok.
 total 0
 ```
 - Put a file from your local drive to dfs
-`kertish-dfs cp local:/usr/local/bin/kertish-dfs /kertish-dfs`
+`krtfs cp local:/usr/local/bin/krtfs /krtfs`
 output: 
 ```
 processing... ok.
 ```
 - Enter the following command
-`kertish-dfs ls -l`
+`krtfs ls -l`
 output: 
 ```
 processing... ok.
 total 1
--  7291kb 2020 Jan 13 05:30 kertish-dfs
+-  7291kb 2020 Jan 13 05:30 krtfs
 ```
 
 If you get the same or similar outputs like here, congratulations! you successfully set up your Kertish-dfs. 
@@ -381,4 +381,4 @@ If you get the same or similar outputs like here, congratulations! you successfu
 When you setup the cluster and the cluster starts taking data blocks, consider that cluster is as absolute. Deleting 
 the cluster will cause you data inconsistency and lost. Due to this reason, when you are creating the structure of
 your farm, pay attention to your cluster setups the most. If you want to remove the cluster from the farm, consider to
-move the cluster first from one point to another using `kertish-admin` client tool.
+move the cluster first from one point to another using `krtadm` client tool.
