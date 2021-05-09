@@ -46,10 +46,41 @@ func (d *dfsRouter) handleGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if read.Type() == manager.RT_Folder {
-		folder := read.Folder()
+		w.Header().Set("X-Type", "folder")
 
 		calculateUsageHeader := strings.ToLower(r.Header.Get("X-Calculate-Usage"))
 		calculateUsage := len(calculateUsageHeader) > 0 && (strings.Compare(calculateUsageHeader, "1") == 0 || strings.Compare(calculateUsageHeader, "true") == 0)
+
+		treeRequestHeader := strings.ToLower(r.Header.Get("X-Tree"))
+		treeRequest := len(treeRequestHeader) > 0 && (strings.Compare(treeRequestHeader, "1") == 0 || strings.Compare(treeRequestHeader, "true") == 0)
+
+		if treeRequest {
+			tree, err := read.Tree()
+			if err != nil {
+				w.WriteHeader(500)
+				d.logger.Error(
+					"Fetching tree for the read request is failed",
+					zap.Strings("paths", requestedPaths),
+					zap.Error(err),
+				)
+			}
+
+			if calculateUsage {
+				tree.CalculateUsage()
+			}
+
+			if err := json.NewEncoder(w).Encode(tree.Shadow()); err != nil {
+				w.WriteHeader(500)
+				d.logger.Error(
+					"Response of read request (tree) is failed",
+					zap.Strings("paths", requestedPaths),
+					zap.Error(err),
+				)
+			}
+			return
+		}
+
+		folder := read.Folder()
 
 		if calculateUsage {
 			folder.CalculateUsage(func(shadows common.FolderShadows) {
@@ -59,12 +90,10 @@ func (d *dfsRouter) handleGet(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 
-		w.Header().Set("X-Type", "folder")
-
 		if err := json.NewEncoder(w).Encode(folder); err != nil {
 			w.WriteHeader(500)
 			d.logger.Error(
-				"Response of read request is failed",
+				"Response of read request (folder) is failed",
 				zap.Strings("paths", requestedPaths),
 				zap.Error(err),
 			)

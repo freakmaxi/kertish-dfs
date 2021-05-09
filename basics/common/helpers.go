@@ -36,7 +36,7 @@ func CorrectPath(folderPath string) string {
 	return CorrectPaths([]string{folderPath})[0]
 }
 
-func PathTree(folderPath string) []string {
+func PathTree(rootPath *string, folderPath string) []string {
 	folderPath = CorrectPath(folderPath)
 	if strings.Compare(folderPath, pathSeparator) == 0 {
 		return []string{pathSeparator}
@@ -46,7 +46,11 @@ func PathTree(folderPath string) []string {
 	split := strings.Split(folderPath, pathSeparator)
 	for len(split) > 0 {
 		p := strings.Join(split, pathSeparator)
-		folderTree = append([]string{CorrectPath(p)}, folderTree...)
+		if rootPath == nil ||
+			strings.Compare(*rootPath, pathSeparator) == 0 ||
+			strings.HasPrefix(p, *rootPath) {
+			folderTree = append([]string{CorrectPath(p)}, folderTree...)
+		}
 
 		split = split[:len(split)-1]
 	}

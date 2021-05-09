@@ -127,8 +127,12 @@ func (m *metadata) Get(folderPaths []string) ([]*common.Folder, error) {
 }
 
 func (m *metadata) Tree(folderPath string, includeItself bool, reverseSort bool) ([]*common.Folder, error) {
+	subFolderPath := folderPath
+	if strings.Compare(subFolderPath, "/") != 0 {
+		subFolderPath = fmt.Sprintf("%s/", subFolderPath)
+	}
 	filterContent := []interface{}{
-		bson.M{"full": bson.M{"$regex": primitive.Regex{Pattern: fmt.Sprintf("^%s/.+", folderPath)}}},
+		bson.M{"full": bson.M{"$regex": primitive.Regex{Pattern: fmt.Sprintf("^%s.+", subFolderPath)}}},
 	}
 	if includeItself {
 		filterContent = append(filterContent, bson.M{"full": bson.M{"$regex": primitive.Regex{Pattern: fmt.Sprintf("^%s$", folderPath)}}})
@@ -203,7 +207,7 @@ func (m *metadata) SaveBlock(folderPaths []string, saveHandler func(folders map[
 }
 
 func (m *metadata) SaveChain(folderPath string, saveHandler func(folder *common.Folder) (bool, error)) error {
-	folderTree := common.PathTree(folderPath)
+	folderTree := common.PathTree(nil, folderPath)
 
 	m.mutex.Wait(metadataLockKey)
 

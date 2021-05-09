@@ -37,7 +37,7 @@ func TestTree_FillV1(t *testing.T) {
 	folders = append(folders, NewFolder("/Level11/Level2/Level4"))
 
 	tree := NewTree()
-	_ = tree.Fill(folders)
+	_ = tree.Fill(nil, folders)
 
 	normalized := tree.Normalize()
 
@@ -94,7 +94,7 @@ func TestTree_FillV2(t *testing.T) {
 	folders = append(folders, orphan)
 
 	tree := NewTree()
-	_ = tree.Fill(folders)
+	_ = tree.Fill(nil, folders)
 
 	normalized := tree.Normalize()
 

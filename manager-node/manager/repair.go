@@ -142,7 +142,7 @@ func (r *repair) repairStructure() error {
 		}
 
 		tree := common.NewTree()
-		if err := tree.Fill(folders); err != nil {
+		if err := tree.Fill(nil, folders); err != nil {
 			return nil, err
 		}
 		return tree.Normalize(), nil

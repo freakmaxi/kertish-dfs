@@ -17,21 +17,24 @@ type ReadContainer interface {
 	Type() ReadType
 
 	Folder() *common.Folder
+	Tree() (*common.Tree, error)
 	File() *common.File
 
 	Read(w io.Writer, begins int64, ends int64) error
 }
 
 type readContainer struct {
-	folder *common.Folder
+	folder      *common.Folder
+	treeHandler func(folderPath string) (*common.Tree, error)
 
 	file          *common.File
 	streamHandler func(w io.Writer, begins int64, ends int64) error
 }
 
-func newReadContainerForFolder(folder *common.Folder) ReadContainer {
+func newReadContainerForFolder(folder *common.Folder, treeHandler func(folderPath string) (*common.Tree, error)) ReadContainer {
 	return &readContainer{
-		folder: folder,
+		folder:      folder,
+		treeHandler: treeHandler,
 	}
 }
 
@@ -51,6 +54,13 @@ func (r *readContainer) Type() ReadType {
 
 func (r *readContainer) Folder() *common.Folder {
 	return r.folder
+}
+
+func (r *readContainer) Tree() (*common.Tree, error) {
+	if r.file != nil {
+		return nil, nil
+	}
+	return r.treeHandler(r.folder.Full)
 }
 
 func (r *readContainer) File() *common.File {

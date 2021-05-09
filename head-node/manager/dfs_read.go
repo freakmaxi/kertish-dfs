@@ -16,7 +16,7 @@ func (d *dfs) Read(paths []string, join bool) (ReadContainer, error) {
 	if len(paths) == 1 {
 		folder, err := d.folder(paths[0])
 		if err == nil {
-			return newReadContainerForFolder(folder), nil
+			return newReadContainerForFolder(folder, d.tree), nil
 		}
 
 		if err != os.ErrNotExist {
@@ -40,6 +40,21 @@ func (d *dfs) folder(folderPath string) (*common.Folder, error) {
 		return nil, err
 	}
 	return folders[0], nil
+}
+
+func (d *dfs) tree(folderPath string) (*common.Tree, error) {
+	folderPath = common.CorrectPath(folderPath)
+
+	folders, err := d.metadata.Tree(folderPath, true, false)
+	if err != nil {
+		return nil, err
+	}
+
+	tree := common.NewTree()
+	if err := tree.Fill(&folderPath, folders); err != nil {
+		return nil, err
+	}
+	return tree, nil
 }
 
 func (d *dfs) file(paths []string) (*common.File, func(w io.Writer, begins int64, ends int64) error, error) {
