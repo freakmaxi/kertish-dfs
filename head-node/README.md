@@ -38,7 +38,8 @@ Will be used to have the stability of metadata of the file storage
 `j,[sourcePath],[sourcePath]...`. `sourcePath`(s) should be url encoded
 
 ##### Optional Headers:
-- `X-Calculate-Usage` (only folder) force to calculate the size of folders
+- `X-Calculate-Usage` (only folder) force to calculate the size of folders. Values: `1` or `true`. Default: `false`
+- `X-Tree` (only folder) export folder tree. Values: `1` or `true`. Default: `false`
 - `X-Download` works only with file request. It provides the data with `Content-Disposition` header. Values: `1` or 
 `true`. Default: `false`
 - `Range` to grab the part of the file. 
@@ -98,6 +99,44 @@ Will be used to have the stability of metadata of the file storage
     }
   ],
   "size": 0
+}
+```
+
+##### Folder Tree Sample Response
+```json
+{
+  "full": "/",
+  "name": "",
+  "created": "2020-04-21T19:18:18.136Z",
+  "modified": "2020-07-07T19:48:41.441Z",
+  "size": 0,
+  "folders": [
+    {
+      "full": "/FolderName",
+      "name": "FolderName",
+      "created": "2020-04-23T08:58:09.757Z",
+      "modified": "2020-07-06T11:38:02.01Z",
+      "size": 0,
+      "folders": [
+        {
+          "full": "/FolderName/SubFolderName1",
+          "name": "SubFolderName1",
+          "created": "2020-04-23T08:58:09.758Z",
+          "modified": "2020-04-23T08:58:09.758Z",
+          "size": 0,
+          "folders": []
+        },
+        {
+          "full": "/FolderName/SubFolderName2",
+          "name": "SubFolderName2",
+          "created": "2020-04-23T09:57:17.87Z",
+          "modified": "2020-04-23T09:57:17.87Z",
+          "size": 0,
+          "folders": []
+        }
+      ]
+    }
+  ]
 }
 ```
 ---
