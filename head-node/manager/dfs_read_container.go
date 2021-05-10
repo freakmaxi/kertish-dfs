@@ -9,8 +9,8 @@ import (
 type ReadType int
 
 const (
-	RT_Folder ReadType = 1
-	RT_File   ReadType = 2
+	RTFolder ReadType = 1
+	RTFile   ReadType = 2
 )
 
 type ReadContainer interface {
@@ -47,9 +47,9 @@ func newReadContainerForFile(file *common.File, streamHandler func(w io.Writer, 
 
 func (r *readContainer) Type() ReadType {
 	if r.file != nil {
-		return RT_File
+		return RTFile
 	}
-	return RT_Folder
+	return RTFolder
 }
 
 func (r *readContainer) Folder() *common.Folder {

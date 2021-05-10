@@ -97,12 +97,12 @@ func (c *clusters) RegisterCluster(cluster *common.Cluster) error {
 	ctx, cancelFunc := c.context(context.Background())
 	defer cancelFunc()
 
-	if err := c.col.FindOne(ctx, bson.M{"clusterId": cluster.Id}).Err(); err == nil {
+	err := c.col.FindOne(ctx, bson.M{"clusterId": cluster.Id}).Err()
+	if err == nil {
 		return errors.ErrExists
-	} else {
-		if err != mongo.ErrNoDocuments {
-			return err
-		}
+	}
+	if err != mongo.ErrNoDocuments {
+		return err
 	}
 	return c.overwrite(common.Clusters{cluster})
 }
@@ -135,10 +135,9 @@ func (c *clusters) RegisterNodeTo(clusterId string, node *common.Node) error {
 	_, err := c.GetByNodeId(node.Id)
 	if err == nil {
 		return errors.ErrRegistered
-	} else {
-		if err != errors.ErrNotFound {
-			return err
-		}
+	}
+	if err != errors.ErrNotFound {
+		return err
 	}
 
 	return c.Save(clusterId, func(cluster *common.Cluster) error {

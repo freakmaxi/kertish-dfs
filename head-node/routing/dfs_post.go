@@ -23,9 +23,8 @@ func (d *dfsRouter) handlePost(w http.ResponseWriter, r *http.Request) {
 			if err == os.ErrExist {
 				w.WriteHeader(409)
 				return
-			} else {
-				w.WriteHeader(500)
 			}
+			w.WriteHeader(500)
 			d.logger.Error(
 				"Create folder request is failed",
 				zap.String("path", requestedPaths[0]),

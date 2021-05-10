@@ -79,19 +79,19 @@ func (m *managerRouter) handleRepairConsistency(w http.ResponseWriter, r *http.R
 	var repairType manager.RepairType
 	switch repairOption {
 	case "structure":
-		repairType = manager.RT_StructureL1
+		repairType = manager.RTStructureL1
 	case "structure+integrity":
-		repairType = manager.RT_StructureL2
+		repairType = manager.RTStructureL2
 	case "integrity":
-		repairType = manager.RT_IntegrityL1
+		repairType = manager.RTIntegrityL1
 	case "integrity+checksum":
-		repairType = manager.RT_IntegrityL2
+		repairType = manager.RTIntegrityL2
 	case "checksum":
-		repairType = manager.RT_ChecksumL1
+		repairType = manager.RTChecksumL1
 	case "checksum+rebuild":
-		repairType = manager.RT_ChecksumL2
+		repairType = manager.RTChecksumL2
 	default:
-		repairType = manager.RT_Full
+		repairType = manager.RTFull
 	}
 
 	err := m.repair.Start(repairType)
@@ -233,7 +233,7 @@ func (m *managerRouter) handleClusters(w http.ResponseWriter, r *http.Request) {
 func (m *managerRouter) handleFind(w http.ResponseWriter, r *http.Request) {
 	sha512Hex := r.Header.Get("X-Options")
 
-	clusterId, address, err := m.manager.Find(sha512Hex, common.MT_Create)
+	clusterId, address, err := m.manager.Find(sha512Hex, common.MTCreate)
 
 	if err == nil {
 		w.Header().Set("X-Cluster-Id", clusterId)

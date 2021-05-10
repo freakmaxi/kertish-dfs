@@ -28,12 +28,12 @@ func (m *managerRouter) handlePost(w http.ResponseWriter, r *http.Request) {
 	case "reserve":
 		m.handleReserve(w, r)
 	case "readMap", "createMap", "deleteMap":
-		mapType := common.MT_Read
+		mapType := common.MTRead
 		switch action {
 		case "createMap":
-			mapType = common.MT_Create
+			mapType = common.MTCreate
 		case "deleteMap":
-			mapType = common.MT_Delete
+			mapType = common.MTDelete
 		}
 		m.handleMap(w, r, mapType)
 	default:

@@ -45,7 +45,7 @@ func (d *dfsRouter) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if read.Type() == manager.RT_Folder {
+	if read.Type() == manager.RTFolder {
 		w.Header().Set("X-Type", "folder")
 
 		calculateUsageHeader := strings.ToLower(r.Header.Get("X-Calculate-Usage"))

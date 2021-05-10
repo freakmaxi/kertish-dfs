@@ -489,7 +489,7 @@ func (c *cluster) Map(sha512HexList []string, mapType common.MapType) (map[strin
 	for _, sha512Hex := range sha512HexList {
 		_, address, err := c.Find(sha512Hex, mapType)
 		if err != nil {
-			if err == os.ErrNotExist && mapType == common.MT_Delete {
+			if err == os.ErrNotExist && mapType == common.MTDelete {
 				continue
 			}
 			return nil, err
@@ -515,7 +515,7 @@ func (c *cluster) Find(sha512Hex string, mapType common.MapType) (string, string
 			return "", "", errors.ErrNoAvailableClusterNode
 		}
 
-		if mapType != common.MT_Read {
+		if mapType != common.MTRead {
 			return "", "", errors.ErrNoAvailableClusterNode
 		}
 	}
@@ -523,7 +523,7 @@ func (c *cluster) Find(sha512Hex string, mapType common.MapType) (string, string
 	var node *common.Node
 
 	switch mapType {
-	case common.MT_Read:
+	case common.MTRead:
 		node = cluster.HighQualityNode(cacheFileItem.ExistsIn)
 	default:
 		node = cluster.Master()

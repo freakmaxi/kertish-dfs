@@ -99,7 +99,7 @@ func (c *cluster) Create(size uint64, reader io.Reader) (*common.CreationResult,
 }
 
 func (c *cluster) CreateShadow(chunks common.DataChunks) error {
-	m, err := c.createClusterMap(chunks, common.MT_Create)
+	m, err := c.createClusterMap(chunks, common.MTCreate)
 	if err != nil {
 		if err == errors.ErrNotFound {
 			return errors.ErrZombie
@@ -126,7 +126,7 @@ func (c *cluster) CreateShadow(chunks common.DataChunks) error {
 func (c *cluster) Read(chunks common.DataChunks) (func(w io.Writer, begins int64, ends int64) error, error) {
 	sort.Sort(chunks)
 
-	m, err := c.createClusterMap(chunks, common.MT_Read)
+	m, err := c.createClusterMap(chunks, common.MTRead)
 	if err != nil {
 		if err == errors.ErrNotFound {
 			return nil, errors.ErrZombie
@@ -194,7 +194,7 @@ func (c *cluster) Delete(chunks common.DataChunks) (*common.DeletionResult, erro
 		return nil, errors.ErrZombie
 	}
 
-	m, err := c.createClusterMap(chunks, common.MT_Delete)
+	m, err := c.createClusterMap(chunks, common.MTDelete)
 	if err != nil {
 		if err == errors.ErrNotFound {
 			return nil, errors.ErrZombie
@@ -369,9 +369,9 @@ func (c *cluster) requestClusterMap(sha512HexList []string, mapType common.MapTy
 
 	mode := "read"
 	switch mapType {
-	case common.MT_Create:
+	case common.MTCreate:
 		mode = "create"
-	case common.MT_Delete:
+	case common.MTDelete:
 		mode = "delete"
 	}
 	req.Header.Set("X-Action", fmt.Sprintf("%sMap", mode))

@@ -22,13 +22,13 @@ const parallelRepair = 10
 type RepairType int
 
 const (
-	RT_Full        RepairType = 1
-	RT_StructureL1 RepairType = 2
-	RT_StructureL2 RepairType = 3
-	RT_IntegrityL1 RepairType = 4
-	RT_IntegrityL2 RepairType = 5
-	RT_ChecksumL1  RepairType = 6
-	RT_ChecksumL2  RepairType = 7
+	RTFull        RepairType = 1
+	RTStructureL1 RepairType = 2
+	RTStructureL2 RepairType = 3
+	RTIntegrityL1 RepairType = 4
+	RTIntegrityL2 RepairType = 5
+	RTChecksumL1  RepairType = 6
+	RTChecksumL2  RepairType = 7
 )
 
 type Repair interface {
@@ -76,17 +76,17 @@ func (r *repair) Start(repairType RepairType) error {
 	go func() {
 		zapRepairType := zap.String("repairType", "full")
 		switch repairType {
-		case RT_StructureL1:
+		case RTStructureL1:
 			zapRepairType = zap.String("repairType", "structure")
-		case RT_StructureL2:
+		case RTStructureL2:
 			zapRepairType = zap.String("repairType", "structure with integrity")
-		case RT_IntegrityL1:
+		case RTIntegrityL1:
 			zapRepairType = zap.String("repairType", "integrity")
-		case RT_IntegrityL2:
+		case RTIntegrityL2:
 			zapRepairType = zap.String("repairType", "integrity with rebuilding checksum calculation")
-		case RT_ChecksumL1:
+		case RTChecksumL1:
 			zapRepairType = zap.String("repairType", "checksum calculation")
-		case RT_ChecksumL2:
+		case RTChecksumL2:
 			zapRepairType = zap.String("repairType", "rebuilding checksum calculation")
 		}
 		r.logger.Info("Consistency repair is started...", zapRepairType)
@@ -104,9 +104,9 @@ func (r *repair) Start(repairType RepairType) error {
 }
 
 func (r *repair) start(repairType RepairType) error {
-	repairStructure := repairType == RT_Full || repairType == RT_StructureL1 || repairType == RT_StructureL2
-	repairIntegrity := repairType == RT_Full || repairType == RT_StructureL2 || repairType == RT_IntegrityL1 || repairType == RT_IntegrityL2
-	repairChecksum := repairType == RT_ChecksumL1 || repairType == RT_ChecksumL2
+	repairStructure := repairType == RTFull || repairType == RTStructureL1 || repairType == RTStructureL2
+	repairIntegrity := repairType == RTFull || repairType == RTStructureL2 || repairType == RTIntegrityL1 || repairType == RTIntegrityL2
+	repairChecksum := repairType == RTChecksumL1 || repairType == RTChecksumL2
 
 	if repairStructure {
 		r.logger.Info("Repairing metadata structure consistency...")
@@ -118,7 +118,7 @@ func (r *repair) start(repairType RepairType) error {
 
 	if repairIntegrity {
 		r.logger.Info("Repairing metadata integrity...")
-		if err := r.repairIntegrity(repairType == RT_Full || repairType == RT_IntegrityL2); err != nil {
+		if err := r.repairIntegrity(repairType == RTFull || repairType == RTIntegrityL2); err != nil {
 			return err
 		}
 		r.logger.Info("Metadata integrity repair is completed")
@@ -126,7 +126,7 @@ func (r *repair) start(repairType RepairType) error {
 
 	if repairChecksum {
 		r.logger.Info("Repairing metadata file checksum...")
-		if err := r.repairChecksum(repairType == RT_ChecksumL2); err != nil {
+		if err := r.repairChecksum(repairType == RTChecksumL2); err != nil {
 			return err
 		}
 		r.logger.Info("Metadata file checksum repair is completed")

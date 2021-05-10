@@ -723,10 +723,9 @@ func (s *shellCommand) searchInLocalFolder(basePath string, v string, onlyFolder
 		if info.IsDir() {
 			matches = append(matches, []string{"folder", info.Name()})
 			return filepath.SkipDir
-		} else {
-			if !onlyFolders {
-				matches = append(matches, []string{"file", info.Name()})
-			}
+		}
+		if !onlyFolders {
+			matches = append(matches, []string{"file", info.Name()})
 		}
 		return nil
 	}); err != nil {
