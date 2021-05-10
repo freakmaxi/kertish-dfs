@@ -15,6 +15,7 @@ import (
 
 const chunkSize uint32 = 1024 * 1024 // 1mb
 
+// File handler for block file operations
 type File interface {
 	Temporary() bool
 
@@ -53,6 +54,7 @@ type file struct {
 	logger     *zap.Logger
 }
 
+// NewFile provides the file interface for (new) block file operations
 func NewFile(root string, sha512Hex string, logger *zap.Logger) (File, error) {
 	file := &file{
 		sha512:     sha512.New512_256(),

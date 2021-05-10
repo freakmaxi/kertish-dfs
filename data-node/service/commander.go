@@ -250,7 +250,7 @@ func (c *commander) crea(conn net.Conn) error {
 			)
 		} else {
 			c.logger.Warn(
-				fmt.Sprintf("Notification timeout is reached for %s (CREATE). System will fix it later or run cluster sync. operation for immidiate consistancy recovery.",
+				fmt.Sprintf("Notification timeout is reached for %s (CREATE). System will fix it later or run cluster sync. operation for immediate consistancy recovery.",
 					sha512Hex,
 				),
 			)
@@ -371,7 +371,7 @@ func (c *commander) dele(conn net.Conn) error {
 			)
 		} else {
 			c.logger.Warn(
-				fmt.Sprintf("Notification timeout is reached for %s (DELETE). System will fix it later or run cluster sync. operation for immidiate consistancy recovery.",
+				fmt.Sprintf("Notification timeout is reached for %s (DELETE). System will fix it later or run cluster sync. operation for immediate consistancy recovery.",
 					sha512Hex,
 				),
 			)

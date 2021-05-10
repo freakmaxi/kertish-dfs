@@ -27,6 +27,7 @@ type moveCommand struct {
 	target    string
 }
 
+// NewMove creates the execution of move operation
 func NewMove(headAddresses []string, output terminal.Output, basePath string, args []string) Execution {
 	return &moveCommand{
 		headAddresses: headAddresses,

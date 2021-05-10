@@ -28,6 +28,7 @@ type copyCommand struct {
 	target    string
 }
 
+// NewCopy creates the execution of copy operation
 func NewCopy(headAddresses []string, output terminal.Output, basePath string, args []string) Execution {
 	return &copyCommand{
 		headAddresses: headAddresses,

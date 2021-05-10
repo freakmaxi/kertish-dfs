@@ -22,6 +22,7 @@ type removeCommand struct {
 	targets     []string
 }
 
+// NewRemove creates the execution of remove operation
 func NewRemove(headAddresses []string, output terminal.Output, basePath string, args []string) Execution {
 	return &removeCommand{
 		headAddresses: headAddresses,

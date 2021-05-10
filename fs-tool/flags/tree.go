@@ -25,6 +25,7 @@ type treeCommand struct {
 	source       string
 }
 
+// NewTree creates the execution of tree operation
 func NewTree(headAddresses []string, output terminal.Output, basePath string, args []string) Execution {
 	return &treeCommand{
 		headAddresses: headAddresses,

@@ -31,6 +31,7 @@ type shellCommand struct {
 	foldersCache map[string]*common.Folder
 }
 
+// NewShell creates an environment for all possible file system manipulation operations
 func NewShell(headAddresses []string, version string) Execution {
 	return &shellCommand{
 		headAddresses: headAddresses,

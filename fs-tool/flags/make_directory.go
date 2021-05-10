@@ -19,6 +19,7 @@ type makeDirectoryCommand struct {
 	target string
 }
 
+// NewMakeDirectory creates the execution of folder creation operation
 func NewMakeDirectory(headAddresses []string, output terminal.Output, basePath string, args []string) Execution {
 	return &makeDirectoryCommand{
 		headAddresses: headAddresses,

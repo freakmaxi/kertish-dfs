@@ -24,6 +24,7 @@ type listCommand struct {
 	source  string
 }
 
+// NewList creates the execution of list operation
 func NewList(headAddresses []string, output terminal.Output, basePath string, args []string) Execution {
 	return &listCommand{
 		headAddresses: headAddresses,

@@ -335,26 +335,6 @@ func (s *synchronize) syncSnapshots(sourceNode cluster.DataNode, sourceContainer
 		return
 	}
 
-	createSnapshotAndSyncFunc := func(targetSnapshot time.Time) error {
-		if _, err := s.snapshot.Create(&targetSnapshot); err != nil {
-			s.logger.Error("snapshot creation for sync is failed", zap.Error(err))
-			return err
-		}
-
-		targetContainer, err := sourceNode.SyncList(&targetSnapshot)
-		if err != nil {
-			s.logger.Error("request for snapshot sync list is failed", zap.Error(err))
-			return err
-		}
-
-		if err = s.syncFileItems(sourceNode, &targetSnapshot, targetContainer.FileItems); err != nil {
-			s.logger.Error("syncing snapshot files is failed", zap.Error(err))
-			return err
-		}
-
-		return nil
-	}
-
 	for len(snapshots) > 0 {
 		currentSnapshot := snapshots[0]
 
@@ -392,7 +372,7 @@ func (s *synchronize) syncSnapshots(sourceNode cluster.DataNode, sourceContainer
 		}
 
 		// Create snapshot from root then sync
-		if err := createSnapshotAndSyncFunc(sourceSnapshot); err != nil {
+		if err := s.createSnapshotAndSync(sourceNode, sourceSnapshot); err != nil {
 			return
 		}
 
@@ -402,7 +382,7 @@ func (s *synchronize) syncSnapshots(sourceNode cluster.DataNode, sourceContainer
 	for len(sourceContainer.Snapshots) > 0 {
 		sourceSnapshot := sourceContainer.Snapshots[0]
 
-		if err := createSnapshotAndSyncFunc(sourceSnapshot); err != nil {
+		if err := s.createSnapshotAndSync(sourceNode, sourceSnapshot); err != nil {
 			return
 		}
 
@@ -410,6 +390,26 @@ func (s *synchronize) syncSnapshots(sourceNode cluster.DataNode, sourceContainer
 	}
 
 	completed = true
+}
+
+func (s *synchronize) createSnapshotAndSync(sourceNode cluster.DataNode, targetSnapshot time.Time) error {
+	if _, err := s.snapshot.Create(&targetSnapshot); err != nil {
+		s.logger.Error("snapshot creation for sync is failed", zap.Error(err))
+		return err
+	}
+
+	targetContainer, err := sourceNode.SyncList(&targetSnapshot)
+	if err != nil {
+		s.logger.Error("request for snapshot sync list is failed", zap.Error(err))
+		return err
+	}
+
+	if err = s.syncFileItems(sourceNode, &targetSnapshot, targetContainer.FileItems); err != nil {
+		s.logger.Error("syncing snapshot files is failed", zap.Error(err))
+		return err
+	}
+
+	return nil
 }
 
 func (s *synchronize) delete(wg *sync.WaitGroup, b block.Manager, wipeList common.SyncFileItemList) {
