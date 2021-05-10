@@ -10,6 +10,7 @@ import (
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
 )
 
+// File struct is to hold the actual file details in dfs cluster
 type File struct {
 	Name     string     `json:"name"`
 	Mime     string     `json:"mime"`
@@ -23,12 +24,14 @@ type File struct {
 	Zombie   bool       `json:"zombie"`
 }
 
+// Files is definition of the pointer array of file struct
 type Files []*File
 
 func (f Files) Len() int           { return len(f) }
 func (f Files) Less(i, j int) bool { return strings.Compare(f[i].Name, f[j].Name) < 0 }
 func (f Files) Swap(i, j int)      { f[i], f[j] = f[j], f[i] }
 
+// CreateJoinedFile creates a file struct from multiple files and behave like a single file
 func CreateJoinedFile(files Files) (*File, error) {
 	hash := md5.New()
 
@@ -88,6 +91,8 @@ func newFile(name string) *File {
 	}
 }
 
+// IngestDeletion ingest the deletion information to file struct to be able to
+// track the consistent deletion operation across the dfs clusters
 func (f *File) IngestDeletion(deletionResult DeletionResult) {
 	if len(deletionResult.Untouched) == 0 && len(deletionResult.Deleted) == 0 && len(deletionResult.Missing) == 0 {
 		return
@@ -144,15 +149,18 @@ func (f *File) IngestDeletion(deletionResult DeletionResult) {
 	f.Missing = append(f.Missing, chunks...)
 }
 
+// ZombieCheck checks if the file is zombie in the dfs clustes
 func (f *File) ZombieCheck() bool {
 	f.Zombie = f.Zombie || len(f.Chunks) == 0
 	return f.Zombie
 }
 
+// CanDie checks if the zombie file can be deleted
 func (f *File) CanDie() bool {
 	return f.Zombie && len(f.Chunks) == 0
 }
 
+// Resurrect resets the zombie situation of the file to able to repair
 func (f *File) Resurrect() {
 	if len(f.Missing) == 0 {
 		return
@@ -163,10 +171,12 @@ func (f *File) Resurrect() {
 	f.Zombie = false
 }
 
+// Locked checks if file is locked for any other operation
 func (f *File) Locked() bool {
 	return f.Lock != nil && f.Lock.Till.After(time.Now().UTC())
 }
 
+// Reset resets the file struct fields to default values
 func (f *File) Reset(mime string, size uint64) {
 	f.Mime = mime
 	f.Size = size
@@ -179,6 +189,7 @@ func (f *File) Reset(mime string, size uint64) {
 	f.Zombie = false
 }
 
+// CloneInto copies the file struct in to a target file struct
 func (f *File) CloneInto(target *File) {
 	if target == nil {
 		return
