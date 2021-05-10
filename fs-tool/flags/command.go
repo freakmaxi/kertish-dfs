@@ -57,6 +57,7 @@ func (c *Command) printUsage() {
 	fmt.Println("  cp      Copy file or folder.")
 	fmt.Println("  mv      Move file or folder.")
 	fmt.Println("  rm      Remove files and/or folders.")
+	fmt.Println("  tree    Print folders tree.")
 	fmt.Println("  sh      Enter shell mode of fs-tool.")
 	fmt.Println()
 }
@@ -91,7 +92,7 @@ func (c *Command) Parse() bool {
 		}
 
 		switch arg {
-		case "mkdir", "ls", "cp", "mv", "rm", "sh":
+		case "mkdir", "ls", "cp", "mv", "rm", "tree", "sh":
 			mrArgs := make([]string, 0)
 			if i+1 < len(c.args) {
 				mrArgs = c.args[i+1:]

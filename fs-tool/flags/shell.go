@@ -76,6 +76,7 @@ func (s *shellCommand) printHelp() {
 	s.output.Println("  cp      Copy file or folder.")
 	s.output.Println("  mv      Move file or folder.")
 	s.output.Println("  rm      Remove files and/or folders.")
+	s.output.Println("  tree    Print folders tree.")
 	s.output.Println("  help    Show this screen.")
 	s.output.Println("          Ex: help [command] or help shortcuts")
 	s.output.Println("  exit    Exit from shell.")
@@ -351,7 +352,7 @@ func (s *shellCommand) processCommand() bool {
 			s.output.Println(err.Error())
 		} else {
 			switch e.Name() {
-			case "cp", "mkdir", "mv", "rm":
+			case "cp", "mkdir", "mv", "rm", "tree":
 				s.rebuildActiveFolderAndCaches()
 			}
 		}
@@ -436,7 +437,7 @@ func (s *shellCommand) parse(args []string) (bool, bool, Execution) {
 		return true, false, nil
 	case "exit":
 		return true, true, nil
-	case "mkdir", "ls", "cp", "mv", "rm":
+	case "mkdir", "ls", "cp", "mv", "rm", "tree":
 		mrArgs := make([]string, 0)
 		if len(args) > 1 {
 			mrArgs = args[1:]

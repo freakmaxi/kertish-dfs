@@ -32,6 +32,8 @@ func newExecution(headAddresses []string, output terminal.Output, command string
 		return NewMove(headAddresses, output, basePath, args), nil
 	case "rm":
 		return NewRemove(headAddresses, output, basePath, args), nil
+	case "tree":
+		return NewTree(headAddresses, output, basePath, args), nil
 	case "sh":
 		return NewShell(headAddresses, version), nil
 	}

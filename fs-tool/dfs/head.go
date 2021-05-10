@@ -54,6 +54,42 @@ func List(headAddresses []string, source string, usage bool) (*common.Folder, er
 	return folder, nil
 }
 
+func Tree(headAddresses []string, source string, usage bool) (*common.TreeShadow, error) {
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s%s", headAddresses[0], headEndPoint), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-Path", createXPath([]string{source}))
+	req.Header.Set("X-Calculate-Usage", strconv.FormatBool(usage))
+	req.Header.Set("X-Tree", "true")
+
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%s: head node is not reachable", headAddresses[0])
+	}
+	defer func() { _ = res.Body.Close() }()
+
+	switch res.StatusCode {
+	case 404:
+		return nil, fmt.Errorf("%s is not exists", source)
+	case 422:
+		return nil, fmt.Errorf("%s should be an absolute path", source)
+	case 500:
+		return nil, fmt.Errorf("unable to list %s", source)
+	default:
+		if res.StatusCode != 200 {
+			return nil, fmt.Errorf("dfs head returned with an unrecognisable status code: %d", res.StatusCode)
+		}
+	}
+
+	var tree *common.TreeShadow
+	if err := json.NewDecoder(res.Body).Decode(&tree); err != nil {
+		return nil, fmt.Errorf("unable to list %s", source)
+	}
+
+	return tree, nil
+}
+
 func MakeFolder(headAddresses []string, target string) error {
 	req, err := http.NewRequest("POST", fmt.Sprintf("http://%s%s", headAddresses[0], headEndPoint), nil)
 	if err != nil {
