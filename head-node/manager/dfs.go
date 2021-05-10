@@ -7,6 +7,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// Dfs interface is for file manipulation operations base on REST service request
 type Dfs interface {
 	CreateFolder(folderPath string) error
 	CreateFile(path string, mime string, size uint64, overwrite bool, contentReader io.Reader) error
@@ -25,6 +26,7 @@ type dfs struct {
 	logger   *zap.Logger
 }
 
+// NewDfs creates the instance of file manipulation operations object for REST service request
 func NewDfs(metadata data.Metadata, cluster Cluster, logger *zap.Logger) Dfs {
 	return &dfs{
 		metadata: metadata,

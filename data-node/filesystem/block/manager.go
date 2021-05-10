@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// Manager interface is for file operation handling
 type Manager interface {
 	Wait()
 
@@ -27,6 +28,7 @@ type manager struct {
 	blockLock      map[string]*sync.Mutex
 }
 
+// NewManager creates the Manager interface for file operation handling
 func NewManager(dataPath string, logger *zap.Logger) (Manager, error) {
 	m := &manager{
 		dataPath: dataPath,

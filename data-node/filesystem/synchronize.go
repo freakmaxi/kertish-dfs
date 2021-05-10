@@ -19,6 +19,7 @@ const queueSize = 5000
 const pauseDuration = time.Second * 30
 const retryCount = 10
 
+// Synchronize interface handles sync operations between cluster data nodes
 type Synchronize interface {
 	List(snapshotTime *time.Time, itemHandler func(fileItem *common.SyncFileItem) error) error
 
@@ -45,6 +46,7 @@ type synchronize struct {
 	syncChan  chan queueItem
 }
 
+// NewSynchronize creates an instance for data node synchronize operation
 func NewSynchronize(rootPath string, snapshot Snapshot, logger *zap.Logger) (Synchronize, error) {
 	s := &synchronize{
 		rootPath: rootPath,

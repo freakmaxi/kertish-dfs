@@ -1,5 +1,6 @@
 package terminal
 
+// Output interface is to handle multiple input operations for different output points
 type Output interface {
 	LockOrigin()
 	PrintlnFromOrigin(input string)

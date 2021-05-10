@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// Manager interface is for handling data node operations
 type Manager interface {
 	Block() block.Manager
 	Snapshot(func(snapshot Snapshot) error) error
@@ -31,6 +32,7 @@ type manager struct {
 	mutex sync.Mutex
 }
 
+// NewManager creates the instance of data node operations manager
 func NewManager(rootPath string, logger *zap.Logger) (Manager, error) {
 	b, err := block.NewManager(rootPath, logger)
 	if err != nil {

@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// Cluster interface contains functions to handle the cluster administration in the dfs farm
 type Cluster interface {
 	Register(nodeAddresses []string) (*common.Cluster, error)
 	RegisterNodesTo(clusterId string, nodeAddresses []string) error
@@ -47,6 +48,7 @@ type cluster struct {
 	logger      *zap.Logger
 }
 
+// NewCluster creates the instance for cluster administration of the dfs farm
 func NewCluster(clusters data.Clusters, index data.Index, synchronize Synchronize, logger *zap.Logger) (Cluster, error) {
 	return &cluster{
 		clusters:    clusters,

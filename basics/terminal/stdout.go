@@ -7,6 +7,7 @@ type stdout struct {
 	colBlockIdx int
 }
 
+// NewStdOut creates an output handling interface for console output
 func NewStdOut() Output {
 	return &stdout{
 		column:      0,

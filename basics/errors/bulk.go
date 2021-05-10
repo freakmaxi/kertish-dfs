@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// BulkError struct is too keep multiple error that can be occurred in execution
 type BulkError struct {
 	innerErrors []*errorContainer
 }
@@ -14,12 +15,14 @@ type errorContainer struct {
 	err  error
 }
 
+// NewBulkError creates empty BulkError struct definition
 func NewBulkError() *BulkError {
 	return &BulkError{
 		innerErrors: make([]*errorContainer, 0),
 	}
 }
 
+// Add adds error in list
 func (b *BulkError) Add(err error) {
 	b.innerErrors = append(b.innerErrors, &errorContainer{
 		date: time.Now(),
@@ -27,6 +30,7 @@ func (b *BulkError) Add(err error) {
 	})
 }
 
+// HasError checks if any error is added to the list
 func (b *BulkError) HasError() bool {
 	return len(b.innerErrors) > 0
 }
