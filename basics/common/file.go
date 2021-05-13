@@ -24,7 +24,7 @@ type File struct {
 	Zombie   bool       `json:"zombie"`
 }
 
-// Files is definition of the pointer array of file struct
+// Files is the definition of the pointer array of File struct
 type Files []*File
 
 func (f Files) Len() int           { return len(f) }

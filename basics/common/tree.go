@@ -6,6 +6,7 @@ import (
 	"strings"
 )
 
+// Tree organised the provided Folder array to create the Tree structure
 type Tree struct {
 	folder      *Folder
 	folderCache map[string]*FolderShadow
@@ -13,6 +14,7 @@ type Tree struct {
 	subMap      map[string]*Tree
 }
 
+// NewTree creates an empty Tree
 func NewTree() *Tree {
 	return newTree(nil)
 }
@@ -33,6 +35,7 @@ func newTree(folder *Folder) *Tree {
 	}
 }
 
+// Normalize converts the Tree to Folder array
 func (t *Tree) Normalize() []*Folder {
 	folders := make([]*Folder, 0)
 	t.normalize(t, &folders)
@@ -52,6 +55,7 @@ func (t *Tree) normalize(tree *Tree, folders *[]*Folder) {
 	}
 }
 
+// CalculateUsage calculates the folder sizes of the each member of the tree
 func (t *Tree) CalculateUsage() {
 	t.calculateUsage(t)
 }
@@ -74,27 +78,15 @@ func (t *Tree) calculateUsage(tree *Tree) uint64 {
 	return s
 }
 
+// Shadow creates the TreeShadow object of the Tree by simplifying
+// the information to make it serializable and exportable
 func (t *Tree) Shadow() *TreeShadow {
-	return t.createShadow(t)
+	return NewTreeShadowFromTree(t)
 }
 
-func (t *Tree) createShadow(tree *Tree) *TreeShadow {
-	subShadows := make(TreeShadows, 0)
-
-	for _, subTree := range tree.subs {
-		subShadows = append(subShadows, t.createShadow(subTree))
-	}
-
-	return &TreeShadow{
-		Full:     tree.folder.Full,
-		Name:     tree.folder.Name,
-		Created:  tree.folder.Created,
-		Modified: tree.folder.Modified,
-		Size:     tree.folder.Size,
-		Folders:  subShadows,
-	}
-}
-
+// Fill creates the Tree using the provided Folder array with the respect of rootPath entry
+// this function will also fix / repair the missing part of the Tree if provided Folder array does not
+// contain all the necessary parts of it
 func (t *Tree) Fill(rootPath *string, folders []*Folder) error {
 	if len(folders) == 0 {
 		return nil

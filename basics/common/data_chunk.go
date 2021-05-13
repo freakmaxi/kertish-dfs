@@ -1,13 +1,16 @@
 package common
 
+// DataChunk struct is to hold the block File particle information
 type DataChunk struct {
 	Sequence uint16 `json:"sequence"`
 	Size     uint32 `json:"size"`
 	Hash     string `json:"hash"`
 }
 
+// DataChunks is the definition of the pointer array of DataChunk struct
 type DataChunks []*DataChunk
 
+// NewDataChunk initialises a new DataChunk using the given information
 func NewDataChunk(sequence uint16, size uint32, sha512 string) *DataChunk {
 	return &DataChunk{
 		Sequence: sequence,
