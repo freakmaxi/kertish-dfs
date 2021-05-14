@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/freakmaxi/kertish-dfs/hooks"
+	"github.com/freakmaxi/kertish-dfs/basics/hooks"
 	"go.uber.org/zap"
 )
 

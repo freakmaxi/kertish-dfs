@@ -6,7 +6,7 @@ import (
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
-	"github.com/freakmaxi/kertish-dfs/hooks"
+	"github.com/freakmaxi/kertish-dfs/basics/hooks"
 )
 
 func (d *dfs) Delete(target string, killZombies bool) error {

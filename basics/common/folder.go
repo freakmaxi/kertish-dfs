@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
-	"github.com/freakmaxi/kertish-dfs/hooks"
+	"github.com/freakmaxi/kertish-dfs/basics/hooks"
 )
 
 // Folder struct is to hold the virtual folder details associated in dfs cluster

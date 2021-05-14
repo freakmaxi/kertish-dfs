@@ -2,7 +2,7 @@ package manager
 
 import (
 	"github.com/freakmaxi/kertish-dfs/basics/common"
-	"github.com/freakmaxi/kertish-dfs/hooks"
+	"github.com/freakmaxi/kertish-dfs/basics/hooks"
 	"go.uber.org/zap"
 )
 
