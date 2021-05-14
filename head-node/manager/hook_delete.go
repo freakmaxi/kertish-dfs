@@ -25,7 +25,7 @@ func (h *hook) Delete(folderPath string, hookIds []string) error {
 			hookId := hookIds[0]
 
 			for i := 0; i < len(folder.Hooks); i++ {
-				if strings.Compare(folder.Hooks[i].Id, hookId) != 0 {
+				if strings.Compare(*folder.Hooks[i].Id, hookId) != 0 {
 					continue
 				}
 				folder.Hooks = append(folder.Hooks[:i], folder.Hooks[i+1:]...)

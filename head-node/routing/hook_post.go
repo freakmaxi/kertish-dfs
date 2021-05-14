@@ -22,6 +22,7 @@ func (h *hookRouter) handlePost(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(422)
 		return
 	}
+	hook.Prepare()
 
 	if err := h.hook.Add(requestedPaths, &hook); err != nil {
 		if err == os.ErrExist {
