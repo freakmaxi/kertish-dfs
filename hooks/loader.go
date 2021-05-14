@@ -1,11 +1,14 @@
 package hooks
 
 import (
-	"fmt"
 	"io/fs"
 	"path/filepath"
 	"plugin"
+
+	"go.uber.org/zap"
 )
+
+var CurrentLoader Loader
 
 type Loader interface {
 	List() []Action
@@ -15,17 +18,26 @@ type Loader interface {
 type loader struct {
 	hooksPath string
 	providers map[string]Action
+
+	logger *zap.Logger
 }
 
-var CurrentLoader = newLoader()
+var defaultHookPath = "./hooks"
 
-func newLoader() Loader {
+func NewLoader(hooksPath *string, logger *zap.Logger) Loader {
+	if hooksPath == nil {
+		hooksPath = &defaultHookPath
+	}
 	l := &loader{
-		hooksPath: "./hooks",
+		hooksPath: *hooksPath,
 		providers: make(map[string]Action),
+		logger:    logger,
 	}
 	if err := l.load(); err != nil {
-		fmt.Println("hook loader unable to load any hook")
+		logger.Error(
+			"Hook loader unable to load any hook",
+			zap.Error(err),
+		)
 	}
 	return l
 }

@@ -5,11 +5,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/freakmaxi/kertish-dfs/basics/log"
+	"github.com/freakmaxi/kertish-dfs/basics/logging"
 	"github.com/freakmaxi/kertish-dfs/head-node/data"
 	"github.com/freakmaxi/kertish-dfs/head-node/manager"
 	"github.com/freakmaxi/kertish-dfs/head-node/routing"
 	"github.com/freakmaxi/kertish-dfs/head-node/services"
+	"github.com/freakmaxi/kertish-dfs/hooks"
 	"github.com/freakmaxi/locking-center-client-go/mutex"
 	"go.uber.org/zap"
 )
@@ -23,7 +24,7 @@ func main() {
 		return
 	}
 
-	logger, console := log.NewLogger("head")
+	logger, console := logging.NewLogger("head")
 	defer func() { _ = logger.Sync() }()
 
 	printWelcome(console)
@@ -109,6 +110,12 @@ func main() {
 	routerManager := routing.NewManager()
 	routerManager.Add(dfsRouter)
 	routerManager.Add(hookRouter)
+
+	hooksPath := os.Getenv("HOOKS_PATH")
+	if len(hooksPath) > 0 {
+		logger.Info(fmt.Sprintf("HOOKS_PATH: %s", hooksPath))
+	}
+	hooks.CurrentLoader = hooks.NewLoader(&hooksPath, logger)
 
 	proxy := services.NewProxy(bindAddr, routerManager, logger)
 	proxy.Start()

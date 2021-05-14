@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/freakmaxi/kertish-dfs/basics/log"
+	"github.com/freakmaxi/kertish-dfs/basics/logging"
 	"github.com/freakmaxi/kertish-dfs/manager-node/data"
 	"github.com/freakmaxi/kertish-dfs/manager-node/manager"
 	"github.com/freakmaxi/kertish-dfs/manager-node/routing"
@@ -25,7 +25,7 @@ func main() {
 		return
 	}
 
-	logger, console := log.NewLogger("manager")
+	logger, console := logging.NewLogger("manager")
 	defer func() { _ = logger.Sync() }()
 
 	printWelcome(console)
