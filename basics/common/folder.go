@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"github.com/freakmaxi/kertish-dfs/hooks"
 )
 
 // Folder struct is to hold the virtual folder details associated in dfs cluster
@@ -20,6 +21,7 @@ type Folder struct {
 	Size     uint64        `json:"size" bson:"-"`
 	Folders  FolderShadows `json:"folders"`
 	Files    Files         `json:"files"`
+	Hooks    hooks.Hooks   `json:"hooks,omitempty"`
 }
 
 // NewFolder creates a new empty Folder struct with folderPath
@@ -34,6 +36,7 @@ func NewFolder(folderPath string) *Folder {
 		Modified: time.Now().UTC(),
 		Folders:  make(FolderShadows, 0),
 		Files:    make(Files, 0),
+		Hooks:    make(hooks.Hooks, 0),
 	}
 }
 

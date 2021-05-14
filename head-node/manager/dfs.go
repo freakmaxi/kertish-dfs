@@ -2,8 +2,10 @@ package manager
 
 import (
 	"io"
+	"strings"
 
 	"github.com/freakmaxi/kertish-dfs/head-node/data"
+	"github.com/freakmaxi/kertish-dfs/hooks"
 	"go.uber.org/zap"
 )
 
@@ -18,6 +20,9 @@ type Dfs interface {
 	Change(sources []string, target string, join bool, overwrite bool, move bool) error
 
 	Delete(path string, killZombies bool) error
+
+	// ExecuteActions executes the hook actions in sync manner
+	ExecuteActions(aI *hooks.ActionInfo, actions []hooks.Action)
 }
 
 type dfs struct {
@@ -33,6 +38,52 @@ func NewDfs(metadata data.Metadata, cluster Cluster, logger *zap.Logger) Dfs {
 		cluster:  cluster,
 		logger:   logger,
 	}
+}
+
+func (d *dfs) ExecuteActions(aI *hooks.ActionInfo, actions []hooks.Action) {
+	if len(actions) == 0 || aI == nil {
+		return
+	}
+
+	for _, action := range actions {
+		if err := action.Execute(aI); err != nil {
+			d.logger.Warn(
+				"Execution of the hook action is failed",
+				zap.String("action", aI.Action),
+				zap.String("sourcePath", aI.SourcePath),
+				zap.Stringp("targetPath", aI.TargetPath),
+				zap.Bool("folder", aI.Folder),
+				zap.Error(err),
+			)
+		}
+	}
+}
+
+func (d *dfs) compileHookActions(folderPath string, actionType hooks.RunOn) []hooks.Action {
+	actions := make([]hooks.Action, 0)
+	folders, err := d.metadata.ParentTree(folderPath, true, false)
+	if err != nil {
+		return make([]hooks.Action, 0)
+	}
+
+	for _, folder := range folders {
+		if len(folder.Hooks) == 0 {
+			continue
+		}
+
+		for _, hook := range folder.Hooks {
+			if hook.RunOn != hooks.All && hook.RunOn != actionType {
+				continue
+			}
+			if strings.Compare(folderPath, folder.Full) != 0 && !hook.Recursive {
+				continue
+			}
+
+			actions = append(actions, hook.Action)
+		}
+	}
+
+	return actions
 }
 
 var _ Dfs = &dfs{}

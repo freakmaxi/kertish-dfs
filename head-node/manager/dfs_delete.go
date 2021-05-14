@@ -6,6 +6,7 @@ import (
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"github.com/freakmaxi/kertish-dfs/hooks"
 )
 
 func (d *dfs) Delete(target string, killZombies bool) error {
@@ -34,7 +35,7 @@ func (d *dfs) deleteFolder(folderPath string, killZombies bool) error {
 }
 
 func (d *dfs) deleteFolderContent(fullPath string, killZombies bool, foldersCache map[string]*common.Folder) error {
-	deletingFolders, err := d.metadata.Tree(fullPath, true, true)
+	deletingFolders, err := d.metadata.ChildrenTree(fullPath, true, true)
 	if err != nil {
 		if err == os.ErrNotExist {
 			return errors.ErrRepair
@@ -56,6 +57,8 @@ func (d *dfs) deleteFolderContent(fullPath string, killZombies bool, foldersCach
 			return errors.ErrLock
 		}
 
+		actions := d.compileHookActions(folder.Full, hooks.Deleted)
+
 		for len(folder.Files) > 0 {
 			file := folder.Files[0]
 
@@ -76,6 +79,9 @@ func (d *dfs) deleteFolderContent(fullPath string, killZombies bool, foldersCach
 		}
 
 		foldersCache[folder.Full] = nil
+
+		// QueueActions for the folder
+		d.ExecuteActions(hooks.NewActionInfoForDeleted(folder.Full, true), actions)
 	}
 
 	return nil
@@ -94,7 +100,16 @@ func (d *dfs) deleteFile(path string, killZombies bool) error {
 			if file.Locked() {
 				return errors.ErrLock
 			}
-			return d.deleteFileChunks(file, killZombies)
+			err := d.deleteFileChunks(file, killZombies)
+			if err != nil {
+				return err
+			}
+
+			// Handle Hook Actions
+			actions := d.compileHookActions(folder.Full, hooks.Deleted)
+			d.ExecuteActions(hooks.NewActionInfoForDeleted(common.Join(folder.Full, file.Name), false), actions)
+
+			return nil
 		})
 	})
 }

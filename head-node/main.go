@@ -103,8 +103,12 @@ func main() {
 	}
 	dfsRouter := routing.NewDfsRouter(dfs, logger)
 
+	hook := manager.NewHook(metadata, logger)
+	hookRouter := routing.NewHookRouter(hook, logger)
+
 	routerManager := routing.NewManager()
 	routerManager.Add(dfsRouter)
+	routerManager.Add(hookRouter)
 
 	proxy := services.NewProxy(bindAddr, routerManager, logger)
 	proxy.Start()

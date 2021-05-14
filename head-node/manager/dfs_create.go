@@ -6,6 +6,7 @@ import (
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"github.com/freakmaxi/kertish-dfs/hooks"
 	"go.uber.org/zap"
 )
 
@@ -13,6 +14,9 @@ func (d *dfs) CreateFolder(folderPath string) error {
 	folderPath = common.CorrectPath(folderPath)
 
 	return d.metadata.SaveChain(folderPath, func(folder *common.Folder) (bool, error) {
+		actions := d.compileHookActions(folderPath, hooks.Created)
+		d.ExecuteActions(hooks.NewActionInfoForCreated(folderPath, true), actions)
+
 		return true, nil
 	})
 }
@@ -88,6 +92,9 @@ func (d *dfs) CreateFile(path string, mime string, size uint64, overwrite bool, 
 			zap.String("path", path),
 			zap.Error(err),
 		)
+	} else {
+		actions := d.compileHookActions(folderPath, hooks.Created)
+		d.ExecuteActions(hooks.NewActionInfoForCreated(path, false), actions)
 	}
 	return err
 }

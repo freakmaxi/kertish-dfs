@@ -6,6 +6,7 @@ import (
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
+	"github.com/freakmaxi/kertish-dfs/hooks"
 )
 
 func (d *dfs) Change(sources []string, target string, join bool, overwrite bool, move bool) error {
@@ -42,7 +43,7 @@ func (d *dfs) changeFolder(sources []string, target string, move bool) error {
 	for i := 0; i < len(sourceFolders); i++ {
 		sourceFolder := sourceFolders[i]
 
-		sourceChildren, err := d.metadata.Tree(sourceFolder.Full, false, false)
+		sourceChildren, err := d.metadata.ChildrenTree(sourceFolder.Full, false, false)
 		if err != nil {
 			return err
 		}
@@ -156,11 +157,23 @@ func (d *dfs) changeFolder(sources []string, target string, move bool) error {
 		}
 
 		if move {
+			// Handle Hooks
+			for _, source := range sources {
+				actions := d.compileHookActions(source, hooks.Updated)
+				d.ExecuteActions(hooks.NewActionInfoForMovedFolder(source, target), actions)
+			}
+
 			return true, nil
 		}
 
 		if err := d.cluster.CreateShadow(createShadowChunks); err != nil {
 			return false, err
+		}
+
+		// Handle Hooks
+		for _, source := range sources {
+			actions := d.compileHookActions(source, hooks.Updated)
+			d.ExecuteActions(hooks.NewActionInfoForCopiedFolder(source, target), actions)
 		}
 
 		return true, nil
@@ -248,6 +261,12 @@ func (d *dfs) changeFile(sources []string, target string, overwrite bool, move b
 	}
 
 	if !move {
+		// Handle Hooks
+		for _, source := range sources {
+			actions := d.compileHookActions(source, hooks.Updated)
+			d.ExecuteActions(hooks.NewActionInfoForMovedFile(source, target, overwrite), actions)
+		}
+
 		return nil
 	}
 
@@ -260,6 +279,13 @@ func (d *dfs) changeFile(sources []string, target string, overwrite bool, move b
 				return nil
 			})
 		}
+
+		// Handle Hooks
+		for _, source := range sources {
+			actions := d.compileHookActions(source, hooks.Updated)
+			d.ExecuteActions(hooks.NewActionInfoForCopiedFile(source, target, overwrite), actions)
+		}
+
 		return true, nil
 	})
 }

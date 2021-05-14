@@ -45,7 +45,7 @@ func (d *dfs) folder(folderPath string) (*common.Folder, error) {
 func (d *dfs) tree(folderPath string) (*common.Tree, error) {
 	folderPath = common.CorrectPath(folderPath)
 
-	folders, err := d.metadata.Tree(folderPath, true, false)
+	folders, err := d.metadata.ChildrenTree(folderPath, true, false)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func (d *dfs) file(paths []string) (*common.File, func(w io.Writer, begins int64
 func (d *dfs) Size(folderPath string) (uint64, error) {
 	folderPath = common.CorrectPath(folderPath)
 
-	folders, err := d.metadata.Tree(folderPath, true, false)
+	folders, err := d.metadata.ChildrenTree(folderPath, true, false)
 	if err != nil {
 		return 0, err
 	}

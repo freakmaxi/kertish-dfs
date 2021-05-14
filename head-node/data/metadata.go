@@ -21,7 +21,8 @@ type LockReleaseHandler func()
 
 type Metadata interface {
 	Get(folderPaths []string) ([]*common.Folder, error)
-	Tree(folderPath string, includeItself bool, reverseSort bool) ([]*common.Folder, error)
+	ChildrenTree(folderPath string, includeItself bool, reverseSort bool) ([]*common.Folder, error)
+	ParentTree(folderPath string, includeItself bool, reverseSort bool) ([]*common.Folder, error)
 
 	SaveBlock(folderPaths []string, saveHandler func(folders map[string]*common.Folder) (bool, error)) error
 	SaveChain(folderPath string, saveHandler func(folder *common.Folder) (bool, error)) error
@@ -126,7 +127,33 @@ func (m *metadata) Get(folderPaths []string) ([]*common.Folder, error) {
 	return folders, nil
 }
 
-func (m *metadata) Tree(folderPath string, includeItself bool, reverseSort bool) ([]*common.Folder, error) {
+func (m *metadata) ParentTree(folderPath string, includeItself bool, reverseSort bool) ([]*common.Folder, error) {
+	folderTree := common.PathTree(nil, folderPath)
+	if len(folderTree) == 0 {
+		return make([]*common.Folder, 0), nil
+	}
+
+	if !includeItself {
+		if strings.Compare(folderPath, folderTree[len(folderTree)-1]) == 0 {
+			folderTree = folderTree[0 : len(folderTree)-1]
+			if len(folderTree) == 0 {
+				return make([]*common.Folder, 0), nil
+			}
+		}
+	}
+
+	if !reverseSort {
+		i := 0
+		for i < len(folderTree)-i {
+			folderTree[i], folderTree[len(folderTree)-i-1] = folderTree[len(folderTree)-i-1], folderTree[i]
+			i++
+		}
+	}
+
+	return m.Get(folderTree)
+}
+
+func (m *metadata) ChildrenTree(folderPath string, includeItself bool, reverseSort bool) ([]*common.Folder, error) {
 	subFolderPath := folderPath
 	if strings.Compare(subFolderPath, "/") != 0 {
 		subFolderPath = fmt.Sprintf("%s/", subFolderPath)
