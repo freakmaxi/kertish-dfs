@@ -66,26 +66,35 @@ func (h *Hook) MarshalJSON() ([]byte, error) {
 	})
 }
 
+func (h *Hook) parseJSONValue(r map[string]json.RawMessage, key string, target interface{}) error {
+	if v, has := r[key]; has {
+		if err := json.Unmarshal(v, &target); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (h *Hook) UnmarshalJSON(data []byte) error {
 	r := make(map[string]json.RawMessage)
 	if err := json.Unmarshal(data, &r); err != nil {
 		return err
 	}
 
-	if err := json.Unmarshal(r["id"], &h.Id); err != nil {
+	if err := h.parseJSONValue(r, "id", &h.Id); err != nil {
 		return err
 	}
-	if err := json.Unmarshal(r["createdAt"], &h.CreatedAt); err != nil {
+	if err := h.parseJSONValue(r, "createdAt", &h.CreatedAt); err != nil {
 		return err
 	}
-	if err := json.Unmarshal(r["runOn"], &h.RunOn); err != nil {
+	if err := h.parseJSONValue(r, "runOn", &h.RunOn); err != nil {
 		return err
 	}
-	if err := json.Unmarshal(r["recursive"], &h.Recursive); err != nil {
+	if err := h.parseJSONValue(r, "recursive", &h.Recursive); err != nil {
 		return err
 	}
 	var provider string
-	if err := json.Unmarshal(r["provider"], &provider); err != nil {
+	if err := h.parseJSONValue(r, "provider", &provider); err != nil {
 		return err
 	}
 
