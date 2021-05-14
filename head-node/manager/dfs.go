@@ -79,7 +79,15 @@ func (d *dfs) compileHookActions(folderPath string, actionType hooks.RunOn) []ho
 				continue
 			}
 
-			actions = append(actions, hook.Action)
+			action, err := hook.Action()
+			if err != nil {
+				d.logger.Error(
+					"Hook action creation is failed on the hook",
+					zap.Error(err),
+				)
+				continue
+			}
+			actions = append(actions, action)
 		}
 	}
 
