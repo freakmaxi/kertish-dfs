@@ -1,12 +1,9 @@
 package hooks
 
 import (
-	"crypto/md5"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -57,10 +54,11 @@ var _ Action = &testAction{}
 var testHook = &Hook{
 	RunOn:     All,
 	Recursive: true,
-	Action: &testAction{
+	Provider:  "testaction",
+	Setup: (&testAction{
 		ConnectionUrl:   "amqp://test:test@127.0.0.1:5672/",
 		TargetQueueName: "testQueueName",
-	},
+	}).Serialize(),
 }
 var hookJsonString string
 
@@ -82,12 +80,7 @@ func loadPlugin() {
 }
 
 func prepare() {
-	createdAt := time.Now().UTC()
-	testHook.CreatedAt = &createdAt
-
-	id := fmt.Sprintf("%d:%t:%s:%s", testHook.RunOn, testHook.Recursive, testHook.Action.Provider(), testHook.CreatedAt.Format(time.RFC3339Nano))
-	idHash := md5.Sum([]byte(id))
-	testHook.Id = hex.EncodeToString(idHash[:])
+	testHook.Prepare()
 
 	b, _ := json.Marshal(testHook)
 	hookJsonString = string(b)
@@ -96,13 +89,6 @@ func prepare() {
 func init() {
 	loadPlugin()
 	prepare()
-}
-
-func TestHook_MarshalJSON(t *testing.T) {
-	b, err := json.Marshal(testHook)
-
-	assert.Nil(t, err)
-	assert.Equal(t, hookJsonString, string(b))
 }
 
 func TestHook_UnmarshalJSON(t *testing.T) {
