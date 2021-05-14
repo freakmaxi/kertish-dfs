@@ -62,11 +62,11 @@ func (l *loader) load() error {
 		}
 		name := ns.(func() string)()
 
-		as, err := p.Lookup(name)
+		ls, err := p.Lookup("Load")
 		if err != nil {
 			return err
 		}
-		action := as.(Action)
+		action := ls.(func() Action)()
 
 		l.providers[name] = action
 
