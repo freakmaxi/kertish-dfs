@@ -16,6 +16,8 @@ major=$(date +%y)
 buildNo=`printf %04d $(expr $(expr $(date +%s) - $(gdate -d "Jun 13 2020" +%s)) / 345600)`
 export RELEASE_VERSION="$major.2.$buildNo"
 
+go clean -cache
+
 echo ""
 echo "Building FileSystem command-line tool (v$RELEASE_VERSION)"
 cd ../../fs-tool
@@ -55,6 +57,27 @@ echo "  > compiling macosx arm64 release"
 GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/macosx/arm64/kertish-manager
 echo "  > compiling macosx amd64 release"
 GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.version=$RELEASE_VERSION" -o ../-build-/executable/releases/macosx/amd64/kertish-manager
+
+echo ""
+echo "Building Hook Plugins (v$RELEASE_VERSION)"
+mkdir ../-build-/executable/releases/linux/arm64/hooks
+mkdir ../-build-/executable/releases/linux/amd64/hooks
+mkdir ../-build-/executable/releases/macosx/arm64/hooks
+mkdir ../-build-/executable/releases/macosx/amd64/hooks
+
+cd ../hook-providers
+for dir in */; do
+  cd $dir
+  echo "  > compiling linux arm64 release"
+  GOOS=linux GOARCH=arm64 go build -buildmode=plugin -ldflags "-X main.version=$RELEASE_VERSION" -o ../../-build-/executable/releases/linux/arm64/hooks
+  echo "  > compiling linux amd64 release"
+  GOOS=linux GOARCH=amd64 go build -buildmode=plugin -ldflags "-X main.version=$RELEASE_VERSION" -o ../../-build-/executable/releases/linux/amd64/hooks
+  echo "  > compiling macosx arm64 release"
+  GOOS=darwin GOARCH=arm64 go build -buildmode=plugin -ldflags "-X main.version=$RELEASE_VERSION" -o ../../-build-/executable/releases/macosx/arm64/hooks
+  echo "  > compiling macosx amd64 release"
+  GOOS=darwin GOARCH=amd64 go build -buildmode=plugin -ldflags "-X main.version=$RELEASE_VERSION" -o ../../-build-/executable/releases/macosx/amd64/hooks
+  cd ..
+done
 
 echo ""
 echo "Building Head Node service executable (v$RELEASE_VERSION)"
