@@ -111,11 +111,13 @@ func main() {
 	routerManager.Add(dfsRouter)
 	routerManager.Add(hookRouter)
 
-	hooksPath := os.Getenv("HOOKS_PATH")
-	if len(hooksPath) > 0 {
+	var hooksPath *string
+	hooksPathEnv := os.Getenv("HOOKS_PATH")
+	if len(hooksPathEnv) > 0 {
 		logger.Info(fmt.Sprintf("HOOKS_PATH: %s", hooksPath))
+		hooksPath = &hooksPathEnv
 	}
-	hooks.CurrentLoader = hooks.NewLoader(&hooksPath, logger)
+	hooks.CurrentLoader = hooks.NewLoader(hooksPath, logger)
 
 	proxy := services.NewProxy(bindAddr, routerManager, logger)
 	proxy.Start()
