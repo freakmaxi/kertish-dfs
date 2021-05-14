@@ -5,6 +5,8 @@ github.com/aws/aws-sdk-go v1.34.28/go.mod h1:H7NKnBqNVzoTJpGfLrQkkD+ytBA93eiDYi/
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/freakmaxi/kertish-dfs/hooks v0.0.0-20210514142344-0d4cc5079365 h1:QGx9WlSU6En8xkHZKDq7denSW/rBJHE5U57lbcW2YFY=
+github.com/freakmaxi/kertish-dfs/hooks v0.0.0-20210514142344-0d4cc5079365/go.mod h1:2kJ0H/SFRBzwjYLPrrsZ6VfyR48zEiw4pCoa76R2O0A=
 github.com/freakmaxi/locking-center-client-go v0.2.0 h1:GA2CII2DHMSK4ghKxOvjxHohIR+9KV8f4ffWkTtbqzQ=
 github.com/freakmaxi/locking-center-client-go v0.2.0/go.mod h1:KFBxhbltlWaS1psUCdUBNbA4FsnKRKOHN2KV6FrdnIE=
 github.com/gdamore/encoding v1.0.0 h1:+7OoQ1Bc6eTm5niUzBa0Ctsh6JbMW6Ra+YNuAtDBdko=

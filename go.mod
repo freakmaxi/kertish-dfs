@@ -3,6 +3,7 @@ module github.com/freakmaxi/kertish-dfs
 go 1.16
 
 require (
+	github.com/freakmaxi/kertish-dfs/hooks v0.0.0-20210514142344-0d4cc5079365
 	github.com/freakmaxi/locking-center-client-go v0.2.0
 	github.com/gdamore/tcell v1.4.0
 	github.com/google/uuid v1.2.0
