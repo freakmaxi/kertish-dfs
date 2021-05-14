@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 type RunOn int
@@ -81,6 +83,14 @@ func (h *Hook) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
+	var provider string
+	if err := h.parseJSONValue(r, "provider", &provider); err != nil {
+		return err
+	}
+	if len(provider) == 0 {
+		return fmt.Errorf("provider is not exists")
+	}
+
 	if err := h.parseJSONValue(r, "id", &h.Id); err != nil {
 		return err
 	}
@@ -91,10 +101,6 @@ func (h *Hook) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	if err := h.parseJSONValue(r, "recursive", &h.Recursive); err != nil {
-		return err
-	}
-	var provider string
-	if err := h.parseJSONValue(r, "provider", &provider); err != nil {
 		return err
 	}
 
@@ -108,4 +114,72 @@ func (h *Hook) UnmarshalJSON(data []byte) error {
 	}
 
 	return fmt.Errorf("unable to find the provider")
+}
+
+func (h *Hook) GetBSON() (interface{}, error) {
+	return struct {
+		Id        string          `bson:"id"`
+		CreatedAt *time.Time      `bson:"createdAt"`
+		RunOn     int             `bson:"runOn"`
+		Recursive bool            `bson:"recursive"`
+		Provider  string          `bson:"provider"`
+		Action    json.RawMessage `bson:"action"`
+	}{
+		Id:        h.Id,
+		CreatedAt: h.CreatedAt,
+		RunOn:     int(h.RunOn),
+		Recursive: h.Recursive,
+		Provider:  h.Action.Provider(),
+		Action:    h.Action.Serialize(),
+	}, nil
+}
+
+func (h *Hook) SetBSON(r bson.Raw) error {
+	rV := r.Lookup("provider")
+	if rV.Type == bson.TypeNull {
+		return fmt.Errorf("provider is not exists")
+	}
+	provider := rV.StringValue()
+
+	rEs, err := r.Elements()
+	if err != nil {
+		return err
+	}
+
+	for _, element := range rEs {
+		switch element.Key() {
+		case "id":
+			if err := element.Value().Unmarshal(&h.Id); err != nil {
+				return err
+			}
+		case "createdAt":
+			if err := element.Value().Unmarshal(&h.CreatedAt); err != nil {
+				return err
+			}
+		case "runOn":
+			if err := element.Value().Unmarshal(&h.RunOn); err != nil {
+				return err
+			}
+		case "recursive":
+			if err := element.Value().Unmarshal(&h.Recursive); err != nil {
+				return err
+			}
+		case "action":
+			for _, action := range CurrentLoader.List() {
+				if strings.Compare(action.Provider(), provider) != 0 {
+					continue
+				}
+
+				h.Action = action.New()
+				if err := h.Action.Create(element.Value().Value); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	if h.Action == nil {
+		return fmt.Errorf("unable to find the provider")
+	}
+	return nil
 }
