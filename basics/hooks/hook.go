@@ -117,6 +117,8 @@ func (h *Hook) UnmarshalJSON(data []byte) error {
 }
 
 func (h *Hook) GetBSON() (interface{}, error) {
+	h.update()
+
 	return struct {
 		Id        string          `bson:"id"`
 		CreatedAt *time.Time      `bson:"createdAt"`
@@ -136,8 +138,8 @@ func (h *Hook) GetBSON() (interface{}, error) {
 
 func (h *Hook) SetBSON(r bson.Raw) error {
 	rV := r.Lookup("provider")
-	if rV.Type == bson.TypeNull {
-		return fmt.Errorf("provider is not exists")
+	if rV.Type != bson.TypeString {
+		return fmt.Errorf("provider is not exists or has wrong type")
 	}
 	provider := rV.StringValue()
 
@@ -174,6 +176,7 @@ func (h *Hook) SetBSON(r bson.Raw) error {
 				if err := h.Action.Create(element.Value().Value); err != nil {
 					return err
 				}
+				break
 			}
 		}
 	}
