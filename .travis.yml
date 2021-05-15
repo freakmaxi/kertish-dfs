@@ -11,4 +11,7 @@ install:
   - go env
 
 script:
+  - cd basics
+  - env GO111MODULE=on go test ./...
+  - cd ../data-node
   - env GO111MODULE=on go test ./...
