@@ -22,7 +22,7 @@ is a simple extension to sync operation between systems.
 It is very easy to implement a hook provider. A hook provider has one special function to be able to load
 by the Kertish-dfs. `Load`.
 
-`Load` function is returning a hook.Action interface, which contains all the information related to the
+`Load` function is returning a `hook.Action` interface, which contains all the information related to the
 hook provider
 
 #### Simple Hook Provider Structure
