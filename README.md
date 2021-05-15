@@ -225,6 +225,8 @@ the `-build-` folder.
 
 ##### Setting Up Manager Node
 
+You can take a look at [Manager-Node](https://github.com/freakmaxi/kertish-dfs/blob/master/manager-node) page to understand how it is working
+
 - Copy `kertish-manager` executable to `/usr/local/bin` folder on the system.
 - Give execution permission to the file `sudo chmod +x /usr/local/bin/kertish-manager`
 - Create an empty file in your user path, copy-paste the following and save the file
@@ -241,6 +243,8 @@ export LOCKING_CENTER="127.0.0.1:22119"                 # Modify the values acco
 ---
 ##### Setting Up Head Node
 
+You can take a look at [Head-Node](https://github.com/freakmaxi/kertish-dfs/blob/master/head-node) page to understand how it is working
+
 - Copy `kertish-head` executable to `/usr/local/bin` folder on the system.
 - Give execution permission to the file `sudo chmod +x /usr/local/bin/kertish-head`
 - Create an empty file in your user path, copy-paste the following and save the file
@@ -256,6 +260,8 @@ export LOCKING_CENTER="127.0.0.1:22119"                 # Modify the values acco
 - Execute the saved file.
 ---
 ##### Setting Up Data Node(s)
+
+You can take a look at [Data-Node](https://github.com/freakmaxi/kertish-dfs/blob/master/data-node) page to understand how it is working
 
 - Copy `kertish-data` executable to `/usr/local/bin` folder on the system.
 - Give execution permission to the file `sudo chmod +x /usr/local/bin/kertish-data`
