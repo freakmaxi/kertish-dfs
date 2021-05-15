@@ -11,6 +11,8 @@ import (
 var CurrentLoader Loader
 
 type Loader interface {
+	HooksPath() string
+
 	List() []Action
 	Get(name string) Action
 }
@@ -24,12 +26,12 @@ type loader struct {
 
 var defaultHookPath = "./hooks"
 
-func NewLoader(hooksPath *string, logger *zap.Logger) Loader {
-	if hooksPath == nil {
-		hooksPath = &defaultHookPath
+func NewLoader(hooksPath string, logger *zap.Logger) Loader {
+	if len(hooksPath) == 0 {
+		hooksPath = defaultHookPath
 	}
 	l := &loader{
-		hooksPath: *hooksPath,
+		hooksPath: hooksPath,
 		providers: make(map[string]Action),
 		logger:    logger,
 	}
@@ -72,6 +74,10 @@ func (l *loader) load() error {
 
 		return nil
 	})
+}
+
+func (l *loader) HooksPath() string {
+	return l.hooksPath
 }
 
 func (l *loader) List() []Action {
