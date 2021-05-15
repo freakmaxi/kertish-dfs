@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/freakmaxi/kertish-dfs/basics/hooks"
 	"github.com/streadway/amqp"
@@ -11,10 +10,6 @@ import (
 
 var version = "XX.X.XXXX"
 var build = "XXXXXX"
-
-func Name() string {
-	return "RabbitMQ"
-}
 
 func Load() hooks.Action {
 	return &RabbitMQ{}
@@ -27,7 +22,7 @@ type RabbitMQ struct {
 }
 
 func (r *RabbitMQ) Provider() string {
-	return strings.ToLower(Name())
+	return "rabbitmq"
 }
 
 func (r *RabbitMQ) Version() string {
