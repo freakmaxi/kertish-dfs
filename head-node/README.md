@@ -1,4 +1,4 @@
-# Kertish DFS Head Node
+# Kertish DFS Head Node (DFS)
 
 Head node is responsible to handle file storage manipulation requests.
 Default bind endpoint port is `:4000`
@@ -17,6 +17,8 @@ Client will access the service using `http://127.0.0.1:4000/client/dfs`
 Manager address will be used to create the data node mapping, reserve, discard and commit 
 operations of file/folder placement.
 
+- `HOOKS_PATH` (optional) : The path of hook provider plugins. Default: `./hooks`
+  
 - `MONGO_CONN` (mandatory) : Mongo DB endpoint. Ex: `mongodb://admin:password@127.0.0.1:27017`
 
 Metadata of the file storage will be kept in Mongo DB.
@@ -71,6 +73,7 @@ Will be used to have the stability of metadata of the file storage
   "name": "",
   "created": "2020-01-11T21:15:55.23Z",
   "modified": "2020-01-11T21:15:55.23Z",
+  "size": 0,
   "folders": [
     {
       "full": "/FolderName",
@@ -98,7 +101,19 @@ Will be used to have the stability of metadata of the file storage
       }       
     }
   ],
-  "size": 0
+  "hooks": [
+    {
+      "id": "c7905a8e6fab03fa3643d81fce611d56",
+      "created": "2021-05-15T11:28:38.524Z",
+      "runOn": 1,
+      "recursive": true,
+      "provider": "rabbitmq",
+      "setup": {
+        "connectionUrl": "amqp://admin:admin@rabbitmq.server.com:5672/",
+        "targetQueueTopic": "testQueueName"
+      }
+    }
+  ]
 }
 ```
 
@@ -153,6 +168,9 @@ Will be used to have the stability of metadata of the file storage
 - `X-Overwrite` (only file) ignore file existence and continue without conflict response. Values: `1` or `true`. 
 Default: `false` 
 
+##### Body
+- `Binary data` (only file)
+
 ##### Possible Status Codes
 - `409`: Conflict (folder/file exists)
 - `411`: Content Length is required
@@ -202,3 +220,121 @@ Default: `false`
 - `526`: Require consistency repair
 - `200`: Successful
 
+# Kertish DFS Head Node (HOOKS)
+
+Hooks can be considered as watchers for the specific folder. They are executed on some
+certain conditions. Kertish DFS supports custom made hook providers. You can find more
+information under - [hook-providers](https://github.com/freakmaxi/kertish-dfs/tree/master/hook-providers) path.
+
+The management of the hook registration is handled by the head node.
+
+### Hook Manipulation Requests
+
+- `GET` is used to get the available hook providers registered in the head node.
+
+##### Available Hook Providers Sample Response
+```json
+[
+  {
+    "provider": "rabbitmq",
+    "version": "21.2.0084-302863",
+    "sample": {
+      "connectionUrl": "amqp://test:test@127.0.0.1:5672/",
+      "targetQueueTopic": "testQueueName"
+    }
+  }
+]
+```
+---
+- `POST` is used to register a hook to a folder or folders.
+
+##### Required Headers:
+- `X-Path` folder(s) location in dfs. Possible formats are `[folderPath]` or for multiple folders
+  `[folderPath],[folderPath]...`. `folderPath`(s) should be url encoded
+
+##### Body
+- `Hook Implementation JSON`
+
+Hook is structured base on the provider that you want to use as hook. You can take
+`sample` field as the hook setup.
+
+You can register only one hook to a folder or multiple folders. If you want to register a different
+hook, you should make this call with the new hook setup body.
+
+
+##### Example Hook Registration Body
+```json
+{
+  "runOn": 1,
+  "recursive": true,
+  "provider": "rabbitmq",
+  "setup": {
+    "connectionUrl": "amqp://admin:admin@rabbitmq.server.com:5672/",
+    "targetQueueTopic": "testQueueName"
+  }
+}
+```
+
+- `runOn` is the case of hook execution. Possible values are, `1` executes hook on any change,
+  `2` executes hook on only file or folder is created, 
+  `3` executes hook on only file or folder is updated, such as moved or copied, 
+  `4` executes hook on only file or folder is deleted
+- `recursive` is about tracking the changes under the folder tree. So, if you add the hook
+  to a parent folder with `recursive` as `true`, this will be trigger on changes that happen
+  on any sub folder(s) of this parent folder.
+- `provider` is the provider id to make the hook execution relation. (`provider` field in available providers list)
+- `setup` is the provider setup and this field can change base on the hook provider setup needs.
+Each provider has its own setup procedure before to take action. (`sample` field in available providers list)
+  
+##### Important Note
+Hooks are executed in a sync manner. That means it will be executed after the dfs operation and
+will wait until the hook finishes the execution. If you are adding hooks which do not have any
+lazy execution implementation this will slow down the file operation and decrease the performance
+of the DFS.
+
+You can add a hook to a parent and children. If there will be more than one hook in the chain to
+execute in the folder tree, this will be done from the children hooks to parent hooks direction.
+So, when you make the changes in a sub folder with a hook, that hook will be executed before the 
+parent hook execution. This execution will be serial and each execution will wait the other one
+finished before starting the next execution.
+
+##### Possible Sample Response
+```json
+[
+  "6a28b95cb2338d57028c0a72eb8a54c9"
+]
+```
+
+If the hook registration is completed successfully, system will create a hook id for this request. The 
+created hook id will return as the string array. Having an array does not mean that there can be
+multiple values in the array. There will always be a single value.
+
+##### Possible Status Codes
+- `422`: Required Request Headers are not valid or absent
+- `500`: Operational failures
+- `202`: Accepted
+---
+- `DELETE` is used to delete/unregister hook(s) from the folder.
+
+##### Required Headers:
+- `X-Path` folder location in dfs (should be urlencoded)
+
+##### Body
+- `HookId Array`
+
+##### Example Hook Deletion Body
+```json
+[
+  "6a28b95cb2338d57028c0a72eb8a54c9",
+  "028c0a72eb8a54c96a28b95cb2338d57"
+]
+```
+
+`HookId` can be taken from the folder details. Folder has `hooks` field that exposes the hook
+registration. Every hook will have an `id` after the hook registration.
+
+##### Possible Status Codes
+- `404`: Folder not found
+- `422`: Required Request Headers are not valid or absent
+- `500`: Operational failures
+- `200`: Successful
