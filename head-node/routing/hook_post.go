@@ -38,5 +38,14 @@ func (h *hookRouter) handlePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := json.NewEncoder(w).Encode([]string{*hook.Id}); err != nil {
+		w.WriteHeader(500)
+		h.logger.Error(
+			"Response of add hook request is failed",
+			zap.Error(err),
+		)
+		return
+	}
+
 	w.WriteHeader(202)
 }
