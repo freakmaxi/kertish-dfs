@@ -20,7 +20,7 @@ type Execution interface {
 
 var targetRegex, _ = regexp.Compile("(\"[\\w\\W\\d\\s]+\")")
 
-func newExecution(headAddresses []string, output terminal.Output, command string, basePath string, args []string, version string) (Execution, error) {
+func newExecution(headAddresses []string, output terminal.Output, command string, basePath string, args []string, version string, build string) (Execution, error) {
 	switch command {
 	case "ls":
 		return NewList(headAddresses, output, basePath, args), nil
@@ -35,7 +35,7 @@ func newExecution(headAddresses []string, output terminal.Output, command string
 	case "tree":
 		return NewTree(headAddresses, output, basePath, args), nil
 	case "sh":
-		return NewShell(headAddresses, version), nil
+		return NewShell(headAddresses, version, build), nil
 	}
 
 	return nil, fmt.Errorf("unsupported command")

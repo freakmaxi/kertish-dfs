@@ -64,9 +64,9 @@ type flagContainer struct {
 	active string
 }
 
-func (f *flagContainer) Define(v string) int {
+func (f *flagContainer) Define(v string, b string) int {
 	if f.help {
-		fmt.Printf("Kertish-dfs Admin (v%s) usage: \n", v)
+		fmt.Printf("Kertish-dfs Admin (v%s-%s) usage: \n", v, b)
 		fmt.Println()
 
 		return 1
@@ -215,7 +215,7 @@ func (f *flagContainer) Define(v string) int {
 	}
 
 	if activeCount == 0 {
-		fmt.Printf("Kertish-dfs Admin (v%s) usage: \n", v)
+		fmt.Printf("Kertish-dfs Admin (v%s-%s) usage: \n", v, b)
 		fmt.Println()
 
 		return 1
@@ -230,7 +230,7 @@ func (f *flagContainer) Define(v string) int {
 	return 0
 }
 
-func defineFlags(v string) *flagContainer {
+func defineFlags(v string, b string) *flagContainer {
 	set := flag.NewFlagSet("dfs", flag.ContinueOnError)
 
 	var managerAddress string
@@ -394,7 +394,7 @@ Ex: clusterId=snapshotIndex`)
 		version:            strings.Contains(joinedArgs, "-version") || strings.Contains(joinedArgs, "-v"),
 	}
 
-	switch fc.Define(v) {
+	switch fc.Define(v, b) {
 	case 1:
 		set.PrintDefaults()
 		os.Exit(0)

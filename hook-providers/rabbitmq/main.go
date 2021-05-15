@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/freakmaxi/kertish-dfs/basics/hooks"
@@ -9,6 +10,7 @@ import (
 )
 
 var version = "XX.X.XXXX"
+var build = "XXXXXX"
 
 func Name() string {
 	return "RabbitMQ"
@@ -29,7 +31,7 @@ func (r *RabbitMQ) Provider() string {
 }
 
 func (r *RabbitMQ) Version() string {
-	return version
+	return fmt.Sprintf("%s-%s", version, build)
 }
 
 func (r *RabbitMQ) Sample() interface{} {

@@ -13,6 +13,7 @@ const local = "local:"
 
 type Command struct {
 	version string
+	build   string
 
 	filename    string
 	args        []string
@@ -20,7 +21,7 @@ type Command struct {
 	command     Execution
 }
 
-func NewCommand(version string, args []string) *Command {
+func NewCommand(version string, build string, args []string) *Command {
 	_, filename := path.Split(args[0])
 
 	mrArgs := make([]string, 0)
@@ -30,6 +31,7 @@ func NewCommand(version string, args []string) *Command {
 
 	return &Command{
 		version:     version,
+		build:       build,
 		filename:    filename,
 		args:        mrArgs,
 		headAddress: "localhost:4000",
@@ -37,7 +39,7 @@ func NewCommand(version string, args []string) *Command {
 }
 
 func (c *Command) printUsageHeader() {
-	fmt.Printf("Kertish-dfs (v%s) usage: \n", c.version)
+	fmt.Printf("Kertish-dfs (v%s-%s) usage: \n", c.version, c.build)
 	fmt.Println()
 }
 
@@ -87,7 +89,7 @@ func (c *Command) Parse() bool {
 			c.printUsage()
 			return false
 		case "--version", "-v":
-			fmt.Printf("%s\n", c.version)
+			fmt.Printf("%s-%s\n", c.version, c.build)
 			return false
 		}
 
@@ -99,7 +101,7 @@ func (c *Command) Parse() bool {
 			}
 
 			var err error
-			c.command, err = newExecution([]string{c.headAddress}, terminal.NewStdOut(), arg, string(os.PathSeparator), mrArgs, c.version)
+			c.command, err = newExecution([]string{c.headAddress}, terminal.NewStdOut(), arg, string(os.PathSeparator), mrArgs, c.version, c.build)
 			if err != nil {
 				fmt.Println(err.Error())
 				fmt.Println()

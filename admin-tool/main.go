@@ -13,13 +13,14 @@ import (
 )
 
 var version = "XX.X.XXXX"
+var build = "XXXXXX"
 
 func main() {
-	fc := defineFlags(version)
+	fc := defineFlags(version, build)
 
 	switch fc.active {
 	case "version", "v":
-		fmt.Println(version)
+		fmt.Printf("%s-%s\n", version, build)
 	case "createCluster":
 		if err := manager.CreateCluster([]string{fc.managerAddress}, fc.createCluster); err != nil {
 			fmt.Printf("ERROR: %s\n", err.Error())

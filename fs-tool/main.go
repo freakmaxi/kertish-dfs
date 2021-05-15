@@ -8,9 +8,10 @@ import (
 )
 
 var version = "XX.X.XXXX"
+var build = "XXXXXX"
 
 func main() {
-	command := flags.NewCommand(version, os.Args)
+	command := flags.NewCommand(version, build, os.Args)
 	if !command.Parse() {
 		return
 	}

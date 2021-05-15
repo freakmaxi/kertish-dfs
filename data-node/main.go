@@ -18,11 +18,12 @@ import (
 )
 
 var version = "XX.X.XXXX"
+var build = "XXXXXX"
 
 func main() {
 	args := os.Args[1:]
 	if len(args) > 0 && strings.Compare(args[0], "--version") == 0 {
-		fmt.Println(version)
+		fmt.Printf("%s-%s\n", version, build)
 		return
 	}
 
@@ -187,7 +188,7 @@ func findHardwareAddress() (string, error) {
 
 func printWelcome(console bool) {
 	if !console {
-		fmt.Printf("Kertish DFS, version %s\n", version)
+		fmt.Printf("Kertish DFS, version %s-%s\n", version, build)
 		fmt.Printf("Visit: https://github.com/freakmaxi/kertish-dfs\n")
 		return
 	}
@@ -202,7 +203,7 @@ func printWelcome(console bool) {
 	fmt.Println("   :@@@@o....@@@@@@@@@@@@@%~                                (    \\(  __)/ ___)")
 	fmt.Println(" .oo@@@@@@@@@@@@@@@@@@@@@@@@o~`    .@@@@`                    ) D ( ) _) \\___ \\")
 	fmt.Println("o@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@o . @@@oo@@@@@               (____/(__)  (____/")
-	fmt.Printf("o@@@@@@%%@@@@@@@@@@@@@@@@@@@@@@@@@@@@@`  @o  @               version %s\n", version)
+	fmt.Printf("o@@@@@@%%@@@@@@@@@@@@@@@@@@@@@@@@@@@@@`  @o  @               version %s-%s\n", version, build)
 	fmt.Println("o@@@@@@:~O@@@@@@@@@@@@@@@@@@@@@@@@@@@ooo@@@@@")
 	fmt.Println(" ~o@@@@|  `O@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@/`")
 	fmt.Println("   `~=/`   *O@@@@@@@@@@@@@@@@@@@@@@@@@@@O/")

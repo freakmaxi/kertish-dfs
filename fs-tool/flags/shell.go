@@ -20,6 +20,7 @@ const rootPath = "/"
 type shellCommand struct {
 	headAddresses []string
 	version       string
+	build         string
 
 	screen tcell.Screen
 	output terminal.Output
@@ -32,10 +33,11 @@ type shellCommand struct {
 }
 
 // NewShell creates an environment for all possible file system manipulation operations
-func NewShell(headAddresses []string, version string) Execution {
+func NewShell(headAddresses []string, version string, build string) Execution {
 	return &shellCommand{
 		headAddresses: headAddresses,
 		version:       version,
+		build:         build,
 		history:       make([]string, 0),
 		buffer:        "",
 		foldersCache:  make(map[string]*common.Folder),
@@ -114,7 +116,7 @@ func (s *shellCommand) printWelcome() {
 	s.output.Println("     (  / )(  __)(  _ \\(_  _)(  )/ ___)/ )( \\     (    \\(  __)/ ___)")
 	s.output.Println("      )  (  ) _)  )   /  )(   )( \\___ \\) __ (      ) D ( ) _) \\___ \\")
 	s.output.Println("     (__\\_)(____)(__\\_) (__) (__)(____/\\_)(_/     (____/(__)  (____/")
-	s.output.Printf("File Storage Shell v%s, Visit: https://github.com/freakmaxi/kertish-dfs\n", s.version)
+	s.output.Printf("File Storage Shell v%s-%s, Visit: https://github.com/freakmaxi/kertish-dfs\n", s.version, s.build)
 	s.output.Refresh()
 }
 
@@ -426,7 +428,7 @@ func (s *shellCommand) parse(args []string) (bool, bool, Execution) {
 		}
 
 		var err error
-		command, err := newExecution(s.headAddresses, s.output, args[1], s.activeFolder.Full, nil, s.version)
+		command, err := newExecution(s.headAddresses, s.output, args[1], s.activeFolder.Full, nil, s.version, s.build)
 		if err != nil {
 			s.output.Println(err.Error())
 			return true, false, nil
@@ -445,7 +447,7 @@ func (s *shellCommand) parse(args []string) (bool, bool, Execution) {
 		}
 
 		var err error
-		command, err := newExecution(s.headAddresses, s.output, args[0], s.activeFolder.Full, mrArgs, s.version)
+		command, err := newExecution(s.headAddresses, s.output, args[0], s.activeFolder.Full, mrArgs, s.version, s.build)
 		if err != nil {
 			s.output.Println(err.Error())
 			return true, false, nil
