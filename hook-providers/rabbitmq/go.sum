@@ -4,8 +4,8 @@ github.com/aws/aws-sdk-go v1.34.28/go.mod h1:H7NKnBqNVzoTJpGfLrQkkD+ytBA93eiDYi/
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/freakmaxi/kertish-dfs/basics v0.0.0-20210515092745-2b46ea4734ce h1:+IGhII03xQYaD3SigfRMV8Z8tYjrXTERVQx5kgZu8MA=
-github.com/freakmaxi/kertish-dfs/basics v0.0.0-20210515092745-2b46ea4734ce/go.mod h1:V5og+/G/1DAFIV+uu75L/7vRB7u+JX/XWlWyAj/iofg=
+github.com/freakmaxi/kertish-dfs/basics v0.0.0-20210515115023-53189267c4e4 h1:hUJXAA8wVtRkswKpgUwDhice4P16OGubcwD9woxCTd4=
+github.com/freakmaxi/kertish-dfs/basics v0.0.0-20210515115023-53189267c4e4/go.mod h1:V5og+/G/1DAFIV+uu75L/7vRB7u+JX/XWlWyAj/iofg=
 github.com/gdamore/encoding v1.0.0/go.mod h1:alR0ol34c49FCSBLjhosxzcPHQbf2trDkoo5dl+VrEg=
 github.com/gdamore/tcell v1.4.0/go.mod h1:vxEiSDZdW3L+Uhjii9c3375IlDmR05bzxY404ZVSMo0=
 github.com/go-sql-driver/mysql v1.5.0/go.mod h1:DCzpHaOWr8IXmIStZouvnhqoel9Qv2LBy8hT2VhHyBg=
