@@ -75,7 +75,7 @@ func (m *MyHookProvider) New() hooks.Action {
 // Setup accepts hooks.SetupMap which is basically a map[string]interface{}
 // Kertish-dfs will create a new instance using `New` function and call
 // Setup function with the data coming from the folder hook registration
-// So, this function will feel your `MyHookProvider` fields that are possible
+// So, this function will fill your `MyHookProvider` fields that are possible
 // used in the Execution function
 func (m *MyHookProvider) Setup(v hooks.SetupMap) error {
 	b, err := json.Marshal(v)
