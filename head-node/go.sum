@@ -5,8 +5,8 @@ github.com/aws/aws-sdk-go v1.34.28/go.mod h1:H7NKnBqNVzoTJpGfLrQkkD+ytBA93eiDYi/
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/freakmaxi/kertish-dfs/basics v0.0.0-20210515082901-d09153a51b90 h1:VYSERicJolDiJu5GRPvdYjpfxEH8VQLt3jHCtyGXyyM=
-github.com/freakmaxi/kertish-dfs/basics v0.0.0-20210515082901-d09153a51b90/go.mod h1:V5og+/G/1DAFIV+uu75L/7vRB7u+JX/XWlWyAj/iofg=
+github.com/freakmaxi/kertish-dfs/basics v0.0.0-20210515092745-2b46ea4734ce h1:+IGhII03xQYaD3SigfRMV8Z8tYjrXTERVQx5kgZu8MA=
+github.com/freakmaxi/kertish-dfs/basics v0.0.0-20210515092745-2b46ea4734ce/go.mod h1:V5og+/G/1DAFIV+uu75L/7vRB7u+JX/XWlWyAj/iofg=
 github.com/freakmaxi/locking-center-client-go v0.2.1-0.20210321122115-cc3968f20dbd h1:JEl5vEOk2XvN+BLIGW4WYUA2eJpb5EV93oBk/SFn8Z4=
 github.com/freakmaxi/locking-center-client-go v0.2.1-0.20210321122115-cc3968f20dbd/go.mod h1:KFBxhbltlWaS1psUCdUBNbA4FsnKRKOHN2KV6FrdnIE=
 github.com/gdamore/encoding v1.0.0 h1:+7OoQ1Bc6eTm5niUzBa0Ctsh6JbMW6Ra+YNuAtDBdko=
