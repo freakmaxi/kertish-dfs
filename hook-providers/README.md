@@ -85,7 +85,7 @@ func (m *MyHookProvider) Setup(v hooks.SetupMap) error {
 	return json.Unmarshal(b, m)
 }
 
-// Execute takes place your plugin handling the operation.
+// Execute takes place in your plugin to handle the operation.
 // it is executed only when the hook definition criteria are met and Kertish-dfs
 // operation was successful, such as execute on only a successful deletion
 // NOW YOU CAN PUT YOUR LOGIC IN HERE
