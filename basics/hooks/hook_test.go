@@ -65,6 +65,10 @@ var hookJsonString string
 type testLoader struct {
 }
 
+func (t testLoader) HooksPath() string {
+	return "./hooks"
+}
+
 func (t testLoader) List() []Action {
 	return []Action{&testAction{}}
 }
