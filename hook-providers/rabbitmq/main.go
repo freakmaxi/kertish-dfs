@@ -37,7 +37,7 @@ func (r *RabbitMQ) Sample() interface{} {
 }
 
 func (r *RabbitMQ) New() hooks.Action {
-	return &RabbitMQ{}
+	return Load()
 }
 
 func (r *RabbitMQ) Setup(v hooks.SetupMap) error {
