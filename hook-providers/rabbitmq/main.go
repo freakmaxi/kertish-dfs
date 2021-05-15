@@ -43,16 +43,12 @@ func (r *RabbitMQ) New() hooks.Action {
 	return &RabbitMQ{}
 }
 
-func (r *RabbitMQ) Create(v json.RawMessage) error {
-	return json.Unmarshal(v, r)
-}
-
-func (r *RabbitMQ) Serialize() json.RawMessage {
-	b, err := json.Marshal(r)
+func (r *RabbitMQ) Setup(v hooks.SetupMap) error {
+	b, err := json.Marshal(v)
 	if err != nil {
-		return nil
+		return err
 	}
-	return b
+	return json.Unmarshal(b, r)
 }
 
 func (r *RabbitMQ) Execute(aI *hooks.ActionInfo) error {
