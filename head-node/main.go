@@ -49,6 +49,9 @@ func main() {
 	}
 	logger.Info(fmt.Sprintf("MANAGER_ADDRESS: %s", managerAddress))
 
+	hooks.CurrentLoader = hooks.NewLoader(os.Getenv("HOOKS_PATH"), logger)
+	logger.Info(fmt.Sprintf("HOOKS_PATH: %s", hooks.CurrentLoader.HooksPath()))
+
 	mongoConn := os.Getenv("MONGO_CONN")
 	if len(mongoConn) == 0 {
 		logger.Error("MONGO_CONN have to be specified")
@@ -110,14 +113,6 @@ func main() {
 	routerManager := routing.NewManager()
 	routerManager.Add(dfsRouter)
 	routerManager.Add(hookRouter)
-
-	var hooksPath *string
-	hooksPathEnv := os.Getenv("HOOKS_PATH")
-	if len(hooksPathEnv) > 0 {
-		logger.Info(fmt.Sprintf("HOOKS_PATH: %s", hooksPath))
-		hooksPath = &hooksPathEnv
-	}
-	hooks.CurrentLoader = hooks.NewLoader(hooksPath, logger)
 
 	proxy := services.NewProxy(bindAddr, routerManager, logger)
 	proxy.Start()
