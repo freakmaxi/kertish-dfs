@@ -3,7 +3,7 @@
 Kertish-dfs supports hooks for folder operation notifications. Hooks are working in a plugins'
 manner. So, you can create your own hook provider and use it under the head node.
 
-**You can very welcome developing a hook provider under this path and create a PR.**
+**You are very welcome developing a hook provider under this path and create a PR.**
 
 All the available providers will be listed in this path. You can find the custom 3rdparty and
 official hook providers together. The official hook providers are listed below in this document.
