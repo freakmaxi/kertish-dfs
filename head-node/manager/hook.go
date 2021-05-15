@@ -34,9 +34,11 @@ func (h *hook) GetAvailableList() []interface{} {
 	for _, action := range actions {
 		availableHooks = append(availableHooks, &struct {
 			Provider string      `json:"provider"`
+			Version  string      `json:"version"`
 			Sample   interface{} `json:"sample"`
 		}{
 			Provider: action.Provider(),
+			Version:  action.Version(),
 			Sample:   action.Sample(),
 		})
 	}
