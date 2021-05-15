@@ -42,8 +42,8 @@ func Load() hooks.Action {
 	return &MyHookProvider{}
 }
 
-// MyHookProvider should an exported struct. It is the place that you can
-// keep your setups to use in execution.
+// MyHookProvider should be an exported struct. It is the place that you can
+// keep your setup to use in execution.
 type MyHookProvider struct {
 	SetupField1 string `json:"setupField1"`
 	SetupField2 string `json:"setupField2"`
