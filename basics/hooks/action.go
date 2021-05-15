@@ -1,7 +1,5 @@
 package hooks
 
-import "encoding/json"
-
 // Action is the interface for the hook operation execution
 type Action interface {
 	Provider() string
@@ -9,8 +7,7 @@ type Action interface {
 	Sample() interface{}
 
 	New() Action
-	Create(v json.RawMessage) error
-	Serialize() json.RawMessage
+	Setup(v SetupMap) error
 
 	Execute(aI *ActionInfo) error
 }

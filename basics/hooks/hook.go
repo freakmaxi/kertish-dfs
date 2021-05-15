@@ -3,7 +3,6 @@ package hooks
 import (
 	"crypto/md5"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -18,18 +17,21 @@ const (
 	Deleted RunOn = 4 // Folder/File or SubFolder/SubFile (if recursive) is completely Deleted
 )
 
+// SetupMap is the simplified type name for underlying map
+type SetupMap map[string]interface{}
+
 // Hook struct holds the information of the action for the Folder base on RunOn setup
 // RunOn is the type of the action that can be reason for the execution
 // Times is the counter for the allowed executions. -1 is no limit. 0 is execution is not allowed anymore
 // Recursive checks if the hook responsible for the sub folders
 // Action is the action to take
 type Hook struct {
-	Id        *string         `json:"id"`
-	Created   *time.Time      `json:"created"`
-	RunOn     RunOn           `json:"runOn" bson:"runOn"`
-	Recursive bool            `json:"recursive"`
-	Provider  string          `json:"provider"`
-	Setup     json.RawMessage `json:"setup"`
+	Id        *string    `json:"id"`
+	Created   *time.Time `json:"created"`
+	RunOn     RunOn      `json:"runOn" bson:"runOn"`
+	Recursive bool       `json:"recursive"`
+	Provider  string     `json:"provider"`
+	Setup     SetupMap   `json:"setup"`
 
 	action Action
 }
@@ -62,7 +64,7 @@ func (h *Hook) Action() (Action, error) {
 		}
 
 		h.action = action.New()
-		if err := h.action.Create(h.Setup); err != nil {
+		if err := h.action.Setup(h.Setup); err != nil {
 			return nil, err
 		}
 		return h.action, nil

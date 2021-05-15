@@ -32,16 +32,12 @@ func (r *testAction) New() Action {
 	return &testAction{}
 }
 
-func (r *testAction) Create(v json.RawMessage) error {
-	return json.Unmarshal(v, r)
-}
-
-func (r *testAction) Serialize() json.RawMessage {
-	b, err := json.Marshal(r)
+func (r *testAction) Setup(v SetupMap) error {
+	b, err := json.Marshal(v)
 	if err != nil {
-		return nil
+		return err
 	}
-	return b
+	return json.Unmarshal(b, r)
 }
 
 func (r *testAction) Execute(ai *ActionInfo) error {
@@ -55,10 +51,10 @@ var testHook = &Hook{
 	RunOn:     All,
 	Recursive: true,
 	Provider:  "testaction",
-	Setup: (&testAction{
-		ConnectionUrl:   "amqp://test:test@127.0.0.1:5672/",
-		TargetQueueName: "testQueueName",
-	}).Serialize(),
+	Setup: map[string]interface{}{
+		"connectionUrl":   "amqp://test:test@127.0.0.1:5672/",
+		"targetQueueName": "testQueueName",
+	},
 }
 var hookJsonString string
 
