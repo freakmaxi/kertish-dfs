@@ -64,6 +64,7 @@ func (r *RabbitMQ) Execute(aI *hooks.ActionInfo) error {
 	if err != nil {
 		return err
 	}
+	defer func() { _ = channel.Close() }()
 
 	if _, err := channel.QueueDeclare(r.TargetQueueTopic, true, false, false, false, nil); err != nil {
 		return err
