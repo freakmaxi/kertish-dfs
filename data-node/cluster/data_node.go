@@ -13,6 +13,7 @@ import (
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 )
 
+const dialTimeout = time.Second * 30
 const commandSyncRead = "SYRD"
 const commandSyncList = "SYLS"
 const chunkSize = 1024 * 1024 // 1mb
@@ -40,8 +41,8 @@ func NewDataNode(address string) (DataNode, error) {
 	}, nil
 }
 
-func (d *dataNode) connect(connectionHandler func(conn *net.TCPConn) error) error {
-	conn, err := net.DialTCP("tcp", nil, d.address)
+func (d *dataNode) connect(connectionHandler func(conn net.Conn) error) error {
+	conn, err := net.DialTimeout(d.address.Network(), d.address.String(), dialTimeout)
 	if err != nil {
 		return err
 	}
@@ -50,7 +51,7 @@ func (d *dataNode) connect(connectionHandler func(conn *net.TCPConn) error) erro
 	return connectionHandler(conn)
 }
 
-func (d *dataNode) result(conn *net.TCPConn) bool {
+func (d *dataNode) result(conn net.Conn) bool {
 	b := make([]byte, 1)
 	_, err := conn.Read(b)
 	if err != nil {
@@ -59,7 +60,7 @@ func (d *dataNode) result(conn *net.TCPConn) bool {
 	return strings.Compare("+", string(b)) == 0
 }
 
-func (d *dataNode) hashAsHex(conn *net.TCPConn) (string, error) {
+func (d *dataNode) hashAsHex(conn net.Conn) (string, error) {
 	h := make([]byte, 32)
 	total, err := io.ReadAtLeast(conn, h, len(h))
 	if err != nil {
@@ -74,7 +75,7 @@ func (d *dataNode) hashAsHex(conn *net.TCPConn) (string, error) {
 func (d *dataNode) SyncList(snapshotTime *time.Time) (*common.SyncContainer, error) {
 	container := common.NewSyncContainer()
 
-	if err := d.connect(func(conn *net.TCPConn) error {
+	if err := d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandSyncList)); err != nil {
 			return err
 		}
@@ -152,7 +153,7 @@ func (d *dataNode) SyncList(snapshotTime *time.Time) (*common.SyncContainer, err
 }
 
 func (d *dataNode) SyncRead(snapshotTime *time.Time, sha512Hex string, drop bool, dataHandler func([]byte) error, verifyHandler func(usage uint16) bool) error {
-	return d.connect(func(conn *net.TCPConn) error {
+	return d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandSyncRead)); err != nil {
 			return err
 		}

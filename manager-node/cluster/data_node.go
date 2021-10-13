@@ -38,6 +38,7 @@ const (
 	commandRequestHandshake = "RQHS"
 )
 
+const dialTimeout = time.Second * 30
 const pingWaitDuration = time.Second * 10
 
 type DataNode interface {
@@ -84,8 +85,8 @@ func NewDataNode(nodeAddress string) (DataNode, error) {
 	}, nil
 }
 
-func (d *dataNode) connect(connectionHandler func(conn *net.TCPConn) error) error {
-	conn, err := net.DialTCP("tcp", nil, d.address)
+func (d *dataNode) connect(connectionHandler func(conn net.Conn) error) error {
+	conn, err := net.DialTimeout(d.address.Network(), d.address.String(), dialTimeout)
 	if err != nil {
 		return err
 	}
@@ -94,7 +95,7 @@ func (d *dataNode) connect(connectionHandler func(conn *net.TCPConn) error) erro
 	return connectionHandler(conn)
 }
 
-func (d *dataNode) result(conn *net.TCPConn) bool {
+func (d *dataNode) result(conn net.Conn) bool {
 	b := make([]byte, 1)
 	_, err := conn.Read(b)
 	if err != nil {
@@ -103,7 +104,7 @@ func (d *dataNode) result(conn *net.TCPConn) bool {
 	return strings.Compare("+", string(b)) == 0
 }
 
-func (d *dataNode) resultWithTimeout(conn *net.TCPConn, timeout time.Duration) bool {
+func (d *dataNode) resultWithTimeout(conn net.Conn, timeout time.Duration) bool {
 	if timeout == 0 {
 		timeout = time.Second * 30
 	}
@@ -114,7 +115,7 @@ func (d *dataNode) resultWithTimeout(conn *net.TCPConn, timeout time.Duration) b
 	return d.result(conn)
 }
 
-func (d *dataNode) hashAsHex(conn *net.TCPConn) (string, error) {
+func (d *dataNode) hashAsHex(conn net.Conn) (string, error) {
 	h := make([]byte, 32)
 	total, err := io.ReadAtLeast(conn, h, len(h))
 	if err != nil {
@@ -127,7 +128,7 @@ func (d *dataNode) hashAsHex(conn *net.TCPConn) (string, error) {
 }
 
 func (d *dataNode) Create(data []byte) (sha512Hex string, err error) {
-	err = d.connect(func(conn *net.TCPConn) error {
+	err = d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandCreate)); err != nil {
 			return err
 		}
@@ -165,7 +166,7 @@ func (d *dataNode) Create(data []byte) (sha512Hex string, err error) {
 }
 
 func (d *dataNode) Read(sha512Hex string, readHandler func([]byte) error) error {
-	return d.connect(func(conn *net.TCPConn) error {
+	return d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandRead)); err != nil {
 			return err
 		}
@@ -216,7 +217,7 @@ func (d *dataNode) Read(sha512Hex string, readHandler func([]byte) error) error 
 }
 
 func (d *dataNode) Delete(sha512Hex string) error {
-	return d.connect(func(conn *net.TCPConn) error {
+	return d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandDelete)); err != nil {
 			return err
 		}
@@ -238,7 +239,7 @@ func (d *dataNode) Delete(sha512Hex string) error {
 }
 
 func (d *dataNode) HardwareId() (hardwareId string, err error) {
-	err = d.connect(func(conn *net.TCPConn) error {
+	err = d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandHardwareId)); err != nil {
 			return err
 		}
@@ -268,7 +269,7 @@ func (d *dataNode) HardwareId() (hardwareId string, err error) {
 }
 
 func (d *dataNode) Join(clusterId string, nodeId string, masterAddress string) bool {
-	return d.connect(func(conn *net.TCPConn) error {
+	return d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandJoin)); err != nil {
 			return err
 		}
@@ -309,7 +310,7 @@ func (d *dataNode) Join(clusterId string, nodeId string, masterAddress string) b
 }
 
 func (d *dataNode) Mode(master bool) bool {
-	return d.connect(func(conn *net.TCPConn) error {
+	return d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandMode)); err != nil {
 			return err
 		}
@@ -327,7 +328,7 @@ func (d *dataNode) Mode(master bool) bool {
 }
 
 func (d *dataNode) Leave() bool {
-	return d.connect(func(conn *net.TCPConn) error {
+	return d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandLeave)); err != nil {
 			return err
 		}
@@ -342,7 +343,7 @@ func (d *dataNode) Leave() bool {
 
 //TODO: wipe security mechanism should be implemented between manager and data node
 func (d *dataNode) Wipe() bool {
-	return d.connect(func(conn *net.TCPConn) error {
+	return d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandWipe)); err != nil {
 			return err
 		}
@@ -366,7 +367,7 @@ func (d *dataNode) SyncCreate(sha512Hex string, sourceNodeAddr string) error {
 		return err
 	}
 
-	return d.connect(func(conn *net.TCPConn) error {
+	return d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandSyncCreate)); err != nil {
 			return err
 		}
@@ -398,7 +399,7 @@ func (d *dataNode) SyncDelete(sha512Hex string) error {
 		return err
 	}
 
-	return d.connect(func(conn *net.TCPConn) error {
+	return d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandSyncDelete)); err != nil {
 			return err
 		}
@@ -421,7 +422,7 @@ func (d *dataNode) SyncMove(sha512Hex string, sourceNodeAddr string) error {
 		return err
 	}
 
-	return d.connect(func(conn *net.TCPConn) error {
+	return d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandSyncMove)); err != nil {
 			return err
 		}
@@ -450,7 +451,7 @@ func (d *dataNode) SyncMove(sha512Hex string, sourceNodeAddr string) error {
 func (d *dataNode) SyncList(snapshotTime *time.Time) (*common.SyncContainer, error) {
 	container := common.NewSyncContainer()
 
-	if err := d.connect(func(conn *net.TCPConn) error {
+	if err := d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandSyncList)); err != nil {
 			return err
 		}
@@ -528,7 +529,7 @@ func (d *dataNode) SyncList(snapshotTime *time.Time) (*common.SyncContainer, err
 }
 
 func (d *dataNode) SyncFull(sourceNodeAddr string) bool {
-	return d.connect(func(conn *net.TCPConn) error {
+	return d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandSyncFull)); err != nil {
 			return err
 		}
@@ -551,7 +552,7 @@ func (d *dataNode) SyncFull(sourceNodeAddr string) bool {
 }
 
 func (d *dataNode) SyncUsage(usageMap map[string]uint16) error {
-	return d.connect(func(conn *net.TCPConn) error {
+	return d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandSyncUsage)); err != nil {
 			return err
 		}
@@ -591,7 +592,7 @@ func (d *dataNode) SyncUsage(usageMap map[string]uint16) error {
 }
 
 func (d *dataNode) SnapshotCreate() bool {
-	return d.connect(func(conn *net.TCPConn) error {
+	return d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandSnapshotCreate)); err != nil {
 			return err
 		}
@@ -605,7 +606,7 @@ func (d *dataNode) SnapshotCreate() bool {
 }
 
 func (d *dataNode) SnapshotDelete(snapshotIndex uint64) bool {
-	return d.connect(func(conn *net.TCPConn) error {
+	return d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandSnapshotDelete)); err != nil {
 			return err
 		}
@@ -623,7 +624,7 @@ func (d *dataNode) SnapshotDelete(snapshotIndex uint64) bool {
 }
 
 func (d *dataNode) SnapshotRestore(snapshotIndex uint64) bool {
-	return d.connect(func(conn *net.TCPConn) error {
+	return d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandSnapshotRestore)); err != nil {
 			return err
 		}
@@ -643,7 +644,7 @@ func (d *dataNode) SnapshotRestore(snapshotIndex uint64) bool {
 func (d *dataNode) Ping() (latency int64) {
 	starts := time.Now().UTC()
 
-	if err := d.connect(func(conn *net.TCPConn) error {
+	if err := d.connect(func(conn net.Conn) error {
 		if err := conn.SetDeadline(time.Now().Add(pingWaitDuration)); err != nil {
 			return err
 		}
@@ -665,7 +666,7 @@ func (d *dataNode) Ping() (latency int64) {
 }
 
 func (d *dataNode) Size() (size uint64, err error) {
-	err = d.connect(func(conn *net.TCPConn) error {
+	err = d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandSize)); err != nil {
 			return err
 		}
@@ -688,7 +689,7 @@ func (d *dataNode) Size() (size uint64, err error) {
 }
 
 func (d *dataNode) Used() (used uint64, usedErr error) {
-	usedErr = d.connect(func(conn *net.TCPConn) error {
+	usedErr = d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandUsed)); err != nil {
 			return err
 		}
@@ -711,7 +712,7 @@ func (d *dataNode) Used() (used uint64, usedErr error) {
 }
 
 func (d *dataNode) RequestHandshake() bool {
-	return d.connect(func(conn *net.TCPConn) error {
+	return d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandRequestHandshake)); err != nil {
 			return err
 		}

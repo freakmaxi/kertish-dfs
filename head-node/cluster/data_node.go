@@ -8,10 +8,12 @@ import (
 	"io"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
 )
 
+const dialTimeout = time.Second * 30
 const commandCreate = "CREA"
 const commandRead = "READ"
 const commandDelete = "DELE"
@@ -38,8 +40,8 @@ func NewDataNode(address string) (DataNode, error) {
 	}, nil
 }
 
-func (d *dataNode) connect(connectionHandler func(conn *net.TCPConn) error) error {
-	conn, err := net.DialTCP("tcp", nil, d.address)
+func (d *dataNode) connect(connectionHandler func(conn net.Conn) error) error {
+	conn, err := net.DialTimeout(d.address.Network(), d.address.String(), dialTimeout)
 	if err != nil {
 		return err
 	}
@@ -48,7 +50,7 @@ func (d *dataNode) connect(connectionHandler func(conn *net.TCPConn) error) erro
 	return connectionHandler(conn)
 }
 
-func (d *dataNode) result(conn *net.TCPConn) bool {
+func (d *dataNode) result(conn net.Conn) bool {
 	b := make([]byte, 1)
 	_, err := conn.Read(b)
 	if err != nil {
@@ -58,7 +60,7 @@ func (d *dataNode) result(conn *net.TCPConn) bool {
 }
 
 func (d *dataNode) Create(data []byte) (exists bool, sha512Hex string, err error) {
-	err = d.connect(func(conn *net.TCPConn) error {
+	err = d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandCreate)); err != nil {
 			return err
 		}
@@ -98,7 +100,7 @@ func (d *dataNode) Create(data []byte) (exists bool, sha512Hex string, err error
 }
 
 func (d *dataNode) CreateShadow(sha512Hex string) error {
-	return d.connect(func(conn *net.TCPConn) error {
+	return d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandCreate)); err != nil {
 			return err
 		}
@@ -117,7 +119,7 @@ func (d *dataNode) CreateShadow(sha512Hex string) error {
 }
 
 func (d *dataNode) Read(sha512Hex string, readHandler func([]byte) error) error {
-	return d.connect(func(conn *net.TCPConn) error {
+	return d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandRead)); err != nil {
 			return err
 		}
@@ -166,7 +168,7 @@ func (d *dataNode) Read(sha512Hex string, readHandler func([]byte) error) error 
 }
 
 func (d *dataNode) Delete(sha512Hex string) error {
-	return d.connect(func(conn *net.TCPConn) error {
+	return d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandDelete)); err != nil {
 			return err
 		}
