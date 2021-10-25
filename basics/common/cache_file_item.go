@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-const cacheExpiresIn = time.Hour * (24 * 10)
+const cacheExpiresIn = time.Hour * (24 * 30 * 6) // six months
 
 type CacheFileItem struct {
 	FileItem  SyncFileItem

@@ -15,8 +15,8 @@ import (
 const healthCheckInterval = time.Second * 10
 
 // has CacheFileItem (cacheExpiresIn) Expire relation
-// the value should be strictly less then cacheExpiresIn value
-const maintainInterval = time.Hour * (24 * 4)
+// the value should be strictly less than cacheExpiresIn value
+const maintainInterval = time.Hour * (24 * 5)
 
 type HealthReport map[string]common.NodeList
 
