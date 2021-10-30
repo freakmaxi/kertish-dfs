@@ -395,7 +395,7 @@ func (s *synchronize) syncSnapshots(sourceNode cluster.DataNode, sourceContainer
 }
 
 func (s *synchronize) createSnapshotAndSync(sourceNode cluster.DataNode, targetSnapshot time.Time) error {
-	if _, err := s.snapshot.Create(&targetSnapshot); err != nil {
+	if _, err := s.snapshot.Create(&targetSnapshot); err != nil && !os.IsExist(err) {
 		s.logger.Error("snapshot creation for sync is failed", zap.Error(err))
 		return err
 	}
