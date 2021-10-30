@@ -345,7 +345,7 @@ func Pull(headAddresses []string, sources []string, target string, readRange *co
 	case 524:
 		return fmt.Errorf("%s is zombie or has zombie", sourcesErrorString(sources))
 	default:
-		if res.StatusCode != 200 {
+		if res.StatusCode != 200 && (readRange != nil && res.StatusCode != 206) {
 			return fmt.Errorf("dfs head returned with an unrecognisable status code: %d", res.StatusCode)
 		}
 	}
