@@ -138,22 +138,25 @@ func (c *cluster) Read(chunks common.DataChunks) (func(w io.Writer, begins int64
 		chunkTotal := int64(0)
 		for _, chunk := range chunks {
 			chunkSize := int64(chunk.Size)
+			chunkTotal += chunkSize
 
-			if chunkTotal+chunkSize < begins {
+			if chunkTotal < begins {
 				continue
 			}
+			if ends > -1 && ends < (chunkTotal-chunkSize) {
+				break
+			}
 
-			virtualTotal := chunkTotal + chunkSize
-			trimmingSize := virtualTotal - begins
-			alignmentPoint := virtualTotal - trimmingSize
-			startPoint := alignmentPoint - chunkTotal
+			trimmingSize := chunkTotal - begins
+			alignmentPoint := chunkTotal - trimmingSize
+			startPoint := alignmentPoint - (chunkTotal - chunkSize)
 			if startPoint < 0 {
 				startPoint = 0
 			}
 
 			endPoint := chunkSize
 			if ends > -1 {
-				endsCal := (virtualTotal - 1) - ends
+				endsCal := (chunkTotal - 1) - ends
 				if endsCal > 0 && endsCal < chunkSize {
 					endPoint -= endsCal
 				}
@@ -161,7 +164,7 @@ func (c *cluster) Read(chunks common.DataChunks) (func(w io.Writer, begins int64
 
 			addresses, has := m[chunk.Hash]
 			if !has {
-				continue
+				return errors.ErrRepair
 			}
 
 			bulkErrors := errors.NewBulkError()
@@ -195,11 +198,6 @@ func (c *cluster) Read(chunks common.DataChunks) (func(w io.Writer, begins int64
 
 			if bulkErrors != nil {
 				return bulkErrors
-			}
-
-			chunkTotal += chunkSize
-			if ends > -1 && ends < chunkTotal {
-				break
 			}
 		}
 
