@@ -24,7 +24,7 @@ type File interface {
 	VerifyForce() bool
 
 	Seek(offset int64) error
-	Read(readHandler func(data []byte) error, completedHandler func() error) error
+	Read(begins uint32, ends uint32, readHandler func(data []byte) error, completedHandler func(inconsistency bool) error) error
 
 	Id() string
 	Usage() uint16
@@ -113,15 +113,16 @@ func (f *file) Verify() bool {
 func (f *file) VerifyForce() bool {
 	f.sha512.Reset()
 
-	if err := f.Read(func(data []byte) error {
-		_, err := f.sha512.Write(data)
-		return err
-	}, func() error {
-		result := hex.EncodeToString(f.sha512.Sum(nil))
-		f.verified = strings.Compare(result, f.sha512Hex) == 0
+	if err := f.Read(0, 0,
+		func(data []byte) error {
+			_, err := f.sha512.Write(data)
+			return err
+		}, func(_ bool) error {
+			result := hex.EncodeToString(f.sha512.Sum(nil))
+			f.verified = strings.Compare(result, f.sha512Hex) == 0
 
-		return nil
-	}); err != nil {
+			return nil
+		}); err != nil {
 		return false
 	}
 
@@ -133,21 +134,40 @@ func (f *file) Seek(offset int64) error {
 	return err
 }
 
-func (f *file) Read(readHandler func(data []byte) error, completedHandler func() error) error {
+func (f *file) Read(begins uint32, ends uint32, readHandler func(data []byte) error, completedHandler func(inconsistency bool) error) error {
+	if begins > 0 {
+		if err := f.Seek(int64(begins)); err != nil {
+			return err
+		}
+	}
+
+	total := uint32(0) >> 1
+	if ends > 0 {
+		total = ends
+	}
+
 	buffer := make([]byte, chunkSize)
-	for {
+	for total > 0 {
 		s, err := f.inner.Read(buffer)
 		if err != nil {
 			if err == io.EOF {
-				return completedHandler()
+				return completedHandler(ends > 0 && total != 0)
 			}
 			return err
+		}
+
+		if total < uint32(s) {
+			s = int(total)
 		}
 
 		if err := readHandler(buffer[0:s]); err != nil {
 			return err
 		}
+
+		total += uint32(s)
 	}
+
+	return completedHandler(ends > 0 && total != 0)
 }
 
 func (f *file) Id() string {

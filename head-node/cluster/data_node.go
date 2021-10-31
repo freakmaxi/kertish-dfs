@@ -21,7 +21,7 @@ const commandDelete = "DELE"
 type DataNode interface {
 	Create(data []byte) (bool, string, error)
 	CreateShadow(sha512Hex string) error
-	Read(sha512Hex string, readHandler func(data []byte) error) error
+	Read(sha512Hex string, begins uint32, ends uint32, readHandler func(data []byte) error) error
 	Delete(sha512Hex string) error
 }
 
@@ -118,7 +118,7 @@ func (d *dataNode) CreateShadow(sha512Hex string) error {
 	})
 }
 
-func (d *dataNode) Read(sha512Hex string, readHandler func([]byte) error) error {
+func (d *dataNode) Read(sha512Hex string, begins uint32, ends uint32, readHandler func([]byte) error) error {
 	return d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandRead)); err != nil {
 			return err
@@ -129,6 +129,14 @@ func (d *dataNode) Read(sha512Hex string, readHandler func([]byte) error) error 
 			return err
 		}
 		if _, err := conn.Write(sha512Sum); err != nil {
+			return err
+		}
+
+		if err := binary.Write(conn, binary.LittleEndian, &begins); err != nil {
+			return err
+		}
+
+		if err := binary.Write(conn, binary.LittleEndian, &ends); err != nil {
 			return err
 		}
 

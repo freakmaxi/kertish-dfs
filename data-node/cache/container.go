@@ -2,27 +2,40 @@ package cache
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
 const autoReportDuration = time.Minute
 
 type Container interface {
-	Query(sha512Hex string) []byte
+	Query(sha512Hex string, begins uint32, ends uint32) []byte
 
-	Upsert(sha512Hex string, data []byte)
+	Upsert(sha512Hex string, begins uint32, ends uint32, data []byte)
 	Remove(sha512Hex string)
 	Invalidate()
 
 	Purge()
 }
 
+type dataContainer struct {
+	id     string
+	begins uint32
+	ends   uint32
+	data   []byte
+}
+
+func (d *dataContainer) Size() uint64 {
+	return uint64(len(d.data))
+}
+
 type indexItem struct {
 	sha512Hex string
-	data      []byte
+	dataItems []dataContainer
 
 	expiresAt time.Time
 	sortIndex int
@@ -33,6 +46,34 @@ type indexItemList []*indexItem
 func (p indexItemList) Len() int           { return len(p) }
 func (p indexItemList) Less(i, j int) bool { return p[i].expiresAt.Before(p[j].expiresAt) }
 func (p indexItemList) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
+
+func (i *indexItem) MatchExactRange(begins uint32, ends uint32) *dataContainer {
+	for _, dC := range i.dataItems {
+		size := uint32(len(dC.data))
+
+		if dC.begins == begins && (dC.ends == ends || size-ends == 0) {
+			return &dC
+		}
+	}
+	return nil
+}
+
+func (i *indexItem) Remove(id string) {
+	for l, dC := range i.dataItems {
+		if strings.Compare(dC.id, id) == 0 {
+			i.dataItems = append(i.dataItems[0:l], i.dataItems[l+1:]...)
+			return
+		}
+	}
+}
+
+func (i *indexItem) Size() uint64 {
+	size := uint64(0)
+	for _, dC := range i.dataItems {
+		size += dC.Size()
+	}
+	return size
+}
 
 type container struct {
 	limit    uint64
@@ -102,7 +143,7 @@ func (c *container) autoReport() {
 	}()
 }
 
-func (c *container) Query(sha512Hex string) []byte {
+func (c *container) Query(sha512Hex string, begins uint32, ends uint32) []byte {
 	if c.limit == 0 {
 		return nil
 	}
@@ -115,6 +156,11 @@ func (c *container) Query(sha512Hex string) []byte {
 		return nil
 	}
 
+	dC := index.MatchExactRange(begins, ends)
+	if dC == nil {
+		return nil
+	}
+
 	c.sortedIndex[index.sortIndex] = nil
 
 	index.expiresAt = time.Now().UTC().Add(c.lifetime)
@@ -123,10 +169,10 @@ func (c *container) Query(sha512Hex string) []byte {
 	c.sortedIndex = append(c.sortedIndex, &index)
 	c.index[index.sha512Hex] = index
 
-	return index.data
+	return dC.data
 }
 
-func (c *container) Upsert(sha512Hex string, data []byte) {
+func (c *container) Upsert(sha512Hex string, begins uint32, ends uint32, data []byte) {
 	if c.limit == 0 {
 		return
 	}
@@ -134,10 +180,14 @@ func (c *container) Upsert(sha512Hex string, data []byte) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	if currentItem, has := c.index[sha512Hex]; has {
-		c.sortedIndex[currentItem.sortIndex] = nil
-		c.usage -= uint64(len(currentItem.data))
-		delete(c.index, currentItem.sha512Hex)
+	currentItem, has := c.index[sha512Hex]
+	if has {
+		dC := currentItem.MatchExactRange(begins, ends)
+		if dC != nil {
+			c.sortedIndex[currentItem.sortIndex] = nil
+			c.usage -= dC.Size()
+			currentItem.Remove(dC.id)
+		}
 	}
 
 	dataSize := uint64(len(data))
@@ -145,20 +195,30 @@ func (c *container) Upsert(sha512Hex string, data []byte) {
 	if c.limit < c.usage+dataSize {
 		// if system caching is its limit, it is better to trim the 1/4 of its usage
 		// for system performance and efficiency.
-		c.trimUnsafe(int64(c.usage / 4))
+		c.trimUnsafe(c.usage / 4)
 	}
 
-	item := indexItem{
-		sha512Hex: sha512Hex,
-		data:      make([]byte, len(data)),
-		expiresAt: time.Now().UTC().Add(c.lifetime),
-		sortIndex: len(c.sortedIndex),
+	if !has {
+		currentItem = indexItem{
+			sha512Hex: sha512Hex,
+			dataItems: make([]dataContainer, 0),
+			sortIndex: len(c.sortedIndex),
+		}
 	}
-	copy(item.data, data)
+	currentItem.expiresAt = time.Now().UTC().Add(c.lifetime)
 
-	c.sortedIndex = append(c.sortedIndex, &item)
+	dC := dataContainer{
+		id:     uuid.New().String(),
+		begins: begins,
+		ends:   ends,
+	}
+	copy(dC.data, data)
+
+	currentItem.dataItems = append(currentItem.dataItems, dC)
+
+	c.sortedIndex = append(c.sortedIndex, &currentItem)
 	c.usage += dataSize
-	c.index[item.sha512Hex] = item
+	c.index[currentItem.sha512Hex] = currentItem
 }
 
 func (c *container) Remove(sha512Hex string) {
@@ -175,7 +235,7 @@ func (c *container) Remove(sha512Hex string) {
 	}
 
 	c.sortedIndex[currentItem.sortIndex] = nil
-	c.usage -= uint64(len(currentItem.data))
+	c.usage -= currentItem.Size()
 	delete(c.index, currentItem.sha512Hex)
 }
 
@@ -212,7 +272,7 @@ func (c *container) Purge() {
 
 		if indexItem.expiresAt.Before(time.Now().UTC()) {
 			c.sortedIndex = append(c.sortedIndex[:i], c.sortedIndex[i+1:]...)
-			c.usage -= uint64(len(indexItem.data))
+			c.usage -= indexItem.Size()
 			delete(c.index, indexItem.sha512Hex)
 			i--
 
@@ -226,7 +286,7 @@ func (c *container) Purge() {
 	}
 }
 
-func (c *container) trimUnsafe(size int64) {
+func (c *container) trimUnsafe(size uint64) {
 	if c.limit == 0 {
 		return
 	}
@@ -240,10 +300,10 @@ func (c *container) trimUnsafe(size int64) {
 			return
 		}
 
-		dataSize := int64(len(indexItem.data))
+		dataSize := indexItem.Size()
 
 		c.sortedIndex[i] = nil
-		c.usage -= uint64(dataSize)
+		c.usage -= dataSize
 		delete(c.index, indexItem.sha512Hex)
 
 		size -= dataSize

@@ -481,7 +481,7 @@ func (r *repair) repairIntegrityPhase2(calculateChecksum bool, clusterIndexMap m
 					continue
 				}
 
-				if err := mdn.Read(chunk.Hash, func(data []byte) error {
+				if err := mdn.Read(chunk.Hash, 0, 0, func(data []byte) error {
 					_, err := sha512Hash.Write(data)
 					return err
 				}); err != nil {
@@ -708,7 +708,7 @@ func (r *repair) repairChecksumCalculation(rebuildChecksum bool, clusterMap map[
 					break
 				}
 
-				if err := mdn.Read(chunk.Hash, func(data []byte) error {
+				if err := mdn.Read(chunk.Hash, 0, 0, func(data []byte) error {
 					_, err := sha512Hash.Write(data)
 					return err
 				}); err != nil {

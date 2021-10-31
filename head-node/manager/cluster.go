@@ -109,7 +109,7 @@ func (c *cluster) CreateShadow(chunks common.DataChunks) error {
 
 	for _, chunk := range chunks {
 		if address, has := m[chunk.Hash]; has {
-			dn, err := c.getDataNode(address)
+			dn, err := c.getDataNode(address[0])
 			if err != nil {
 				return err
 			}
@@ -161,27 +161,42 @@ func (c *cluster) Read(chunks common.DataChunks) (func(w io.Writer, begins int64
 				}
 			}
 
-			address, has := m[chunk.Hash]
+			addresses, has := m[chunk.Hash]
 			if !has {
 				continue
 			}
 
-			dn, err := c.getDataNode(address)
-			if err != nil {
-				return err
+			bulkErrors := errors.NewBulkError()
+			for _, address := range addresses {
+				dn, err := c.getDataNode(address)
+				if err != nil {
+					bulkErrors.Add(err)
+					continue
+				}
+
+				if err := dn.Read(chunk.Hash, uint32(startPoint), uint32(endPoint), func(buffer []byte) error {
+					if int64(len(buffer)) != endPoint-startPoint {
+						return errors.ErrRepair
+					}
+					_, err := w.Write(buffer)
+					if errors2.Is(err, syscall.EPIPE) {
+						return nil
+					}
+					return err
+				}); err != nil {
+					if errors.IsDialError(err) {
+						bulkErrors.Add(err)
+						continue
+					}
+					return err
+				}
+
+				bulkErrors = nil
+				break
 			}
 
-			if err := dn.Read(chunk.Hash, func(buffer []byte) error {
-				if int64(len(buffer)) < endPoint {
-					return errors.ErrRepair
-				}
-				_, err := w.Write(buffer[startPoint:endPoint])
-				if errors2.Is(err, syscall.EPIPE) {
-					return nil
-				}
-				return err
-			}); err != nil {
-				return err
+			if bulkErrors != nil {
+				return bulkErrors
 			}
 		}
 
@@ -211,7 +226,7 @@ func (c *cluster) Delete(chunks common.DataChunks) (*common.DeletionResult, erro
 			continue
 		}
 
-		dn, err := c.getDataNode(address)
+		dn, err := c.getDataNode(address[0])
 		if err != nil {
 			deletionResult.Untouched = append(deletionResult.Untouched, chunk.Hash)
 			continue
@@ -347,7 +362,7 @@ func (c *cluster) findCluster(sha512Hex string) (string, string, error) {
 	return "", "", errors.ErrRemote
 }
 
-func (c *cluster) createClusterMap(chunks common.DataChunks, mapType common.MapType) (map[string]string, error) {
+func (c *cluster) createClusterMap(chunks common.DataChunks, mapType common.MapType) (map[string][]string, error) {
 	sha512HexList := make([]string, 0)
 	for _, chunk := range chunks {
 		sha512HexList = append(sha512HexList, chunk.Hash)
@@ -361,7 +376,7 @@ func (c *cluster) createClusterMap(chunks common.DataChunks, mapType common.MapT
 	return m, nil
 }
 
-func (c *cluster) requestClusterMap(sha512HexList []string, mapType common.MapType) (map[string]string, error) {
+func (c *cluster) requestClusterMap(sha512HexList []string, mapType common.MapType) (map[string][]string, error) {
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s%s", c.managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return nil, err
@@ -394,7 +409,7 @@ func (c *cluster) requestClusterMap(sha512HexList []string, mapType common.MapTy
 		return nil, fmt.Errorf("cluster manager request is failed (requestClusterMap): %d - %s", res.StatusCode, common.NewErrorFromReader(res.Body).Message)
 	}
 
-	var clusterMapping map[string]string
+	var clusterMapping map[string][]string
 	if err := json.NewDecoder(res.Body).Decode(&clusterMapping); err != nil {
 		return nil, err
 	}

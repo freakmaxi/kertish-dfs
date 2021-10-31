@@ -1,6 +1,9 @@
 package errors
 
-import "errors"
+import (
+	"errors"
+	"strings"
+)
 
 var (
 	ErrQuit = errors.New("operation does not need to continue")
@@ -33,3 +36,7 @@ var (
 	ErrFrozen     = errors.New("cluster is frozen")
 	ErrRemote     = errors.New("remote call execution is failed")
 )
+
+func IsDialError(err error) bool {
+	return strings.HasPrefix(err.Error(), "dial tcp") && strings.HasSuffix(err.Error(), "i/o timeout")
+}

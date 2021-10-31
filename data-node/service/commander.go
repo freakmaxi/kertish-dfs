@@ -229,7 +229,7 @@ func (c *commander) crea(conn net.Conn) error {
 		}
 
 		// Add to the cache in go routine
-		go c.cache.Upsert(sha512Hex, chunkBuffer)
+		go c.cache.Upsert(sha512Hex, 0, 0, chunkBuffer)
 
 		return nil
 	})
@@ -267,8 +267,18 @@ func (c *commander) read(conn net.Conn) error {
 		return err
 	}
 
+	var begins uint32
+	if err := c.readBinaryWithTimeout(conn, &begins); err != nil {
+		return err
+	}
+
+	var ends uint32
+	if err := c.readBinaryWithTimeout(conn, &ends); err != nil {
+		return err
+	}
+
 	// Check cache first
-	if content := c.cache.Query(sha512Hex); content != nil {
+	if content := c.cache.Query(sha512Hex, begins, ends); content != nil {
 		if err := c.writeWithTimeout(conn, []byte{'+'}); err != nil {
 			return err
 		}
@@ -280,7 +290,7 @@ func (c *commander) read(conn net.Conn) error {
 			return err
 		}
 
-		if err := c.writeWithTimeout(conn, content); err != nil {
+		if err := c.writeWithTimeout(conn, content[begins:ends]); err != nil {
 			return err
 		}
 
@@ -291,30 +301,55 @@ func (c *commander) read(conn net.Conn) error {
 		if blockFile.Temporary() {
 			return os.ErrNotExist
 		}
-		if err := c.writeWithTimeout(conn, []byte{'+'}); err != nil {
-			return err
-		}
 
 		size, err := blockFile.Size()
 		if err != nil {
 			return err
 		}
 
-		if err := c.writeBinaryWithTimeout(conn, size); err != nil {
+		if begins >= size {
+			return fmt.Errorf("range is not satisfied")
+		}
+		if ends > size {
+			return fmt.Errorf("range is not satisfied")
+		}
+		if begins > ends {
+			return fmt.Errorf("range is not satisfied")
+		}
+
+		if err := c.writeWithTimeout(conn, []byte{'+'}); err != nil {
+			return err
+		}
+
+		if ends == size {
+			ends = 0
+		}
+		if ends > 0 {
+			size = ends - begins
+		}
+
+		sizeBuffer := make([]byte, 4)
+		binary.LittleEndian.PutUint32(sizeBuffer, size)
+
+		if err := c.writeBinaryWithTimeout(conn, sizeBuffer); err != nil {
 			return err
 		}
 
 		cacheData := make([]byte, 0)
-		return blockFile.Read(
+		return blockFile.Read(begins, ends,
 			func(data []byte) error {
 				// Compile For Cache
 				cacheData = append(cacheData, data...)
 
 				return c.writeWithTimeout(conn, data)
 			},
-			func() error {
+			func(inconsistency bool) error {
+				if inconsistency {
+					return errors.ErrRepair
+				}
+
 				// Add/Update Cache
-				c.cache.Upsert(sha512Hex, cacheData)
+				c.cache.Upsert(sha512Hex, begins, ends, cacheData)
 
 				return nil
 			})
@@ -531,11 +566,11 @@ func (c *commander) syrd(conn net.Conn) error {
 			return nil
 		}
 
-		return blockFile.Read(
+		return blockFile.Read(0, 0,
 			func(data []byte) error {
 				return c.writeWithTimeout(conn, data)
 			},
-			func() error {
+			func(_ bool) error {
 				if drop {
 					c.cache.Remove(sha512Hex)
 
