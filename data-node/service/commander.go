@@ -325,7 +325,7 @@ func (c *commander) read(conn net.Conn) error {
 			ends = 0
 		}
 		if ends > 0 {
-			size = ends - begins
+			size = (ends - begins) + 1
 		}
 
 		sizeBuffer := make([]byte, 4)
