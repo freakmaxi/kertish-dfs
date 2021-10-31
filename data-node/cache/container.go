@@ -211,6 +211,7 @@ func (c *container) Upsert(sha512Hex string, begins uint32, ends uint32, data []
 		id:     uuid.New().String(),
 		begins: begins,
 		ends:   ends,
+		data:   make([]byte, len(data)),
 	}
 	copy(dC.data, data)
 
