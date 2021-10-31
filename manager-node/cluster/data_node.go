@@ -215,10 +215,11 @@ func (d *dataNode) Read(sha512Hex string, begins uint32, ends uint32, readHandle
 			return fmt.Errorf("read command is failed on data node")
 		}
 
-		sha512HexCompare := hex.EncodeToString(sha512Hash.Sum(nil))
+		// TODO: Remove
+		/*sha512HexCompare := hex.EncodeToString(sha512Hash.Sum(nil))
 		if strings.Compare(sha512Hex, sha512HexCompare) != 0 {
 			return fmt.Errorf("read result is not verified")
-		}
+		}*/
 
 		return nil
 	})
