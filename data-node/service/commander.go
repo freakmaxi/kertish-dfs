@@ -290,7 +290,7 @@ func (c *commander) read(conn net.Conn) error {
 			return err
 		}
 
-		if err := c.writeWithTimeout(conn, content[begins:ends]); err != nil {
+		if err := c.writeWithTimeout(conn, content); err != nil {
 			return err
 		}
 
