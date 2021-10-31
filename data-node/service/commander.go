@@ -308,13 +308,13 @@ func (c *commander) read(conn net.Conn) error {
 		}
 
 		if begins >= size {
-			return fmt.Errorf("range is not satisfied")
+			return fmt.Errorf("range is not satisfied (begins >= size), size: %d, begins: %d", size, begins)
 		}
 		if ends > size {
-			return fmt.Errorf("range is not satisfied")
+			return fmt.Errorf("range is not satisfied (ends > size), size: %d, ends: %d", size, ends)
 		}
 		if begins > ends {
-			return fmt.Errorf("range is not satisfied")
+			return fmt.Errorf("range is not satisfied (begins > ends), begins: %d, ends: %d", begins, ends)
 		}
 
 		if err := c.writeWithTimeout(conn, []byte{'+'}); err != nil {
