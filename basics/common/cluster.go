@@ -146,24 +146,21 @@ func (c *Cluster) Slaves() NodeList {
 	return slaves
 }
 
-// HighQualityNode returns the most responsive Node in the cluster
+// PrioritizedHighQualityNodes returns the most responsive Nodes in the cluster ordered by their quality
 // if there is not any node with a good quality, it returns nil
-func (c *Cluster) HighQualityNode(nodeIdsMap CacheFileItemLocationMap) *Node {
-	quality := int64(^uint64(0) >> 1) // MaxIntNumber
-	nodeIndex := -1
-	for i, n := range c.Nodes {
+func (c *Cluster) PrioritizedHighQualityNodes(nodeIdsMap CacheFileItemLocationMap) PrioritizedHighQualityNodeList {
+	nodeList := make(PrioritizedHighQualityNodeList, 0)
+
+	for _, n := range c.Nodes {
 		if exists, has := nodeIdsMap[n.Id]; !has || !exists {
 			continue
 		}
 
-		if n.Quality < quality {
-			quality = n.Quality
-			nodeIndex = i
-		}
+		nodeList = append(nodeList, n)
 	}
 
-	if nodeIndex > -1 {
-		return c.Nodes[nodeIndex]
+	if len(nodeList) > 0 {
+		return nodeList
 	}
 	return nil
 }

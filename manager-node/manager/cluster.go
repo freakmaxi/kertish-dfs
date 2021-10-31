@@ -37,8 +37,8 @@ type Cluster interface {
 	DeleteSnapshot(clusterId string, snapshotIndex uint64) error
 	RestoreSnapshot(clusterId string, snapshotIndex uint64) error
 
-	Map(sha512HexList []string, mapType common.MapType) (map[string]string, error)
-	Find(sha512Hex string, mapType common.MapType) (string, string, error)
+	Map(sha512HexList []string, mapType common.MapType) (map[string][]string, error)
+	Find(sha512Hex string, mapType common.MapType) (string, []string, error)
 }
 
 type cluster struct {
@@ -486,56 +486,64 @@ func (c *cluster) RestoreSnapshot(clusterId string, snapshotIndex uint64) error 
 	return c.synchronize.Cluster(cluster.Id, true, false, false)
 }
 
-func (c *cluster) Map(sha512HexList []string, mapType common.MapType) (map[string]string, error) {
-	clusterMapping := make(map[string]string)
+func (c *cluster) Map(sha512HexList []string, mapType common.MapType) (map[string][]string, error) {
+	clusterMapping := make(map[string][]string)
 	for _, sha512Hex := range sha512HexList {
-		_, address, err := c.Find(sha512Hex, mapType)
+		_, addresses, err := c.Find(sha512Hex, mapType)
 		if err != nil {
 			if err == os.ErrNotExist && mapType == common.MTDelete {
 				continue
 			}
 			return nil, err
 		}
-		clusterMapping[sha512Hex] = address
+		clusterMapping[sha512Hex] = addresses
 	}
 	return clusterMapping, nil
 }
 
-func (c *cluster) Find(sha512Hex string, mapType common.MapType) (string, string, error) {
+func (c *cluster) Find(sha512Hex string, mapType common.MapType) (string, []string, error) {
 	cacheFileItem, err := c.index.Get(sha512Hex)
 	if err != nil {
-		return "", "", err
+		return "", nil, err
 	}
 
 	cluster, err := c.clusters.Get(cacheFileItem.ClusterId)
 	if err != nil {
-		return "", "", err
+		return "", nil, err
 	}
 
 	if cluster.Paralyzed {
 		if !cluster.Frozen {
-			return "", "", errors.ErrNoAvailableClusterNode
+			return "", nil, errors.ErrNoAvailableClusterNode
 		}
 
 		if mapType != common.MTRead {
-			return "", "", errors.ErrNoAvailableClusterNode
+			return "", nil, errors.ErrNoAvailableClusterNode
 		}
 	}
 
-	var node *common.Node
+	// addresses should always contain node address, if it will be empty or nil
+	// just return the error
+	addresses := make([]string, 0)
 
 	switch mapType {
 	case common.MTRead:
-		node = cluster.HighQualityNode(cacheFileItem.ExistsIn)
+		nodes := cluster.PrioritizedHighQualityNodes(cacheFileItem.ExistsIn)
+		if nodes == nil {
+			return "", nil, errors.ErrNoAvailableActionNode
+		}
+		for _, n := range nodes {
+			addresses = append(addresses, n.Address)
+		}
 	default:
-		node = cluster.Master()
+		node := cluster.Master()
+		if node == nil {
+			return "", nil, errors.ErrNoAvailableActionNode
+		}
+		addresses = []string{node.Address}
 	}
 
-	if node == nil {
-		return "", "", errors.ErrNoAvailableActionNode
-	}
-
-	return cluster.Id, node.Address, nil
+	return cluster.Id, addresses, nil
 }
 
 var _ Cluster = &cluster{}
