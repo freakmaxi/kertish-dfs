@@ -147,7 +147,7 @@ func (c *cluster) Read(chunks common.DataChunks) (func(w io.Writer, begins int64
 				break
 			}
 
-			startPoint := begins - (chunkTotal - chunkSize)
+			startPoint := chunkSize - (chunkTotal - begins)
 			if startPoint < 0 {
 				startPoint = 0
 			}
