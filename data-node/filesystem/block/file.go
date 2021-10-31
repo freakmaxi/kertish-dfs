@@ -141,7 +141,7 @@ func (f *file) Read(begins uint32, ends uint32, readHandler func(data []byte) er
 		}
 	}
 
-	total := uint32(0) >> 1
+	total := ^uint32(0) >> 1
 	if ends > 0 {
 		total = ends - begins
 	}
