@@ -140,7 +140,7 @@ func (c *cluster) Read(chunks common.DataChunks) (func(w io.Writer, begins int64
 			chunkSize := int64(chunk.Size)
 			chunkTotal += chunkSize
 
-			if chunkTotal < begins {
+			if chunkTotal <= begins {
 				continue
 			}
 			if ends > -1 && ends < (chunkTotal-chunkSize) {
