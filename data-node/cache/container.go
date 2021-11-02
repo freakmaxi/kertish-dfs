@@ -195,7 +195,7 @@ func (c *container) Upsert(sha512Hex string, begins uint32, ends uint32, data []
 	if c.limit < c.usage+dataSize {
 		// if system caching is its limit, it is better to trim the 1/4 of its usage
 		// for system performance and efficiency.
-		c.trimUnsafe(c.usage / 4)
+		c.trimUnsafe(int64(c.usage / 4))
 	}
 
 	if !has {
@@ -287,7 +287,7 @@ func (c *container) Purge() {
 	}
 }
 
-func (c *container) trimUnsafe(size uint64) {
+func (c *container) trimUnsafe(size int64) {
 	if c.limit == 0 {
 		return
 	}
@@ -307,6 +307,6 @@ func (c *container) trimUnsafe(size uint64) {
 		c.usage -= dataSize
 		delete(c.index, indexItem.sha512Hex)
 
-		size -= dataSize
+		size -= int64(dataSize)
 	}
 }
