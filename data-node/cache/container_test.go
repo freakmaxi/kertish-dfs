@@ -24,7 +24,7 @@ func TestContainer_PurgeV1(t *testing.T) {
 	} // limit 5MB
 
 	for i := 0; i < 5; i++ {
-		container.Upsert(fmt.Sprintf("a%d", i+1), []byte{})
+		container.Upsert(fmt.Sprintf("a%d", i+1), 0, 0, []byte{})
 	}
 
 	for i := 0; i < 5; i++ {
@@ -61,7 +61,7 @@ func TestContainer_PurgeV2(t *testing.T) {
 	container.start()
 
 	for i := 0; i < 5; i++ {
-		container.Upsert(fmt.Sprintf("a%d", i+1), []byte{})
+		container.Upsert(fmt.Sprintf("a%d", i+1), 0, 0, []byte{})
 		container.sortedIndex[i].expiresAt = time.Now().UTC().Add(time.Second * 6)
 	}
 
@@ -117,7 +117,7 @@ func TestContainer_PurgeV3(t *testing.T) {
 			index: i,
 		}
 
-		container.Upsert(dI.name, dI.data)
+		container.Upsert(dI.name, 0, 0, dI.data)
 		container.sortedIndex[i].expiresAt = time.Now().UTC().Add(time.Second * 61)
 	}
 	runtime.GC()
