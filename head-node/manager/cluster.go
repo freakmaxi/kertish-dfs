@@ -190,6 +190,14 @@ func (c *cluster) Read(chunks common.DataChunks) (func(w io.Writer, begins int64
 					return err
 				}
 
+				if bulkErrors.HasError() {
+					c.logger.Warn(
+						"Read request for file chunk is successful with difficulties",
+						zap.String("sha512Hex", chunk.Hash),
+						zap.Error(bulkErrors),
+					)
+				}
+
 				bulkErrors = nil
 				break
 			}
