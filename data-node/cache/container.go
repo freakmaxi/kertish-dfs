@@ -79,7 +79,7 @@ type container struct {
 	limit    uint64
 	lifetime time.Duration
 	logger   *zap.Logger
-	usage    uint64
+	usage    int64 // Because of some calculations in place, usage should accept negative numbers
 
 	mutex       *sync.Mutex
 	index       map[string]indexItem
@@ -122,13 +122,13 @@ func (c *container) start() {
 func (c *container) autoReport() {
 	limit := c.limit / (1024 * 1024)
 
-	usageBackup := uint64(0)
-	freeBackup := uint64(0)
+	usageBackup := int64(0)
+	freeBackup := int64(0)
 
 	go func() {
 		for {
 			usage := c.usage / (1024 * 1024)
-			free := c.limit - c.usage
+			free := int64(c.limit) - c.usage
 			free /= 1024 * 1024
 
 			if usageBackup != usage || freeBackup != free {
@@ -185,17 +185,17 @@ func (c *container) Upsert(sha512Hex string, begins uint32, ends uint32, data []
 		dC := currentItem.MatchExactRange(begins, ends)
 		if dC != nil {
 			c.sortedIndex[currentItem.sortIndex] = nil
-			c.usage -= dC.Size()
+			c.usage -= int64(dC.Size())
 			currentItem.Remove(dC.id)
 		}
 	}
 
-	dataSize := uint64(len(data))
+	dataSize := int64(len(data))
 
-	if c.limit < c.usage+dataSize {
+	if c.limit < uint64(c.usage+dataSize) {
 		// if system caching is its limit, it is better to trim the 1/4 of its usage
 		// for system performance and efficiency.
-		c.trimUnsafe(int64(c.usage / 4))
+		c.trimUnsafe(c.usage / 4)
 	}
 
 	if !has {
@@ -236,7 +236,7 @@ func (c *container) Remove(sha512Hex string) {
 	}
 
 	c.sortedIndex[currentItem.sortIndex] = nil
-	c.usage -= currentItem.Size()
+	c.usage -= int64(currentItem.Size())
 	delete(c.index, currentItem.sha512Hex)
 }
 
@@ -273,7 +273,7 @@ func (c *container) Purge() {
 
 		if indexItem.expiresAt.Before(time.Now().UTC()) {
 			c.sortedIndex = append(c.sortedIndex[:i], c.sortedIndex[i+1:]...)
-			c.usage -= indexItem.Size()
+			c.usage -= int64(indexItem.Size())
 			delete(c.index, indexItem.sha512Hex)
 			i--
 
@@ -301,12 +301,12 @@ func (c *container) trimUnsafe(size int64) {
 			return
 		}
 
-		dataSize := indexItem.Size()
+		dataSize := int64(indexItem.Size())
 
 		c.sortedIndex[i] = nil
 		c.usage -= dataSize
 		delete(c.index, indexItem.sha512Hex)
 
-		size -= int64(dataSize)
+		size -= dataSize
 	}
 }
