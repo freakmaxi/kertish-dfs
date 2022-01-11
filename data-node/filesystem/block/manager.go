@@ -103,7 +103,7 @@ func (m *manager) Traverse(hexHandler func(sha512Hex string) error) error {
 	})
 }
 
-func (m *manager) Wipe() error {
+func (m *manager) compileSha512HexList() ([]string, error) {
 	m.blockLockMutex.Lock()
 	defer m.blockLockMutex.Unlock()
 
@@ -113,6 +113,15 @@ func (m *manager) Wipe() error {
 		sha512HexList = append(sha512HexList, info.Name())
 		return nil
 	}); err != nil {
+		return nil, err
+	}
+
+	return sha512HexList, nil
+}
+
+func (m *manager) Wipe() error {
+	sha512HexList, err := m.compileSha512HexList()
+	if err != nil {
 		return err
 	}
 
