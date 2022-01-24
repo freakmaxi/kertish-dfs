@@ -179,8 +179,14 @@ func TestIndexItem_MatchRangeV1(t *testing.T) {
 	result5 := item.MatchRange(37, 50)
 	assert.Equal(t, []byte{16, 17, 18, 19, 20, 21, 23, 24, 25, 26, 27, 28, 29, 30}, result5)
 
-	result6 := item.MatchRange(37, 51)
+	result6 := item.MatchRange(19, 28)
 	assert.Nil(t, result6)
+
+	result7 := item.MatchRange(37, 51)
+	assert.Nil(t, result7)
+
+	result8 := item.MatchRange(0, 0)
+	assert.Nil(t, result8)
 }
 
 func TestIndexItem_MatchRangeV2(t *testing.T) {
@@ -203,6 +209,31 @@ func TestIndexItem_MatchRangeV2(t *testing.T) {
 
 	result2 := item.MatchRange(0, 9)
 	assert.Equal(t, []byte{0, 1, 2, 3, 4, 5, 6, 7, 8}, result2)
+
+	result3 := item.MatchRange(0, 10)
+	assert.Nil(t, result3)
+}
+
+func TestIndexItem_MatchRangeV3(t *testing.T) {
+	item := indexItem{
+		sha512Hex: "test",
+		expiresAt: time.Now(),
+		sortIndex: 0,
+
+		dataItems: []dataContainer{
+			{
+				begins: 10,
+				ends:   19,
+				data:   []byte{0, 1, 2, 3, 4, 5, 6, 7, 8},
+			},
+		},
+	}
+
+	result1 := item.MatchRange(8, 21)
+	assert.Nil(t, result1)
+
+	result2 := item.MatchRange(8, 3)
+	assert.Nil(t, result2)
 }
 
 func TestIndexItem_MergeV1(t *testing.T) {

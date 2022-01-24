@@ -61,18 +61,21 @@ func (i *indexItem) MatchRange(begins uint32, ends uint32) []byte {
 			if begins == 0 && (ends == 0 || size-ends == 0) {
 				return dC.data
 			}
+			if int(size)-int(ends) < 0 {
+				return nil
+			}
 			return dC.data[begins:ends]
 		}
 
 		if begins >= dC.begins && begins < dC.ends {
 			startIndex := begins - dC.begins
-			endIndex := dC.Size() - startIndex - 1
-			if ends <= dC.ends {
-				endIndex = ends - begins
+			remainSize := dC.Size() - startIndex
+			if ends < dC.ends {
+				remainSize = ends - begins + 1
 			}
 
-			compiledData = append(compiledData, dC.data[startIndex:startIndex+endIndex+1]...)
-			begins += endIndex
+			compiledData = append(compiledData, dC.data[startIndex:startIndex+remainSize]...)
+			begins += remainSize - 1
 
 			if begins == ends {
 				return compiledData
