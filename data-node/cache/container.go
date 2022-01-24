@@ -2,11 +2,10 @@ package cache
 
 import (
 	"fmt"
-	"strings"
+	"sort"
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -23,19 +22,24 @@ type Container interface {
 }
 
 type dataContainer struct {
-	id     string
 	begins uint32
 	ends   uint32
 	data   []byte
 }
 
-func (d *dataContainer) Size() uint64 {
-	return uint64(len(d.data))
+func (d *dataContainer) Size() uint32 {
+	return uint32(len(d.data))
 }
+
+type dataContainerList []dataContainer
+
+func (p dataContainerList) Len() int           { return len(p) }
+func (p dataContainerList) Less(i, j int) bool { return p[i].begins < p[j].begins }
+func (p dataContainerList) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
 type indexItem struct {
 	sha512Hex string
-	dataItems []dataContainer
+	dataItems dataContainerList
 
 	expiresAt time.Time
 	sortIndex int
@@ -47,30 +51,121 @@ func (p indexItemList) Len() int           { return len(p) }
 func (p indexItemList) Less(i, j int) bool { return p[i].expiresAt.Before(p[j].expiresAt) }
 func (p indexItemList) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 
-func (i *indexItem) MatchExactRange(begins uint32, ends uint32) *dataContainer {
+func (i *indexItem) MatchRange(begins uint32, ends uint32) []byte {
+	compiledData := make([]byte, 0)
+
 	for _, dC := range i.dataItems {
 		size := uint32(len(dC.data))
 
-		if dC.begins == begins && (dC.ends == ends || size-ends == 0) {
-			return &dC
+		if dC.begins == 0 && dC.ends == 0 {
+			if begins == 0 && (ends == 0 || size-ends == 0) {
+				return dC.data
+			}
+			return dC.data[begins:ends]
+		}
+
+		if begins >= dC.begins && begins < dC.ends {
+			startIndex := begins - dC.begins
+			endIndex := dC.Size() - startIndex - 1
+			if ends <= dC.ends {
+				endIndex = ends - begins
+			}
+
+			compiledData = append(compiledData, dC.data[startIndex:startIndex+endIndex+1]...)
+			begins += endIndex
+
+			if begins == ends {
+				return compiledData
+			}
+
+			// if still needs to be filled, so move one byte forward not to repeat the same byte
+			begins++
 		}
 	}
+
 	return nil
 }
 
-func (i *indexItem) Remove(id string) {
-	for l, dC := range i.dataItems {
-		if strings.Compare(dC.id, id) == 0 {
-			i.dataItems = append(i.dataItems[0:l], i.dataItems[l+1:]...)
-			return
+// Merge returns current size and new size after merge
+func (i *indexItem) Merge(begins uint32, ends uint32, data []byte) (uint64, uint64) {
+	currentSize := i.Size()
+
+	// if merge request is for whole file, just drop all data pieces and set the whole data as cache
+	if begins == 0 && ends == 0 {
+		i.dataItems = []dataContainer{
+			{
+				begins: begins,
+				ends:   ends,
+				data:   data,
+			},
 		}
+		return currentSize, i.Size()
 	}
+
+	// Insert data container blindly to the index
+	newDC := dataContainer{
+		data:   make([]byte, len(data)),
+		begins: begins,
+		ends:   ends,
+	}
+	copy(newDC.data, data)
+
+	i.dataItems = append(i.dataItems, newDC)
+
+	// sort data to process efficiently
+	sort.Sort(i.dataItems)
+
+	var mergingContainer *dataContainer
+
+	for idx := 0; idx < len(i.dataItems); idx++ {
+		if mergingContainer == nil {
+			mergingContainer = &i.dataItems[idx]
+			continue
+		}
+
+		dC := i.dataItems[idx]
+
+		if dC.begins == 0 && dC.ends == 0 {
+			break
+		}
+
+		/*
+		* Covers these two conditions
+		* Condition One
+		* ------
+		*   ---
+		* Condition Two
+		* ------
+		*    -----
+		 */
+		if dC.begins <= mergingContainer.ends {
+			remainsBegins := dC.begins + (mergingContainer.ends - dC.begins)
+			if remainsBegins >= dC.ends {
+				i.dataItems = append(i.dataItems[0:idx], i.dataItems[idx+1:]...)
+				idx--
+
+				continue
+			}
+
+			mergingContainer.data = append(mergingContainer.data, dC.data[remainsBegins-dC.begins+1:]...)
+			mergingContainer.ends += dC.ends - remainsBegins
+
+			i.dataItems = append(i.dataItems[0:idx], i.dataItems[idx+1:]...)
+			idx--
+
+			continue
+		}
+
+		mergingContainer = nil
+	}
+
+	return currentSize, i.Size()
 }
 
 func (i *indexItem) Size() uint64 {
 	size := uint64(0)
 	for _, dC := range i.dataItems {
-		size += dC.Size()
+		size += uint64(dC.Size())
 	}
 	return size
 }
@@ -156,8 +251,8 @@ func (c *container) Query(sha512Hex string, begins uint32, ends uint32) []byte {
 		return nil
 	}
 
-	dC := index.MatchExactRange(begins, ends)
-	if dC == nil {
+	data := index.MatchRange(begins, ends)
+	if data == nil {
 		return nil
 	}
 
@@ -169,7 +264,7 @@ func (c *container) Query(sha512Hex string, begins uint32, ends uint32) []byte {
 	c.sortedIndex = append(c.sortedIndex, &index)
 	c.index[index.sha512Hex] = index
 
-	return dC.data
+	return data
 }
 
 func (c *container) Upsert(sha512Hex string, begins uint32, ends uint32, data []byte) {
@@ -180,16 +275,6 @@ func (c *container) Upsert(sha512Hex string, begins uint32, ends uint32, data []
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	currentItem, has := c.index[sha512Hex]
-	if has {
-		dC := currentItem.MatchExactRange(begins, ends)
-		if dC != nil {
-			c.sortedIndex[currentItem.sortIndex] = nil
-			c.usage -= int64(dC.Size())
-			currentItem.Remove(dC.id)
-		}
-	}
-
 	dataSize := int64(len(data))
 
 	if c.limit < uint64(c.usage+dataSize) {
@@ -198,27 +283,24 @@ func (c *container) Upsert(sha512Hex string, begins uint32, ends uint32, data []
 		c.trimUnsafe(c.usage / 4)
 	}
 
+	currentItem, has := c.index[sha512Hex]
 	if !has {
 		currentItem = indexItem{
 			sha512Hex: sha512Hex,
-			dataItems: make([]dataContainer, 0),
+			dataItems: make(dataContainerList, 0),
 			sortIndex: len(c.sortedIndex),
 		}
+	} else {
+		c.sortedIndex[currentItem.sortIndex] = nil
 	}
 	currentItem.expiresAt = time.Now().UTC().Add(c.lifetime)
 
-	dC := dataContainer{
-		id:     uuid.New().String(),
-		begins: begins,
-		ends:   ends,
-		data:   make([]byte, len(data)),
-	}
-	copy(dC.data, data)
+	prevSize, newSize := currentItem.Merge(begins, ends, data)
 
-	currentItem.dataItems = append(currentItem.dataItems, dC)
+	c.usage -= int64(prevSize)
+	c.usage += int64(newSize)
 
 	c.sortedIndex = append(c.sortedIndex, &currentItem)
-	c.usage += dataSize
 	c.index[currentItem.sha512Hex] = currentItem
 }
 
