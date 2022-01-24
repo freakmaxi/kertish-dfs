@@ -71,18 +71,15 @@ func (i *indexItem) MatchRange(begins uint32, ends uint32) []byte {
 			startIndex := begins - dC.begins
 			remainSize := dC.Size() - startIndex
 			if ends < dC.ends {
-				remainSize = ends - begins + 1
+				remainSize = ends - begins
 			}
 
 			compiledData = append(compiledData, dC.data[startIndex:startIndex+remainSize]...)
-			begins += remainSize - 1
+			begins += remainSize
 
 			if begins == ends {
 				return compiledData
 			}
-
-			// if still needs to be filled, so move one byte forward not to repeat the same byte
-			begins++
 		}
 	}
 
@@ -90,6 +87,8 @@ func (i *indexItem) MatchRange(begins uint32, ends uint32) []byte {
 }
 
 // Merge returns current size and new size after merge
+// ends is the ending index and not included
+// begins = 6, ends: 10 length should be 4 indices are 6 7 8 9
 func (i *indexItem) Merge(begins uint32, ends uint32, data []byte) (uint64, uint64) {
 	currentSize := i.Size()
 
@@ -150,7 +149,7 @@ func (i *indexItem) Merge(begins uint32, ends uint32, data []byte) (uint64, uint
 				continue
 			}
 
-			mergingContainer.data = append(mergingContainer.data, dC.data[remainsBegins-dC.begins+1:]...)
+			mergingContainer.data = append(mergingContainer.data, dC.data[remainsBegins-dC.begins:]...)
 			mergingContainer.ends += dC.ends - remainsBegins
 
 			i.dataItems = append(i.dataItems[0:idx], i.dataItems[idx+1:]...)
