@@ -129,6 +129,65 @@ func TestContainer_PurgeV3(t *testing.T) {
 	assert.Less(t, int64(result), int64(container.limit))
 }
 
+func TestContainer_PurgeV4(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+
+	container := container{
+		limit:       1024 * 1024 * 1024 * 5,
+		lifetime:    time.Second * 5,
+		mutex:       &sync.Mutex{},
+		index:       make(map[string]indexItem),
+		sortedIndex: make(indexItemList, 0),
+		logger:      logger,
+	} // limit 5MB
+	container.start()
+
+	type dI struct {
+		name  string
+		data  []byte
+		index int
+	}
+
+	for i := 0; i < 1024; i++ {
+		dI := dI{
+			name:  fmt.Sprintf("a%d", i+1),
+			data:  make([]byte, 1024*(i+1)),
+			index: i,
+		}
+
+		container.Upsert(dI.name, 0, 0, dI.data)
+		if i == 0 {
+			container.sortedIndex[i].expiresAt = time.Now().UTC().Add(time.Second)
+			continue
+		}
+		container.sortedIndex[i].expiresAt = time.Now().UTC().Add(time.Second * -1)
+	}
+	container.Purge()
+
+	assert.Equal(t, int64(1024), container.usage)
+}
+
+func TestContainer_PurgeV5(t *testing.T) {
+	logger, _ := zap.NewDevelopment()
+
+	container := container{
+		limit:       1024 * 1024 * 5,
+		lifetime:    time.Second,
+		mutex:       &sync.Mutex{},
+		index:       make(map[string]indexItem),
+		sortedIndex: make(indexItemList, 0),
+		logger:      logger,
+	} // limit 5MB
+	container.start()
+
+	container.Upsert("a1", 5, 21, make([]byte, 21-5))
+	container.Upsert("a1", 22, 25, make([]byte, 25-22))
+	container.Upsert("a1", 18, 23, make([]byte, 23-18))
+	time.Sleep(time.Second * 2)
+
+	assert.Equal(t, int64(0), container.usage)
+}
+
 func TestIndexItem_MatchRangeV1(t *testing.T) {
 	item := indexItem{
 		sha512Hex: "test",

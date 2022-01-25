@@ -260,8 +260,8 @@ func (c *container) Query(sha512Hex string, begins uint32, ends uint32) []byte {
 
 	c.sortedIndex[index.sortIndex] = nil
 
-	index.expiresAt = time.Now().UTC().Add(c.lifetime)
 	index.sortIndex = len(c.sortedIndex)
+	index.expiresAt = time.Now().UTC().Add(c.lifetime)
 
 	c.sortedIndex = append(c.sortedIndex, &index)
 	c.index[index.sha512Hex] = index
@@ -290,11 +290,11 @@ func (c *container) Upsert(sha512Hex string, begins uint32, ends uint32, data []
 		currentItem = indexItem{
 			sha512Hex: sha512Hex,
 			dataItems: make(dataContainerList, 0),
-			sortIndex: len(c.sortedIndex),
 		}
 	} else {
 		c.sortedIndex[currentItem.sortIndex] = nil
 	}
+	currentItem.sortIndex = len(c.sortedIndex)
 	currentItem.expiresAt = time.Now().UTC().Add(c.lifetime)
 
 	prevSize, newSize := currentItem.Merge(begins, ends, data)
