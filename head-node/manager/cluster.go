@@ -134,6 +134,8 @@ func (c *cluster) Read(chunks common.DataChunks) (func(w io.Writer, begins int64
 		return nil, err
 	}
 
+	// begins and ends came from Http Range Header Logic.
+	// however, request is transferred to the data-node in start index and end index (included) logic
 	return func(w io.Writer, begins int64, ends int64) error {
 		chunkTotal := int64(0)
 		for _, chunk := range chunks {
