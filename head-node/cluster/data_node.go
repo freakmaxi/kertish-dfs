@@ -144,12 +144,12 @@ func (d *dataNode) Read(sha512Hex string, begins uint32, ends uint32, readHandle
 			return fmt.Errorf("data node refused the read request")
 		}
 
-		var blockSize uint32
-		if err := binary.Read(conn, binary.LittleEndian, &blockSize); err != nil {
+		var dataSize uint32
+		if err := binary.Read(conn, binary.LittleEndian, &dataSize); err != nil {
 			return err
 		}
 
-		buf := make([]byte, blockSize)
+		buf := make([]byte, dataSize)
 
 		if _, err = io.ReadAtLeast(conn, buf, len(buf)); err != nil {
 			return err
