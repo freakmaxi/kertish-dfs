@@ -1,6 +1,6 @@
 module github.com/freakmaxi/kertish-dfs/admin-tool
 
-go 1.16
+go 1.17
 
 replace github.com/freakmaxi/kertish-dfs/basics => ../basics
 

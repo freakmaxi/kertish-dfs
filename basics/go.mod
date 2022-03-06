@@ -1,6 +1,6 @@
 module github.com/freakmaxi/kertish-dfs/basics
 
-go 1.16
+go 1.17
 
 require (
 	github.com/gdamore/tcell v1.4.0
