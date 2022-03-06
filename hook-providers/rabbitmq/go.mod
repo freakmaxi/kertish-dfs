@@ -7,4 +7,10 @@ require (
 	github.com/streadway/amqp v1.0.0
 )
 
+require (
+	go.uber.org/atomic v1.6.0 // indirect
+	go.uber.org/multierr v1.5.0 // indirect
+	go.uber.org/zap v1.16.0 // indirect
+)
+
 replace github.com/freakmaxi/kertish-dfs/basics => ../../basics
