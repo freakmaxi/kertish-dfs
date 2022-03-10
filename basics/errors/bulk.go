@@ -35,6 +35,10 @@ func (b *BulkError) HasError() bool {
 	return len(b.innerErrors) > 0
 }
 
+func (b *BulkError) Count() int {
+	return len(b.innerErrors)
+}
+
 func (b *BulkError) Error() string {
 	errs := ""
 	for _, container := range b.innerErrors {

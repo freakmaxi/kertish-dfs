@@ -3,7 +3,6 @@ package manager
 import (
 	"fmt"
 	"os"
-	"sync"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
@@ -311,96 +310,9 @@ func (c *cluster) Discard(reservationId string) error {
 	})
 }
 
-func (c *cluster) MoveCluster(sourceClusterId string, targetClusterId string) (e error) {
-	sourceCluster, err := c.clusters.Get(sourceClusterId)
-	if err != nil {
-		return err
-	}
-
-	targetCluster, err := c.clusters.Get(targetClusterId)
-	if err != nil {
-		return err
-	}
-
-	if sourceCluster.Used > 0 && sourceCluster.Frozen {
-		return errors.ErrNotAvailableForClusterAction
-	}
-
-	if err := c.clusters.SetFreeze(sourceClusterId, true); err != nil {
-		return err
-	}
-
-	if targetCluster.Used > 0 && targetCluster.Frozen {
-		return errors.ErrNotAvailableForClusterAction
-	}
-
-	if err := c.clusters.SetFreeze(targetClusterId, true); err != nil {
-		return err
-	}
-
-	if sourceCluster.Used > targetCluster.Available() {
-		return errors.ErrNoSpace
-	}
-
-	sourceMasterNode := sourceCluster.Master()
-	smdn, err := cluster2.NewDataNode(sourceMasterNode.Address)
-	if err != nil {
-		return err
-	}
-
-	targetMasterNode := targetCluster.Master()
-	tmdn, err := cluster2.NewDataNode(targetMasterNode.Address)
-	if err != nil {
-		return err
-	}
-
-	sourceContainer, err := smdn.SyncList(nil)
-	if err != nil {
-		c.logger.Error(
-			"Unable to get sync list from data node",
-			zap.String("nodeId", sourceMasterNode.Id),
-			zap.String("nodeAddress", sourceMasterNode.Address),
-			zap.Error(err),
-		)
-		return errors.ErrPing
-	}
-
-	for i := len(sourceContainer.Snapshots) - 1; i >= 0; i-- {
-		if !smdn.SnapshotDelete(uint64(i)) {
-			c.logger.Error(
-				"Unable to drop snapshots, it will create problem in future so move process must be failed",
-				zap.String("nodeId", sourceMasterNode.Id),
-				zap.String("nodeAddress", sourceMasterNode.Address),
-			)
-			return errors.ErrSnapshot
-		}
-	}
-
-	var syncErr error
-	for sha512Hex := range sourceContainer.FileItems {
-		if tmdn.SyncMove(sha512Hex, sourceMasterNode.Address) != nil {
-			syncErr = errors.ErrSync
-		}
-	}
-
-	syncClustersFunc := func(wg *sync.WaitGroup, clusterId string, keepFrozen bool) {
-		defer wg.Done()
-		if err := c.synchronize.Cluster(clusterId, true, keepFrozen, false); err != nil {
-			c.logger.Error(
-				"Cluster sync is failed after move operation",
-				zap.String("clusterId", clusterId),
-				zap.Error(err),
-			)
-		}
-	}
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
-	go syncClustersFunc(wg, sourceCluster.Id, true)
-	wg.Add(1)
-	go syncClustersFunc(wg, targetCluster.Id, false)
-	wg.Wait()
-
-	return syncErr
+func (c *cluster) MoveCluster(sourceClusterId string, targetClusterId string) error {
+	move := newMove(c.clusters, c.synchronize, c.logger)
+	return move.Move(sourceClusterId, targetClusterId)
 }
 
 func (c *cluster) BalanceClusters(clusterIds []string) error {
