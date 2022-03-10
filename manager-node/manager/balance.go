@@ -13,7 +13,7 @@ import (
 )
 
 const balanceThreshold = 0.05
-const semaphoreLimit = 10
+const balanceSemaphoreLimit = 10
 
 type balance struct {
 	clusters    data.Clusters
@@ -146,7 +146,7 @@ func (b *balance) Balance(clusterIds []string) error {
 
 		s, has := b.semaphoreChan[clusterId]
 		if !has {
-			s = make(chan bool, semaphoreLimit)
+			s = make(chan bool, balanceSemaphoreLimit)
 			for i := 0; i < cap(s); i++ {
 				s <- true
 			}
