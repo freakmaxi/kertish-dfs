@@ -93,6 +93,8 @@ func (f *file) Temporary() bool {
 }
 
 func (f *file) Write(data []byte) error {
+	f.verified = false
+
 	if _, err := f.sha512.Write(data); err != nil {
 		return err
 	}
