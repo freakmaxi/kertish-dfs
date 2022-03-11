@@ -18,6 +18,7 @@ import (
 const queueSize = 5000
 const pauseDuration = time.Second * 30
 const retryCount = 10
+const semaphoreLimit = 10
 
 // Synchronize interface handles sync operations between cluster data nodes
 type Synchronize interface {
@@ -458,11 +459,38 @@ func (s *synchronize) deleteBlockFile(b block.Manager, fileItem common.SyncFileI
 func (s *synchronize) create(wg *sync.WaitGroup, sourceNode cluster.DataNode, snapshotTime *time.Time, b block.Manager, createList common.SyncFileItemList) {
 	defer wg.Done()
 
+	createListMutex := sync.Mutex{}
 	totalCreateCount := len(createList)
-	for len(createList) > 0 {
+
+	currentCreatedCountFunc := func() int {
+		createListMutex.Lock()
+		defer createListMutex.Unlock()
+
+		return totalCreateCount - (len(createList) - 1)
+	}
+	nextCreateListItemFunc := func() *common.SyncFileItem {
+		createListMutex.Lock()
+		defer createListMutex.Unlock()
+
+		if len(createList) == 0 {
+			return nil
+		}
+
 		fileItem := createList[0]
-		currentCreatedCount := totalCreateCount - (len(createList) - 1)
+		createList = createList[1:]
+
+		return &fileItem
+	}
+
+	semaphoreChan := make(chan bool, semaphoreLimit)
+	createFunc := func(fileItem common.SyncFileItem, semaphoreWG *sync.WaitGroup) {
+		defer func() {
+			<-semaphoreChan
+			semaphoreWG.Done()
+		}()
+
 		if err := s.createBlockFile(sourceNode, snapshotTime, b, fileItem, false); err != nil && err != errors.ErrQuit {
+			currentCreatedCount := currentCreatedCountFunc()
 			s.logger.Error(
 				fmt.Sprintf("Sync cannot create %s - %d/%d", fileItem.Sha512Hex, currentCreatedCount, totalCreateCount),
 				zap.String("sha512Hex", fileItem.Sha512Hex),
@@ -470,16 +498,30 @@ func (s *synchronize) create(wg *sync.WaitGroup, sourceNode cluster.DataNode, sn
 				zap.Int("total", totalCreateCount),
 				zap.Error(err),
 			)
-		} else {
-			s.logger.Info(
-				fmt.Sprintf("Synced (CREATED) %s - %d/%d...", fileItem.Sha512Hex, currentCreatedCount, totalCreateCount),
-				zap.String("sha512Hex", fileItem.Sha512Hex),
-				zap.Int("current", currentCreatedCount),
-				zap.Int("total", totalCreateCount),
-			)
+			return
 		}
-		createList = createList[1:]
+
+		currentCreatedCount := currentCreatedCountFunc()
+		s.logger.Info(
+			fmt.Sprintf("Synced (CREATED) %s - %d/%d...", fileItem.Sha512Hex, currentCreatedCount, totalCreateCount),
+			zap.String("sha512Hex", fileItem.Sha512Hex),
+			zap.Int("current", currentCreatedCount),
+			zap.Int("total", totalCreateCount),
+		)
 	}
+
+	semaphoreWG := &sync.WaitGroup{}
+	for {
+		fileItem := nextCreateListItemFunc()
+		if fileItem == nil {
+			break
+		}
+
+		semaphoreChan <- true
+		semaphoreWG.Add(1)
+		go createFunc(*fileItem, semaphoreWG)
+	}
+	semaphoreWG.Wait()
 }
 
 func (s *synchronize) createBlockFile(sourceNode cluster.DataNode, snapshotTime *time.Time, b block.Manager, fileItem common.SyncFileItem, queueRequest bool) error {
