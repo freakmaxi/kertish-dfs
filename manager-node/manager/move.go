@@ -107,6 +107,8 @@ func (m *move) Move(sourceClusterId string, targetClusterId string) error {
 		return err
 	}
 
+	m.logger.Info(fmt.Sprintf("Fetching source (%s) sync list for cluster moving...", sourceClusterId))
+
 	sourceContainer, err := smdn.SyncList(nil)
 	if err != nil {
 		m.logger.Error(
@@ -128,6 +130,8 @@ func (m *move) Move(sourceClusterId string, targetClusterId string) error {
 			return errors.ErrSnapshot
 		}
 	}
+
+	m.logger.Info("Cluster moving operation is taking place...")
 
 	bulkErr := errors.NewBulkError()
 	for sha512Hex := range sourceContainer.FileItems {
