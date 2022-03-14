@@ -460,13 +460,14 @@ func (s *synchronize) create(wg *sync.WaitGroup, sourceNode cluster.DataNode, sn
 	defer wg.Done()
 
 	createListMutex := sync.Mutex{}
+	inProgressCount := 0
 	totalCreateCount := len(createList)
 
 	currentCreatedCountFunc := func() int {
 		createListMutex.Lock()
 		defer createListMutex.Unlock()
 
-		return totalCreateCount - (len(createList) - 1)
+		return totalCreateCount - (inProgressCount + len(createList) - 1)
 	}
 	nextCreateListItemFunc := func() *common.SyncFileItem {
 		createListMutex.Lock()
@@ -478,8 +479,15 @@ func (s *synchronize) create(wg *sync.WaitGroup, sourceNode cluster.DataNode, sn
 
 		fileItem := createList[0]
 		createList = createList[1:]
+		inProgressCount++
 
 		return &fileItem
+	}
+	completedCreateFunc := func() {
+		createListMutex.Lock()
+		defer createListMutex.Unlock()
+
+		inProgressCount--
 	}
 
 	semaphoreChan := make(chan bool, semaphoreLimit)
@@ -487,6 +495,8 @@ func (s *synchronize) create(wg *sync.WaitGroup, sourceNode cluster.DataNode, sn
 		defer func() {
 			<-semaphoreChan
 			semaphoreWG.Done()
+
+			completedCreateFunc()
 		}()
 
 		if err := s.createBlockFile(sourceNode, snapshotTime, b, fileItem, false); err != nil && err != errors.ErrQuit {
