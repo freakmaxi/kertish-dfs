@@ -28,7 +28,22 @@ func TestNewBulkError(t *testing.T) {
 	funcX(fmt.Errorf("test2"))
 	result = bulk.Error()
 
-	fmt.Println(result)
-
 	assert.True(t, strings.HasSuffix(result, "test2"))
+}
+
+func TestBulkError_ContainsType(t *testing.T) {
+	bulk := NewBulkError()
+
+	bulk.Add(fmt.Errorf("test1"))
+	bulk.Add(NewUploadError("upload Error"))
+	bulk.Add(fmt.Errorf("test2"))
+
+	assert.True(t, bulk.ContainsType(&UploadError{}))
+
+	bulk = NewBulkError()
+
+	bulk.Add(fmt.Errorf("test1"))
+	bulk.Add(fmt.Errorf("test2"))
+
+	assert.False(t, bulk.ContainsType(&UploadError{}))
 }

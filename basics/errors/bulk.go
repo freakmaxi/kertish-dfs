@@ -2,6 +2,7 @@ package errors
 
 import (
 	"fmt"
+	"reflect"
 	"time"
 )
 
@@ -33,6 +34,15 @@ func (b *BulkError) Add(err error) {
 // HasError checks if any error is added to the list
 func (b *BulkError) HasError() bool {
 	return len(b.innerErrors) > 0
+}
+
+func (b *BulkError) ContainsType(err error) bool {
+	for _, ec := range b.innerErrors {
+		if reflect.TypeOf(ec.err) == reflect.TypeOf(err) {
+			return true
+		}
+	}
+	return false
 }
 
 func (b *BulkError) Count() int {

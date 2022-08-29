@@ -9,9 +9,9 @@ type CreationResult struct {
 }
 
 // NewCreationResult initialises the new empty CreationResult struct
-func NewCreationResult() CreationResult {
-	return CreationResult{
-		Checksum: EmptyChecksum(),
-		Chunks:   make(DataChunks, 0),
+func NewCreationResult(sha512Hex string, chunks DataChunks) *CreationResult {
+	return &CreationResult{
+		Checksum: sha512Hex,
+		Chunks:   chunks,
 	}
 }
