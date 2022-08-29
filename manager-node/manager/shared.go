@@ -22,6 +22,8 @@ func newClusterId() string {
 	return md5Hash(clusterId.String())
 }
 
+// newNodeId uses hardwareAddr, bindPort and size
+// it extract the bindPort from the provided bindAddr or use 9430 as default
 func newNodeId(hardwareAddr string, bindAddr string, size uint64) string {
 	colonIdx := strings.LastIndex(bindAddr, ":")
 	if colonIdx > -1 {

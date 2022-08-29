@@ -2,10 +2,13 @@ package manager
 
 import (
 	"bytes"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,7 +23,7 @@ const notificationChannelLimit = 100
 const notificationBulkLimit = 20
 
 type Node interface {
-	Join(clusterId string, nodeId string, masterAddress string)
+	Join(clusterId string, nodeId string, masterAddress string) error
 	Mode(master bool)
 	Leave()
 	Handshake() error
@@ -60,6 +63,8 @@ func NewNode(hardwareAddr string, bindAddr string, nodeSize uint64, managerAddre
 		hardwareAddr: hardwareAddr,
 		bindAddr:     bindAddr,
 		nodeSize:     nodeSize,
+
+		nodeId: calculateNodeId(hardwareAddr, bindAddr, nodeSize),
 
 		client:      http.Client{},
 		managerAddr: managerAddresses,
@@ -226,9 +231,16 @@ func (n *node) notify(notificationContainerList common.NotificationContainerList
 	return nil
 }
 
-func (n *node) Join(clusterId string, nodeId string, masterAddress string) {
+func (n *node) Join(clusterId string, nodeId string, masterAddress string) error {
 	if len(n.clusterId) > 0 && len(n.nodeId) > 0 {
-		return
+		if strings.Compare(n.clusterId, clusterId) == 0 && strings.Compare(n.nodeId, nodeId) == 0 {
+			return nil
+		}
+		return fmt.Errorf("it is already a member of another cluster, registered cluster id: %s, node id: %s", n.clusterId, n.nodeId)
+	}
+
+	if strings.Compare(n.nodeId, nodeId) != 0 {
+		return fmt.Errorf("join requested with wrong node id current: %s, requested: %s, targeted cluster id: %s", n.nodeId, nodeId, clusterId)
 	}
 
 	n.clusterId = clusterId
@@ -241,6 +253,7 @@ func (n *node) Join(clusterId string, nodeId string, masterAddress string) {
 	}
 
 	n.logger.Info(fmt.Sprintf("Data Node is joined to cluster (%s) with node id (%s) as %s", clusterId, nodeId, mode))
+	return nil
 }
 
 func (n *node) Mode(master bool) {
@@ -340,6 +353,26 @@ func (n *node) BindAddr() string {
 
 func (n *node) NodeSize() uint64 {
 	return n.nodeSize
+}
+
+func md5Hash(v string) string {
+	hash := md5.New()
+	_, _ = hash.Write([]byte(v))
+
+	return hex.EncodeToString(hash.Sum(nil))
+}
+
+// calculateNodeId uses hardwareAddr, bindPort and size
+// it extract the bindPort from the provided bindAddr or use 9430 as default
+func calculateNodeId(hardwareAddr string, bindAddr string, size uint64) string {
+	colonIdx := strings.LastIndex(bindAddr, ":")
+	if colonIdx > -1 {
+		bindAddr = bindAddr[colonIdx+1:]
+	} else {
+		bindAddr = "9430"
+	}
+	nodeId := fmt.Sprintf("%s%s%s", hardwareAddr, bindAddr, strconv.FormatUint(size, 10))
+	return md5Hash(nodeId)
 }
 
 var _ Node = &node{}

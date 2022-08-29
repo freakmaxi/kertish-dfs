@@ -465,9 +465,7 @@ func (c *commander) join(conn net.Conn) error {
 		return err
 	}
 
-	c.node.Join(string(bC), string(bN), string(bM))
-
-	return nil
+	return c.node.Join(string(bC), string(bN), string(bM))
 }
 
 func (c *commander) mode(conn net.Conn) error {
