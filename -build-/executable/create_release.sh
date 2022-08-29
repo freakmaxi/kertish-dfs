@@ -1,5 +1,7 @@
 #!/bin/sh
 
+brew install coreutils
+
 echo "Pruning the old releases..."
 rm -R releases
 
