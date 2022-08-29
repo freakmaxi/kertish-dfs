@@ -37,7 +37,7 @@ func (d *dfs) CreateFile(path string, mime string, size uint64, overwrite bool, 
 		file = folder.File(filename)
 		if file == nil {
 			file, err = folder.NewFile(filename)
-			return true, err
+			return err == nil, err
 		}
 
 		if !overwrite {
