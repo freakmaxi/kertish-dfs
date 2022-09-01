@@ -95,7 +95,7 @@ func (r *repair) Start(repairType RepairType) error {
 			for _, cluster := range clusters {
 				if err := r.clusters.UpdateStateWithMaintain(cluster.Id, common.StateOnline, false, common.TopicNone); err != nil {
 					r.logger.Error(
-						"Cluster hasn't been taken of the maintain mode. Needs manual action!",
+						"Cluster hasn't been taken off the maintain mode. Needs manual action!",
 						zap.String("clusterId", cluster.Id),
 						zap.Error(err),
 					)

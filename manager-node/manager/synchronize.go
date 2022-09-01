@@ -201,7 +201,7 @@ func (s *synchronize) Cluster(clusterId string, ignoreMaintainMode bool, keepInM
 		wg.Wait()
 		if err := s.clusters.UpdateMaintain(clusterId, keepInMaintainMode, common.TopicNone); err != nil {
 			s.logger.Error(
-				"Cluster hasn't been taken of the maintain mode. Needs manual action!",
+				"Cluster hasn't been taken off the maintain mode. Needs manual action!",
 				zap.String("clusterId", clusterId),
 				zap.Error(err),
 			)
