@@ -60,7 +60,7 @@ Will be used to have the stability of metadata of the file storage
 - `416`: Range dissatisfaction
 - `422`: Required Request Headers are not valid or absent
 - `500`: Operational failures
-- `503`: Not available for reservation (Frozen or Paralysed cluster/node)
+- `503`: Not available for reservation (Readonly, Offline or Paralysed cluster/node)
 - `523`: File or folder has lock
 - `524`: Zombie file or folder has zombie file(s)
 - `200`: Successful
@@ -176,7 +176,7 @@ Default: `false`
 - `411`: Content Length is required
 - `422`: Required Request Headers are not valid or absent
 - `500`: Operational failures
-- `503`: Not available for reservation (Frozen or Paralysed cluster/node)
+- `503`: Not available for reservation (Readonly, Offline or Paralysed cluster/node)
 - `507`: Out of disk space
 - `202`: Accepted
 ---
@@ -198,7 +198,7 @@ Default: `false`
 - `412`: Conflict when joining folders
 - `422`: Required Request Headers are not valid or absent
 - `500`: Operational failures
-- `503`: Not available for reservation (Frozen or Paralysed cluster/node)
+- `503`: Not available for reservation (Readonly, Offline or Paralysed cluster/node)
 - `524`: Zombie file or folder has zombie file(s)
 - `200`: Successful
 ---
@@ -213,7 +213,7 @@ Default: `false`
 - `404`: Not found
 - `422`: Required Request Headers are not valid or absent
 - `500`: Operational failures
-- `503`: Not available for reservation (Frozen or Paralysed cluster/node)
+- `503`: Not available for reservation (Readonly, Offline or Paralysed cluster/node)
 - `523`: File or folder has lock
 - `524`: Zombie file or folder has zombie file(s)
 - `525`: Zombie file or folder is still alive, try again to kill
