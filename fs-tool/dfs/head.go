@@ -340,6 +340,8 @@ func Pull(headAddresses []string, sources []string, target string, readRange *co
 		return fmt.Errorf("combining dfs folder(s) to local folder is not possible")
 	case 500:
 		return fmt.Errorf("unable to get %s", sourcesErrorString(sources))
+	case 503:
+		return fmt.Errorf("cluster(s) is/are unavailable to get %s", sourcesErrorString(sources))
 	case 523:
 		return fmt.Errorf("%s is locked or has locked file(s)", sourcesErrorString(sources))
 	case 524:
