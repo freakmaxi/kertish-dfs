@@ -49,13 +49,13 @@ func (m *managerRouter) manipulate(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = r.Body.Close() }()
 
 	switch r.Method {
-	case "POST":
+	case http.MethodPost:
 		m.handlePost(w, r)
-	case "PUT":
+	case http.MethodPut:
 		m.handlePut(w, r)
-	case "DELETE":
+	case http.MethodDelete:
 		m.handleDelete(w, r)
-	case "GET":
+	case http.MethodGet:
 		m.handleGet(w, r)
 	default:
 		w.WriteHeader(406)

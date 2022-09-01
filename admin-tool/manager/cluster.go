@@ -17,7 +17,7 @@ const managerEndPoint = "/client/manager"
 var client = http.Client{Timeout: time.Hour * 24 * 7} // one week timeout
 
 func CreateCluster(managerAddr []string, addresses []string) error {
-	req, err := http.NewRequest("POST", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return err
 	}
@@ -58,7 +58,7 @@ func CreateCluster(managerAddr []string, addresses []string) error {
 }
 
 func DeleteCluster(managerAddr []string, clusterId string) error {
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return err
 	}
@@ -88,7 +88,7 @@ func DeleteCluster(managerAddr []string, clusterId string) error {
 }
 
 func MoveCluster(managerAddr []string, clusterIds []string) error {
-	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return err
 	}
@@ -120,7 +120,7 @@ func MoveCluster(managerAddr []string, clusterIds []string) error {
 }
 
 func BalanceClusters(managerAddr []string, clusterIds []string) error {
-	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return err
 	}
@@ -152,7 +152,7 @@ func BalanceClusters(managerAddr []string, clusterIds []string) error {
 }
 
 func AddNode(managerAddr []string, clusterId string, addresses []string) error {
-	req, err := http.NewRequest("POST", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return err
 	}
@@ -193,7 +193,7 @@ func AddNode(managerAddr []string, clusterId string, addresses []string) error {
 }
 
 func RemoveNode(managerAddr []string, nodeId string) error {
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return err
 	}
@@ -223,7 +223,7 @@ func RemoveNode(managerAddr []string, nodeId string) error {
 }
 
 func ChangeState(managerAddr []string, clusterIds []string, state common.States) error {
-	req, err := http.NewRequest("PUT", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return err
 	}
@@ -273,7 +273,7 @@ func ChangeState(managerAddr []string, clusterIds []string, state common.States)
 }
 
 func CreateSnapshot(managerAddr []string, clusterId string) error {
-	req, err := http.NewRequest("POST", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return err
 	}
@@ -305,7 +305,7 @@ func CreateSnapshot(managerAddr []string, clusterId string) error {
 }
 
 func DeleteSnapshot(managerAddr []string, clusterId string, snapshotIndex uint64) error {
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return err
 	}
@@ -337,7 +337,7 @@ func DeleteSnapshot(managerAddr []string, clusterId string, snapshotIndex uint64
 }
 
 func RestoreSnapshot(managerAddr []string, clusterId string, snapshotIndex uint64) error {
-	req, err := http.NewRequest("PUT", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return err
 	}
@@ -369,7 +369,7 @@ func RestoreSnapshot(managerAddr []string, clusterId string, snapshotIndex uint6
 }
 
 func SyncClusters(managerAddr []string, clusterId string) error {
-	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return err
 	}
@@ -397,7 +397,7 @@ func SyncClusters(managerAddr []string, clusterId string) error {
 }
 
 func RepairConsistency(managerAddr []string, repairModel string) error {
-	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return err
 	}
@@ -425,7 +425,7 @@ func RepairConsistency(managerAddr []string, repairModel string) error {
 }
 
 func GetClusters(managerAddr []string, clusterId string) error {
-	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return err
 	}
@@ -510,7 +510,7 @@ func GetClusters(managerAddr []string, clusterId string) error {
 }
 
 func GetReport(managerAddr []string) error {
-	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return err
 	}

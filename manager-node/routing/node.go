@@ -43,7 +43,7 @@ func (n *nodeRouter) manipulate(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = r.Body.Close() }()
 
 	switch r.Method {
-	case "POST":
+	case http.MethodPost:
 		n.handlePost(w, r)
 	default:
 		w.WriteHeader(406)

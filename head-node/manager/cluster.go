@@ -253,7 +253,7 @@ func (c *cluster) Delete(chunks common.DataChunks) (*common.DeletionResult, erro
 }
 
 func (c *cluster) makeReservation(size uint64) (*common.ReservationMap, error) {
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s%s", c.managerAddr[0], managerEndPoint), nil)
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s%s", c.managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +285,7 @@ func (c *cluster) makeReservation(size uint64) (*common.ReservationMap, error) {
 }
 
 func (c *cluster) discardReservation(reservationId string) error {
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s%s", c.managerAddr[0], managerEndPoint), nil)
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s%s", c.managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return err
 	}
@@ -306,7 +306,7 @@ func (c *cluster) discardReservation(reservationId string) error {
 }
 
 func (c *cluster) commitReservation(reservationId string, clusterUsageMap map[string]uint64) error {
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("%s%s", c.managerAddr[0], managerEndPoint), nil)
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s%s", c.managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return err
 	}
@@ -333,7 +333,7 @@ func (c *cluster) commitReservation(reservationId string, clusterUsageMap map[st
 }
 
 func (c *cluster) findCluster(sha512Hex string) (string, string, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s%s", c.managerAddr[0], managerEndPoint), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s%s", c.managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return "", "", err
 	}
@@ -386,7 +386,7 @@ func (c *cluster) createClusterMap(chunks common.DataChunks, mapType common.MapT
 }
 
 func (c *cluster) requestClusterMap(sha512HexList []string, mapType common.MapType) (map[string][]string, error) {
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s%s", c.managerAddr[0], managerEndPoint), nil)
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s%s", c.managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return nil, err
 	}

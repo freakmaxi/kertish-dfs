@@ -20,7 +20,7 @@ const headEndPoint = "/client/dfs"
 var client = http.Client{}
 
 func List(headAddresses []string, source string, usage bool) (*common.Folder, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s%s", headAddresses[0], headEndPoint), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s%s", headAddresses[0], headEndPoint), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func List(headAddresses []string, source string, usage bool) (*common.Folder, er
 }
 
 func Tree(headAddresses []string, source string, usage bool) (*common.TreeShadow, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s%s", headAddresses[0], headEndPoint), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s%s", headAddresses[0], headEndPoint), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func Tree(headAddresses []string, source string, usage bool) (*common.TreeShadow
 }
 
 func MakeFolder(headAddresses []string, target string) error {
-	req, err := http.NewRequest("POST", fmt.Sprintf("http://%s%s", headAddresses[0], headEndPoint), nil)
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://%s%s", headAddresses[0], headEndPoint), nil)
 	if err != nil {
 		return err
 	}
@@ -119,7 +119,7 @@ func MakeFolder(headAddresses []string, target string) error {
 }
 
 func Change(headAddresses []string, sources []string, target string, overwrite bool, copy bool) error {
-	req, err := http.NewRequest("PUT", fmt.Sprintf("http://%s%s", headAddresses[0], headEndPoint), nil)
+	req, err := http.NewRequest(http.MethodPut, fmt.Sprintf("http://%s%s", headAddresses[0], headEndPoint), nil)
 	if err != nil {
 		return err
 	}
@@ -165,7 +165,7 @@ func Change(headAddresses []string, sources []string, target string, overwrite b
 }
 
 func Delete(headAddresses []string, target string, killZombies bool) error {
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://%s%s", headAddresses[0], headEndPoint), nil)
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("http://%s%s", headAddresses[0], headEndPoint), nil)
 	if err != nil {
 		return err
 	}
@@ -250,7 +250,7 @@ func PutFile(headAddresses []string, source string, target string, overwrite boo
 	}
 	defer func() { _ = file.Close() }()
 
-	req, err := http.NewRequest("POST", fmt.Sprintf("http://%s%s", headAddresses[0], headEndPoint), file)
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://%s%s", headAddresses[0], headEndPoint), file)
 	if err != nil {
 		return err
 	}
@@ -312,7 +312,7 @@ func contentDetails(source string) (string, int64, error) {
 }
 
 func Pull(headAddresses []string, sources []string, target string, readRange *common.ReadRange) error {
-	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s%s", headAddresses[0], headEndPoint), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s%s", headAddresses[0], headEndPoint), nil)
 	if err != nil {
 		return err
 	}

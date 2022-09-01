@@ -47,13 +47,13 @@ func (d *dfsRouter) manipulate(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = r.Body.Close() }()
 
 	switch r.Method {
-	case "GET":
+	case http.MethodGet:
 		d.handleGet(w, r)
-	case "POST":
+	case http.MethodPost:
 		d.handlePost(w, r)
-	case "PUT":
+	case http.MethodPut:
 		d.handlePut(w, r)
-	case "DELETE":
+	case http.MethodDelete:
 		d.handleDelete(w, r)
 	default:
 		w.WriteHeader(406)

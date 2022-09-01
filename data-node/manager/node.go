@@ -202,7 +202,7 @@ func (n *node) notify(notificationContainerList common.NotificationContainerList
 		return common.NewNotificationError(notificationContainerList, err)
 	}
 
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s%s", n.managerAddr[0], managerEndPoint), bytes.NewBuffer(body))
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s%s", n.managerAddr[0], managerEndPoint), bytes.NewBuffer(body))
 	if err != nil {
 		return common.NewNotificationError(notificationContainerList, err)
 	}
@@ -278,7 +278,7 @@ func (n *node) Leave() {
 }
 
 func (n *node) Handshake() error {
-	req, err := http.NewRequest("POST", fmt.Sprintf("%s%s", n.managerAddr[0], managerEndPoint), nil)
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s%s", n.managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return err
 	}

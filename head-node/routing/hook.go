@@ -47,11 +47,11 @@ func (h *hookRouter) manipulate(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = r.Body.Close() }()
 
 	switch r.Method {
-	case "GET":
+	case http.MethodGet:
 		h.handleGet(w, r)
-	case "POST":
+	case http.MethodPost:
 		h.handlePost(w, r)
-	case "DELETE":
+	case http.MethodDelete:
 		h.handleDelete(w, r)
 	default:
 		w.WriteHeader(406)
