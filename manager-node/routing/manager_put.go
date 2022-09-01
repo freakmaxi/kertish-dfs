@@ -39,7 +39,7 @@ func (m *managerRouter) handleState(w http.ResponseWriter, r *http.Request) {
 	if len(clusterStates) == 0 || err != nil {
 		w.WriteHeader(422)
 		if err != nil {
-			e := common.NewError(400, err.Error())
+			e := common.NewError(300, err.Error())
 			if err := json.NewEncoder(w).Encode(e); err != nil {
 				m.logger.Error("Response of cluster state change request is failed", zap.Error(err))
 			}
@@ -52,7 +52,7 @@ func (m *managerRouter) handleState(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(400)
 				m.logger.Error("Change cluster state request is failed", zap.Error(err))
 
-				e := common.NewError(400, err.Error())
+				e := common.NewError(300, err.Error())
 				if err := json.NewEncoder(w).Encode(e); err != nil {
 					m.logger.Error("Response of change cluster state request is failed", zap.Error(err))
 				}
@@ -68,7 +68,7 @@ func (m *managerRouter) handleState(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(400)
 		m.logger.Error("Change cluster state request is failed", zap.Error(err))
 
-		e := common.NewError(400, err.Error())
+		e := common.NewError(300, err.Error())
 		if err := json.NewEncoder(w).Encode(e); err != nil {
 			m.logger.Error("Response of change cluster state request is failed", zap.Error(err))
 		}
@@ -112,7 +112,7 @@ func (m *managerRouter) validatePutAction(action string) bool {
 func (m *managerRouter) describeStateOptions(options string) ([]*clusterState, error) {
 	clusterIdWithStateList := strings.Split(options, ",")
 	if len(clusterIdWithStateList) == 0 {
-		return nil, fmt.Errorf("clusters state change options are insufficiant")
+		return nil, fmt.Errorf("clusters state change options are insufficient")
 	}
 
 	clusterStates := make([]*clusterState, 0)
