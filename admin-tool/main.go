@@ -47,7 +47,7 @@ func main() {
 			fmt.Println("cluster deletion is canceled")
 		}
 	case "moveCluster":
-		fmt.Println("CAUTION: The cluster move can be partially done and clusters may need to be manually unfrozen!")
+		fmt.Println("CAUTION: The cluster move can be partially done!")
 		fmt.Print("Do you want to continue? (y/N) ")
 		reader := bufio.NewReader(os.Stdin)
 		char, _, err := reader.ReadRune()
@@ -95,12 +95,6 @@ func main() {
 		default:
 			fmt.Println("node removal is canceled")
 		}
-	case "unFreeze":
-		if err := manager.Unfreeze([]string{fc.managerAddress}, fc.unfreeze); err != nil {
-			fmt.Printf("ERROR: %s\n", err.Error())
-			os.Exit(45)
-		}
-		fmt.Println("ok.")
 	case "createSnapshot":
 		fmt.Println("CAUTION: The snapshot creation will prevent the access to the cluster!")
 		fmt.Print("Do you want to continue? (y/N) ")
@@ -181,6 +175,50 @@ func main() {
 		default:
 			fmt.Println("snapshot restoration is canceled")
 		}
+	case "changeState":
+		if !fc.stateOnline && !fc.stateReadonly && !fc.stateOffline {
+			fmt.Println("You have to define the target state of the cluster(s)")
+			os.Exit(50)
+		}
+
+		if (fc.stateOnline && fc.stateReadonly) ||
+			(fc.stateOnline && fc.stateOffline) ||
+			(fc.stateReadonly && fc.stateOffline) {
+			fmt.Println("You have to define only one type of state to change the state of the cluster(s)")
+			os.Exit(50)
+		}
+
+		fmt.Println("You are about to change the state of the cluster(s)")
+		fmt.Print("Do you want to continue? (y/N) ")
+		reader := bufio.NewReader(os.Stdin)
+		char, _, err := reader.ReadRune()
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		state := common.StateOnline
+		if fc.stateReadonly {
+			state = common.StateReadonly
+		}
+		if fc.stateOffline {
+			state = common.StateOffline
+		}
+
+		switch char {
+		case 'Y', 'y':
+			anim := common.NewAnimation(terminal.NewStdOut(), "cluster state change is in progress...")
+			anim.Start()
+
+			if err := manager.ChangeState([]string{fc.managerAddress}, fc.changeState, state); err != nil {
+				anim.Cancel()
+
+				fmt.Printf("%s\n", err.Error())
+				os.Exit(50)
+			}
+			anim.Stop()
+		default:
+			fmt.Println("cluster state change is canceled")
+		}
 	case "syncClusters":
 		if fc.syncClusters {
 			fmt.Println("CAUTION: The sync of clusters will be started simultaneously on each cluster and it will " +
@@ -197,7 +235,7 @@ func main() {
 
 		switch char {
 		case 'Y', 'y':
-			if err := manager.SyncClusters([]string{fc.managerAddress}, fc.syncCluster, fc.force); err != nil {
+			if err := manager.SyncClusters([]string{fc.managerAddress}, fc.syncCluster); err != nil {
 				fmt.Printf("%s\n", err.Error())
 				os.Exit(50)
 			}

@@ -2,7 +2,9 @@ package manager
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -43,7 +45,7 @@ func CreateCluster(managerAddr []string, addresses []string) error {
 	if err := json.NewDecoder(res.Body).Decode(&c); err != nil {
 		return err
 	}
-	fmt.Printf("Cluster is created as frozen: %s\n", c.Id)
+	fmt.Printf("Cluster is created as offline: %s\n", c.Id)
 	for _, n := range c.Nodes {
 		mode := "SLAVE"
 		if n.Master {
@@ -220,13 +222,21 @@ func RemoveNode(managerAddr []string, nodeId string) error {
 	return nil
 }
 
-func Unfreeze(managerAddr []string, clusterIds []string) error {
-	req, err := http.NewRequest("DELETE", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
+func ChangeState(managerAddr []string, clusterIds []string, state common.States) error {
+	req, err := http.NewRequest("PUT", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("X-Action", "unfreeze")
-	req.Header.Set("X-Options", strings.Join(clusterIds, ","))
+
+	options := make([]string, 0)
+	for _, clusterId := range clusterIds {
+		options = append(options, fmt.Sprintf("%s=%d", clusterId, state))
+	}
+	if len(options) == 0 {
+		options = append(options, fmt.Sprintf("=%d", state))
+	}
+	req.Header.Set("X-Action", "state")
+	req.Header.Set("X-Options", strings.Join(options, ","))
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -237,6 +247,9 @@ func Unfreeze(managerAddr []string, clusterIds []string) error {
 	if res.StatusCode != 200 {
 		var e common.Error
 		if err := json.NewDecoder(res.Body).Decode(&e); err != nil {
+			if errors.Is(err, io.EOF) {
+				return fmt.Errorf("")
+			}
 			if _, ok := err.(*json.SyntaxError); ok {
 				return fmt.Errorf("dfs manager returned with an unrecognisable status code: %d", res.StatusCode)
 			}
@@ -245,7 +258,16 @@ func Unfreeze(managerAddr []string, clusterIds []string) error {
 		return fmt.Errorf(e.Message)
 	}
 
-	fmt.Println("Clusters are unfrozen...")
+	stateString := "Online"
+	switch state {
+	case common.StateReadonly:
+		stateString = "Online (RO)"
+	case common.StateOffline:
+		stateString = "Offline"
+	}
+
+	fmt.Println()
+	fmt.Printf("Clusters state has been changed to %s...\n", stateString)
 
 	return nil
 }
@@ -346,13 +368,13 @@ func RestoreSnapshot(managerAddr []string, clusterId string, snapshotIndex uint6
 	return nil
 }
 
-func SyncClusters(managerAddr []string, clusterId string, force bool) error {
+func SyncClusters(managerAddr []string, clusterId string) error {
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s%s", managerAddr[0], managerEndPoint), nil)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("X-Action", "sync")
-	req.Header.Set("X-Options", fmt.Sprintf("%s|%t", clusterId, force))
+	req.Header.Set("X-Options", clusterId)
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -438,12 +460,7 @@ func GetClusters(managerAddr []string, clusterId string) error {
 		total += cluster.Size
 		used += cluster.Used
 
-		frozen := ""
-		if cluster.Frozen {
-			frozen = " (FROZEN)"
-		}
-
-		fmt.Printf("Cluster Details: %s%s\n", cluster.Id, frozen)
+		fmt.Printf("Cluster Details: %s\n", cluster.Id)
 		for _, n := range cluster.Nodes {
 			mode := "(SLAVE) "
 			if n.Master {
@@ -454,14 +471,10 @@ func GetClusters(managerAddr []string, clusterId string) error {
 		fmt.Printf("      Size:      %d (%d Gb)\n", cluster.Size, cluster.Size/(1024*1024*1024))
 		fmt.Printf("      Available: %d (%d Gb)\n", cluster.Available(), cluster.Available()/(1024*1024*1024))
 		fmt.Printf("      Weight:    %.2f\n", cluster.Weight())
-		state := "Online"
-		if cluster.Paralyzed {
-			state = "Paralyzed"
+		fmt.Printf("      Status:    %s\n", cluster.StateString())
+		if cluster.Maintain {
+			fmt.Printf("      Maintain:  InProgress (%s)\n", cluster.MaintainTopic)
 		}
-		if cluster.Frozen {
-			state = "Frozen"
-		}
-		fmt.Printf("      Status:    %s\n", state)
 		if len(cluster.Snapshots) > 0 {
 			for i, snapshot := range cluster.Snapshots {
 				if i == 0 {

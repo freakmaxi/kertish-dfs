@@ -13,10 +13,10 @@ import (
 )
 
 type Synchronize interface {
-	QueueClusters(force bool) error
-	QueueCluster(clusterId string, force bool)
+	QueueClusters() error
+	QueueCluster(clusterId string, ignoreMaintainMode bool, keepInMaintainMode bool)
 
-	Cluster(clusterId string, force bool, keepFrozen bool, waitFullSync bool) error
+	Cluster(clusterId string, ignoreMaintainMode bool, keepInMaintainMode bool, waitFullSync bool) error
 }
 
 type synchronize struct {
@@ -31,9 +31,9 @@ type synchronize struct {
 }
 
 type syncOrder struct {
-	clusterId  string
-	force      bool
-	keepFrozen bool
+	clusterId          string
+	ignoreMaintainMode bool
+	keepInMaintainMode bool
 }
 
 func NewSynchronize(clusters data.Clusters, index data.Index, logger *zap.Logger) Synchronize {
@@ -54,12 +54,10 @@ func (s *synchronize) start() {
 	go func() {
 		for so := range s.syncChan {
 			go func(so syncOrder) {
-				if err := s.startSync(so.clusterId, so.force, so.keepFrozen, false); err != nil {
+				if err := s.Cluster(so.clusterId, so.ignoreMaintainMode, so.keepInMaintainMode, false); err != nil {
 					s.logger.Error(
 						"Cluster sync is failed",
 						zap.String("clusterId", so.clusterId),
-						zap.Bool("keepFrozen", so.keepFrozen),
-						zap.Bool("force", so.force),
 						zap.Error(err),
 					)
 				}
@@ -68,57 +66,46 @@ func (s *synchronize) start() {
 	}()
 }
 
-func (s *synchronize) QueueClusters(force bool) error {
+func (s *synchronize) QueueClusters() error {
 	clusters, err := s.clusters.GetAll()
 	if err != nil {
 		return err
 	}
 
 	for _, cluster := range clusters {
-		s.QueueCluster(cluster.Id, force)
+		s.QueueCluster(cluster.Id, false, false)
 	}
 
 	return nil
 }
 
-func (s *synchronize) QueueCluster(clusterId string, force bool) {
+func (s *synchronize) QueueCluster(clusterId string, ignoreMaintainMode bool, keepInMaintainMode bool) {
 	s.syncChan <- syncOrder{
-		clusterId:  clusterId,
-		force:      force,
-		keepFrozen: false,
+		clusterId:          clusterId,
+		ignoreMaintainMode: ignoreMaintainMode,
+		keepInMaintainMode: keepInMaintainMode,
 	}
 }
 
-func (s *synchronize) Cluster(clusterId string, force bool, keepFrozen bool, waitFullSync bool) error {
-	return s.startSync(clusterId, force, keepFrozen, waitFullSync)
-}
-
-func (s *synchronize) startSync(clusterId string, force bool, keepFrozen bool, waitFullSync bool) error {
+func (s *synchronize) Cluster(clusterId string, ignoreMaintainMode bool, keepInMaintainMode bool, waitFullSync bool) error {
 	cluster, err := s.clusters.Get(clusterId)
 	if err != nil {
 		return err
 	}
 
-	if !force && cluster.Frozen {
-		return errors.ErrFrozen
+	if cluster.Maintain && !ignoreMaintainMode {
+		return errors.ErrMaintain
+	}
+	if cluster.State == common.StateOffline {
+		return errors.ErrOffline
+	}
+	if cluster.Paralyzed {
+		return errors.ErrParalyzed
 	}
 
-	if err := s.clusters.SetFreeze(clusterId, true); err != nil {
+	if err := s.clusters.UpdateMaintain(cluster.Id, true, common.TopicSynchronisation); err != nil {
 		return err
 	}
-	defer func() {
-		if keepFrozen {
-			return
-		}
-
-		if err := s.clusters.SetFreeze(clusterId, false); err != nil {
-			s.logger.Error(
-				"Syncing error: unfreezing is failed",
-				zap.String("clusterId", clusterId),
-				zap.Error(err),
-			)
-		}
-	}()
 
 	masterNode := cluster.Master()
 
@@ -167,7 +154,7 @@ func (s *synchronize) startSync(clusterId string, force bool, keepFrozen bool, w
 		zap.String("nodeAddress", masterNode.Address),
 	)
 
-	cluster.Reservations = make(map[string]uint64)
+	cluster.Reservations.CleanUp()
 	cluster.Used, _ = mdn.Used()
 	cluster.Snapshots = container.Snapshots
 
@@ -203,15 +190,23 @@ func (s *synchronize) startSync(clusterId string, force bool, keepFrozen bool, w
 
 	wg := &sync.WaitGroup{}
 	for _, slaveNode := range slaveNodes {
-		if !waitFullSync {
-			go s.syncSlaveNode(nil, clusterId, masterNode, slaveNode)
-			continue
-		}
-
 		wg.Add(1)
 		go s.syncSlaveNode(wg, clusterId, masterNode, slaveNode)
 	}
-	wg.Wait()
+	if waitFullSync {
+		wg.Wait()
+	}
+
+	go func(wg *sync.WaitGroup, clusterId string, keepInMaintainMode bool) {
+		wg.Wait()
+		if err := s.clusters.UpdateMaintain(clusterId, keepInMaintainMode, common.TopicNone); err != nil {
+			s.logger.Error(
+				"Cluster hasn't been taken of the maintain mode. Needs manual action!",
+				zap.String("clusterId", clusterId),
+				zap.Error(err),
+			)
+		}
+	}(wg, clusterId, keepInMaintainMode)
 
 	s.logger.Info(
 		fmt.Sprintf("Synchronization master node of cluster %s is completed", clusterId),

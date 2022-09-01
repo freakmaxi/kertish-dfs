@@ -4,20 +4,86 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
 )
 
+const reservationDuration = time.Hour * 24 // 24 hours
+const qualityDifferenceThreshold = 20      // 20 milliseconds
+
+type States int
+
+const (
+	StateOnline   States = 0
+	StateReadonly States = 1
+	StateOffline  States = -1
+)
+
+type Topics string
+
+const (
+	TopicNone            Topics = ""
+	TopicSynchronisation Topics = "Synchronisation"
+	TopicBalance         Topics = "Balance"
+	TopicMove            Topics = "Move"
+	TopicRepair          Topics = "Repair"
+	TopicUnregisterNode  Topics = "Unregister Node"
+	TopicCreateSnapshot  Topics = "Create Snapshot"
+	TopicDeleteSnapshot  Topics = "Delete Snapshot"
+	TopicRestoreSnapshot Topics = "Restore Snapshot"
+)
+
 // Cluster struct is to hold cluster details in dfs farm
 type Cluster struct {
-	Id           string            `json:"clusterId"`
-	Size         uint64            `json:"size"`
-	Used         uint64            `json:"used"`
-	Nodes        NodeList          `json:"nodes"`
-	Reservations map[string]uint64 `json:"reservations"`
-	Paralyzed    bool              `json:"paralyzed"` // If none of the cluster nodes are reachable or not have sync. content in slaves to be master
-	Frozen       bool              `json:"frozen"`    // Available for Read but Not Create and Delete
-	Snapshots    Snapshots         `json:"snapshots"`
+	Id           string       `json:"clusterId"`
+	Size         uint64       `json:"size"`
+	Used         uint64       `json:"used"`
+	Nodes        NodeList     `json:"nodes"`
+	Reservations Reservations `json:"reservations"`
+
+	// If master node is unreachable and also unable to elect a new master in the cluster
+	Paralyzed bool `json:"paralyzed"`
+
+	// 0 = Online, 1 = Readonly, -1 = Offline
+	// Readonly mode: Create and Delete file operations are forbidden.
+	// Offline mode:  All file operations for the cluster is forbidden
+	State States `json:"state"`
+
+	// Cluster can be in any state in maintain mode but all administrative
+	// operations are forbidden when the cluster is in this mode
+	Maintain      bool   `json:"maintain"`
+	MaintainTopic Topics `json:"maintainTopic"`
+
+	Snapshots Snapshots `json:"snapshots"`
+}
+
+// Reservations point the type declaration
+type Reservations map[string]*Reservation
+
+// NewReservations initialises a new Reservations struct
+func NewReservations() Reservations {
+	return make(Reservations)
+}
+
+func (r Reservations) CleanUp() {
+	deletingReservationIds := make([]string, 0)
+
+	for reservationId, reservation := range r {
+		if reservation.ExpiresAt.Before(time.Now().UTC()) {
+			deletingReservationIds = append(deletingReservationIds, reservationId)
+		}
+	}
+
+	for _, reservationId := range deletingReservationIds {
+		delete(r, reservationId)
+	}
+}
+
+// Reservation struct is to hold the file creation reservation information specific to the cluster
+type Reservation struct {
+	Size      uint64    `json:"size"`
+	ExpiresAt time.Time `json:"expiresAt"`
 }
 
 // Clusters is the definition of the pointer array of Cluster struct
@@ -32,9 +98,10 @@ func NewCluster(id string) *Cluster {
 	return &Cluster{
 		Id:           id,
 		Nodes:        make(NodeList, 0),
-		Reservations: make(map[string]uint64),
+		Reservations: NewReservations(),
 		Paralyzed:    true,
-		Frozen:       true,
+		State:        StateOffline,
+		Maintain:     true,
 	}
 }
 
@@ -42,10 +109,14 @@ func NewCluster(id string) *Cluster {
 // simultaneous write request will have enough space in the cluster
 func (c *Cluster) Reserve(id string, size uint64) {
 	if _, has := c.Reservations[id]; !has {
-		c.Reservations[id] = 0
+		c.Reservations[id] =
+			&Reservation{
+				Size:      0,
+				ExpiresAt: time.Now().UTC().Add(reservationDuration),
+			}
 	}
 
-	c.Reservations[id] += size
+	c.Reservations[id].Size += size
 	c.Used += size
 }
 
@@ -56,10 +127,10 @@ func (c *Cluster) Commit(id string, size uint64) {
 		return
 	}
 
-	c.Reservations[id] -= size
-	c.Used -= c.Reservations[id]
+	c.Reservations[id].Size -= size
+	c.Used -= c.Reservations[id].Size
 
-	delete(c.Reservations, id)
+	c.Reservations[id].ExpiresAt = time.Now().UTC()
 }
 
 // Discard discards the reservation from the cluster and free the reserved space
@@ -68,9 +139,9 @@ func (c *Cluster) Discard(id string) {
 		return
 	}
 
-	c.Used -= c.Reservations[id]
+	c.Used -= c.Reservations[id].Size
 
-	delete(c.Reservations, id)
+	c.Reservations[id].ExpiresAt = time.Now().UTC()
 }
 
 // Available returns the available space in the cluster
@@ -158,11 +229,41 @@ func (c *Cluster) PrioritizedHighQualityNodes(nodeIdsMap CacheFileItemLocationMa
 
 		nodeList = append(nodeList, n)
 	}
+	sort.Sort(nodeList)
 
 	if len(nodeList) > 0 {
 		return nodeList
 	}
 	return nil
+}
+
+// HighQualityMasterNodeCandidate returns the most responsive Node that can be evaluated as master node
+// if there is no candidate, returns nil
+func (c *Cluster) HighQualityMasterNodeCandidate() *Node {
+	masterNode := c.Master()
+	slaveNodes := c.Slaves()
+
+	var bestDiffValue = int64(^uint64(0) >> 1)
+	var bestNodeCandidate *Node
+
+	for _, slaveNode := range slaveNodes {
+		diff := masterNode.Quality - slaveNode.Quality
+
+		if diff < 0 {
+			continue
+		}
+
+		if diff > bestDiffValue {
+			continue
+		}
+
+		if diff >= qualityDifferenceThreshold {
+			bestDiffValue = diff
+			bestNodeCandidate = slaveNode
+		}
+	}
+
+	return bestNodeCandidate
 }
 
 // Others returns the nodes in the cluster other than the one provided in the nodeId
@@ -181,4 +282,27 @@ func (c *Cluster) Others(nodeId string) NodeList {
 		return nil
 	}
 	return others
+}
+
+func (c *Cluster) CanSchedule() bool {
+	return c.State == StateOnline && !c.Paralyzed && !c.Maintain
+}
+
+// StateString returns the cluster current situation as string representative
+func (c *Cluster) StateString() string {
+	state := "Online"
+	if c.State == StateReadonly {
+		state = "Online (RO)"
+	}
+
+	switch c.State {
+	case StateOnline, StateReadonly:
+		if c.Paralyzed {
+			return "Paralyzed"
+		}
+	case StateOffline:
+		return "Offline"
+	}
+
+	return state
 }

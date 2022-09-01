@@ -43,15 +43,15 @@ func (m *managerRouter) handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *managerRouter) handleSync(w http.ResponseWriter, r *http.Request) {
-	clusterId, force := m.describeSyncOptions(r.Header.Get("X-Options"))
+	clusterId := r.Header.Get("X-Options")
 
 	var err error
 	if len(clusterId) == 0 {
-		if errSync := m.synchronize.QueueClusters(force); errSync != nil {
+		if errSync := m.synchronize.QueueClusters(); errSync != nil {
 			err = errors.ErrSync
 		}
 	} else {
-		m.synchronize.QueueCluster(clusterId, force)
+		m.synchronize.QueueCluster(clusterId, false, false)
 	}
 
 	if err == nil {
@@ -262,20 +262,6 @@ func (m *managerRouter) validateGetAction(action string) bool {
 		return true
 	}
 	return false
-}
-
-func (m *managerRouter) describeSyncOptions(options string) (string, bool) {
-	clusterId := ""
-
-	pipeIdx := strings.Index(options, "|")
-	if pipeIdx > -1 {
-		clusterId = options[:pipeIdx]
-		options = options[pipeIdx+1:]
-	}
-
-	force := len(options) > 0
-
-	return clusterId, force
 }
 
 func (m *managerRouter) describeMoveOptions(options string) (string, string, bool) {

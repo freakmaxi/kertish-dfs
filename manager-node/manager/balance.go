@@ -3,7 +3,9 @@ package manager
 import (
 	"os"
 	"sort"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/freakmaxi/kertish-dfs/basics/common"
 	"github.com/freakmaxi/kertish-dfs/basics/errors"
@@ -18,8 +20,8 @@ const balanceSemaphoreLimit = 10
 type balance struct {
 	clusters    data.Clusters
 	index       data.Index
-	logger      *zap.Logger
 	synchronize Synchronize
+	logger      *zap.Logger
 
 	mapMutex    sync.Mutex
 	indexingMap map[string]map[string]string
@@ -41,65 +43,13 @@ func newBalance(clusters data.Clusters, index data.Index, synchronize Synchroniz
 	}
 }
 
-func (b *balance) nextChunk(sourceCluster *common.Cluster) (*common.CacheFileItem, error) {
-	b.mapMutex.Lock()
-	defer b.mapMutex.Unlock()
-
-	fileItemMap := b.indexingMap[sourceCluster.Id]
-	if len(fileItemMap) == 0 {
-		return nil, os.ErrNotExist
-	}
-
-	for sha512Hex := range fileItemMap {
-		c, err := b.index.Get(sha512Hex)
-		if err != nil {
-			if err == os.ErrNotExist {
-				continue
-			}
-			return nil, err
-		}
-
-		b.index.QueueDrop(sourceCluster.Id, sha512Hex)
-		delete(fileItemMap, sha512Hex)
-
-		return c, nil
-	}
-
-	return nil, os.ErrNotExist
-}
-
-func (b *balance) moved(targetClusterId string, masterNodeId string, movedFileItem common.SyncFileItem) {
-	b.mapMutex.Lock()
-	defer b.mapMutex.Unlock()
-
-	cacheFileItem := common.NewCacheFileItem(targetClusterId, masterNodeId, movedFileItem)
-
-	b.indexingMap[targetClusterId][movedFileItem.Sha512Hex] = "moved"
-	// if it fails, let the cluster sync fix it. till that moment, file will be zombie
-	b.index.QueueUpsert(cacheFileItem, nil)
-}
-
-func (b *balance) move(sha512Hex string, sourceAddress string, targetAddress string) int {
-	tmdn, err := cluster2.NewDataNode(targetAddress)
-	if err != nil {
-		return -1
-	}
-
-	if tmdn.SyncMove(sha512Hex, sourceAddress) != nil {
-		return 0
-	}
-
-	return 1
-}
-
-func (b *balance) complete(balancingClusters common.Clusters) {
-	for _, cluster := range balancingClusters {
-		b.synchronize.QueueCluster(cluster.Id, true)
-	}
-}
-
 func (b *balance) Balance(clusterIds []string) error {
 	b.logger.Info("Cluster balancing is started...")
+
+	clusterIdsMap := make(map[string]bool)
+	for _, clusterId := range clusterIds {
+		clusterIdsMap[clusterId] = true
+	}
 
 	clusters, err := b.clusters.GetAll()
 	if err != nil {
@@ -107,30 +57,25 @@ func (b *balance) Balance(clusterIds []string) error {
 	}
 
 	clusterMap := make(map[string]*common.Cluster)
-	for _, cluster := range clusters {
-		clusterMap[cluster.Id] = cluster
-	}
-
 	balancingClusters := make(common.Clusters, 0)
-	for len(clusterIds) > 0 {
-		clusterId := clusterIds[0]
-
-		cluster, has := clusterMap[clusterId]
-		if !has {
-			return errors.ErrNotFound
+	for _, cluster := range clusters {
+		if len(clusterIdsMap) == 0 {
+			clusterMap[cluster.Id] = cluster
+			balancingClusters = append(balancingClusters, cluster)
+			continue
 		}
-
-		balancingClusters = append(balancingClusters, cluster)
-		clusterIds = clusterIds[1:]
+		if _, has := clusterIdsMap[cluster.Id]; has {
+			clusterMap[cluster.Id] = cluster
+			balancingClusters = append(balancingClusters, cluster)
+		}
 	}
 
-	if len(balancingClusters) == 0 {
-		balancingClusters = clusters
-	}
-
-	for _, cluster := range balancingClusters {
-		if cluster.Used > 0 && cluster.Frozen {
-			return errors.ErrNotAvailableForClusterAction
+	for _, cluster := range clusterMap {
+		if cluster.Maintain {
+			return errors.ErrMaintain
+		}
+		if err := b.clusters.UpdateMaintain(cluster.Id, true, common.TopicBalance); err != nil {
+			return err
 		}
 
 		fileItemList, err := b.index.PullMap(cluster.Id)
@@ -152,7 +97,6 @@ func (b *balance) Balance(clusterIds []string) error {
 			}
 			b.semaphoreChan[clusterId] = s
 		}
-
 		return s
 	}
 
@@ -195,28 +139,96 @@ func (b *balance) Balance(clusterIds []string) error {
 
 		wg.Add(1)
 		go func(wg *sync.WaitGroup, emptiestCluster common.Cluster, fullestCluster common.Cluster, cacheFileItem common.CacheFileItem, semaphoreChan chan bool) {
-			defer wg.Done()
-			defer func() { semaphoreChan <- true }()
+			defer func() {
+				semaphoreChan <- true
+				wg.Done()
+			}()
 
-			// -1 = Connectivity Problem, 0 = Unsuccessful Move Operation (Read error or Deleted file), 1 = Successful
-			if result := b.move(cacheFileItem.FileItem.Sha512Hex, fullestCluster.Master().Address, emptiestCluster.Master().Address); result < 1 {
-				if result == 0 {
-					return
-				}
+			if err := b.move(cacheFileItem.FileItem.Sha512Hex, fullestCluster.Master().Address, emptiestCluster.Master().Address); err != nil {
+				b.logger.Warn("Failed to move the file chunk between clusters", zap.Error(err))
 
-				b.moved(fullestCluster.Id, fullestCluster.Master().Id, cacheFileItem.FileItem)
+				b.returnChunk(fullestCluster.Id, cacheFileItem.FileItem.Sha512Hex)
 
 				atomicSizeFunc(emptiestCluster.Id, uint64(cacheFileItem.FileItem.Size), false)
 				atomicSizeFunc(fullestCluster.Id, uint64(cacheFileItem.FileItem.Size), true)
+				return
 			}
-			b.moved(emptiestCluster.Id, emptiestCluster.Master().Id, cacheFileItem.FileItem)
+			b.moved(emptiestCluster.Id, emptiestCluster.Master().Id, fullestCluster.Id, cacheFileItem.FileItem)
 		}(wg, *emptiestCluster, *fullestCluster, *sourceCacheFileItem, semaphoreChan)
 	}
 	wg.Wait()
 
-	b.logger.Info("Balancing will be completed after the sync of clusters")
+	b.logger.Info("Balancing is completed")
 
 	b.complete(balancingClusters)
 
 	return nil
+}
+
+func (b *balance) nextChunk(sourceCluster *common.Cluster) (*common.CacheFileItem, error) {
+	b.mapMutex.Lock()
+	defer b.mapMutex.Unlock()
+
+	fileItemMap := b.indexingMap[sourceCluster.Id]
+	if len(fileItemMap) == 0 {
+		return nil, os.ErrNotExist
+	}
+
+	for sha512Hex, state := range fileItemMap {
+		// Do not move back the moved file chunk
+		if strings.Compare(state, "moved") == 0 {
+			continue
+		}
+
+		c, err := b.index.Get(sha512Hex)
+		if err != nil {
+			if err == os.ErrNotExist {
+				continue
+			}
+			return nil, err
+		}
+
+		delete(fileItemMap, sha512Hex)
+
+		return c, nil
+	}
+
+	return nil, os.ErrNotExist
+}
+
+func (b *balance) returnChunk(sourceClusterId string, sha512Hex string) {
+	b.mapMutex.Lock()
+	defer b.mapMutex.Unlock()
+
+	b.indexingMap[sourceClusterId][sha512Hex] = "returned"
+}
+
+func (b *balance) move(sha512Hex string, sourceAddress string, targetAddress string) error {
+	tmdn, err := cluster2.NewDataNode(targetAddress)
+	if err != nil {
+		return err
+	}
+
+	if err := tmdn.SyncMove(sha512Hex, sourceAddress); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (b *balance) moved(targetClusterId string, targetMasterNodeId string, sourceClusterId string, movedFileItem common.SyncFileItem) {
+	b.mapMutex.Lock()
+	defer b.mapMutex.Unlock()
+
+	b.indexingMap[targetClusterId][movedFileItem.Sha512Hex] = "moved"
+
+	syncTime := time.Now().UTC()
+	b.index.QueueUpsert(common.NewCacheFileItem(targetClusterId, targetMasterNodeId, movedFileItem), &syncTime)
+	b.index.QueueDrop(sourceClusterId, movedFileItem.Sha512Hex)
+}
+
+func (b *balance) complete(balancingClusters common.Clusters) {
+	for _, cluster := range balancingClusters {
+		b.synchronize.QueueCluster(cluster.Id, true, false)
+	}
 }

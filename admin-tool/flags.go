@@ -47,17 +47,19 @@ type flagContainer struct {
 	repairConsistency  string
 	addNode            addNode
 	removeNode         string
-	unfreeze           []string
-	unfreezeAll        bool
 	createSnapshot     string
 	deleteSnapshot     string
 	restoreSnapshot    string
+	changeState        []string
+	changeStateAll     bool
+	stateOnline        bool
+	stateReadonly      bool
+	stateOffline       bool
 	syncCluster        string
 	syncClusters       bool
 	clustersReport     bool
 	getCluster         string
 	getClusters        bool
-	force              bool
 	help               bool
 	version            bool
 
@@ -123,11 +125,6 @@ func (f *flagContainer) Define(v string, b string) int {
 		f.active = "removeNode"
 	}
 
-	if len(f.unfreeze) != 0 || f.unfreezeAll {
-		activeCount++
-		f.active = "unFreeze"
-	}
-
 	if len(f.createSnapshot) != 0 {
 		activeCount++
 		f.active = "createSnapshot"
@@ -187,6 +184,11 @@ func (f *flagContainer) Define(v string, b string) int {
 
 		activeCount++
 		f.active = "restoreSnapshot"
+	}
+
+	if len(f.changeState) != 0 || f.changeStateAll {
+		activeCount++
+		f.active = "changeState"
 	}
 
 	if len(f.syncCluster) > 0 {
@@ -269,9 +271,6 @@ Ex: clusterId=192.168.0.1:9430,192.168.0.2:9430`)
 	var removeNode string
 	set.StringVar(&removeNode, `remove-node`, "", `Removes the node from its cluster.`)
 
-	var unFreeze string
-	set.StringVar(&unFreeze, `unfreeze`, "", `Unfreeze the frozen clusters to accept data. Provide cluster ids to unfreeze or leave empty to apply all clusters in the setup. Ex: clusterId,clusterId`)
-
 	var repairConsistency string
 	set.StringVar(&repairConsistency, `repair-consistency`, "", `Repair file chunk node distribution consistency in metadata and data nodes and mark as zombie for the broken ones. Provide repair model for consistency repairing operation or leave empty to run full repair. Possible repair models (full, structure, structure+integrity, integrity, integrity+checksum, checksum, checksum+rebuild)`)
 
@@ -286,12 +285,19 @@ Ex: clusterId=snapshotIndex`)
 	set.StringVar(&restoreSnapshot, `restore-snapshot`, "", `Restores a snapshot in the cluster. Provide cluster id with snapshot index to be restored.
 Ex: clusterId=snapshotIndex`)
 
-	var syncCluster string
-	set.StringVar(&syncCluster, `sync-cluster`, "", `Synchronise selected cluster and their nodes for data consistency. Use --force flag to force synchronization for frozen cluster`)
+	var changeState string
+	set.StringVar(&changeState, `change-state`, "", `Change the state of the cluster. Provide at least one cluster id to change the state or leave empty to apply all clusters in the setup.
+Ex: clusterId,clusterId`)
 
-	set.Bool(`sync-clusters`, false, `Synchronise all clusters and their nodes for data consistency. Use --force flag to force synchronization for frozen clusters`)
+	set.Bool(`online`, false, `Change the state of the cluster to ONLINE. (Can only be used with -change-state argument)`)
+	set.Bool(`readonly`, false, `Change the state of the cluster to READONLY. (Can only be used with -change-state argument)`)
+	set.Bool(`offline`, false, `Change the state of the cluster to OFFLINE. (Can only be used with -change-state argument)`)
+
+	var syncCluster string
+	set.StringVar(&syncCluster, `sync-cluster`, "", `Synchronise selected cluster and their nodes for data consistency.`)
+
+	set.Bool(`sync-clusters`, false, `Synchronise all clusters and their nodes for data consistency.`)
 	set.Bool(`clusters-report`, false, `Gets clusters health report.`)
-	set.Bool(`force`, false, `Force to apply the given command`)
 	set.Bool(`help`, false, `Print this usage documentation`)
 	set.Bool(`h`, false, `Print this usage documentation`)
 	set.Bool(`version`, false, `Print release version`)
@@ -306,19 +312,7 @@ Ex: clusterId=snapshotIndex`)
 		if len(args) > i+1 && !strings.HasPrefix(args[i+1], "-") {
 			break
 		}
-		args = append(append(args[:i+1], "*"), args[i+1:]...)
-		break
-	}
-
-	for i, arg := range args {
-		idx := strings.Index(arg, "-unfreeze")
-		if idx == -1 {
-			continue
-		}
-		if len(args) > i+1 && !strings.HasPrefix(args[i+1], "-") {
-			break
-		}
-		args = append(append(args[:i+1], "*"), args[i+1:]...)
+		args = insert(args, i, "*")
 		break
 	}
 
@@ -330,9 +324,22 @@ Ex: clusterId=snapshotIndex`)
 		if len(args) > i+1 && !strings.HasPrefix(args[i+1], "-") {
 			break
 		}
-		args = append(append(args[:i+1], "full"), args[i+1:]...)
+		args = insert(args, i, "full")
 		break
 	}
+
+	for i, arg := range args {
+		idx := strings.Index(arg, "-change-state")
+		if idx == -1 {
+			continue
+		}
+		if len(args) > i+1 && !strings.HasPrefix(args[i+1], "-") {
+			break
+		}
+		args = insert(args, i, "*")
+		break
+	}
+
 	_ = set.Parse(args)
 
 	if strings.Compare(managerAddress, "localhost:9400") == 0 {
@@ -360,11 +367,11 @@ Ex: clusterId=snapshotIndex`)
 		bc = []string{}
 	}
 
-	ufa := false
-	uf := strings.Split(unFreeze, ",")
-	if len(uf) > 0 && len(uf[0]) == 0 || strings.Compare(unFreeze, "*") == 0 {
-		ufa = strings.Compare(uf[0], "*") == 0
-		uf = []string{}
+	csa := false
+	cs := strings.Split(changeState, ",")
+	if len(cs) > 0 && len(cs[0]) == 0 || strings.Compare(cs[0], "*") == 0 {
+		csa = strings.Compare(cs[0], "*") == 0
+		cs = []string{}
 	}
 
 	joinedArgs := strings.Join(os.Args, " ")
@@ -379,17 +386,19 @@ Ex: clusterId=snapshotIndex`)
 		repairConsistency:  repairConsistency,
 		addNode:            addNode,
 		removeNode:         removeNode,
-		unfreeze:           uf,
-		unfreezeAll:        ufa,
 		createSnapshot:     createSnapshot,
 		deleteSnapshot:     deleteSnapshot,
 		restoreSnapshot:    restoreSnapshot,
+		changeState:        cs,
+		changeStateAll:     csa,
+		stateOnline:        strings.Contains(joinedArgs, "online"),
+		stateReadonly:      strings.Contains(joinedArgs, "readonly"),
+		stateOffline:       strings.Contains(joinedArgs, "offline"),
 		syncCluster:        syncCluster,
 		syncClusters:       strings.Contains(joinedArgs, "sync-clusters"),
 		clustersReport:     strings.Contains(joinedArgs, "clusters-report"),
 		getCluster:         getCluster,
 		getClusters:        strings.Contains(joinedArgs, "get-clusters"),
-		force:              strings.Contains(joinedArgs, "-force"),
 		help:               strings.Contains(joinedArgs, "-help") || strings.Contains(joinedArgs, "-h"),
 		version:            strings.Contains(joinedArgs, "-version") || strings.Contains(joinedArgs, "-v"),
 	}
@@ -403,4 +412,11 @@ Ex: clusterId=snapshotIndex`)
 	}
 
 	return fc
+}
+
+func insert(target []string, index int, item string) []string {
+	temp := make([]string, index+1)
+	copy(temp, target[:index+1])
+	temp = append(temp, item)
+	return append(temp, target[index+1:]...)
 }

@@ -24,7 +24,7 @@ func (c *cluster) createReservationMap(size uint64, clusters common.Clusters) (*
 		sort.Sort(clusters)
 		cluster := clusters[0]
 
-		if cluster.Paralyzed {
+		if !cluster.CanSchedule() {
 			clusters = clusters[1:]
 			continue
 		}

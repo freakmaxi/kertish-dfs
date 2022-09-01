@@ -9,7 +9,7 @@ var (
 	ErrQuit = errors.New("operation does not need to continue")
 
 	ErrNoSpace               = errors.New("no space on clusters")
-	ErrNoAvailableActionNode = errors.New("no available node for clusters")
+	ErrNoAvailableActionNode = errors.New("no available node for requested action")
 	ErrCreate                = errors.New("not possible to create shadow on data node")
 	ErrNotEmpty              = errors.New("path is not empty")
 	ErrLock                  = errors.New("path/file is locked")
@@ -34,7 +34,10 @@ var (
 
 	ErrShowUsage  = errors.New("show usage")
 	ErrProcessing = errors.New("another operation in progress")
-	ErrFrozen     = errors.New("cluster is frozen")
+	ErrParalyzed  = errors.New("cluster is paralyzed")
+	ErrReadonly   = errors.New("cluster is readonly")
+	ErrOffline    = errors.New("cluster is offline")
+	ErrMaintain   = errors.New("cluster is in maintain mode")
 	ErrRemote     = errors.New("remote call execution is failed")
 )
 

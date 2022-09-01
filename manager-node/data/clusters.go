@@ -16,10 +16,10 @@ import (
 
 type Clusters interface {
 	RegisterCluster(cluster *common.Cluster) error
-	UnRegisterCluster(clusterId string, clusterHandler func(cluster *common.Cluster) error) error
+	UnregisterCluster(clusterId string, clusterHandler func(cluster *common.Cluster) error) error
 
 	RegisterNodeTo(clusterId string, node *common.Node) error
-	UnRegisterNode(nodeId string, syncHandler func(cluster *common.Cluster) error, unregisteredNodeHandler func(deletingNode *common.Node) error, masterChangedHandler func(newMaster *common.Node) error) error
+	UnregisterNode(nodeId string, syncHandler func(cluster *common.Cluster) error, unregisteredNodeHandler func(deletingNode *common.Node) error, masterChangedHandler func(newMaster *common.Node) error) error
 
 	Get(clusterId string) (*common.Cluster, error)
 	GetByNodeId(nodeId string) (*common.Cluster, error)
@@ -29,9 +29,11 @@ type Clusters interface {
 	SaveAll(saveAllHandler func(clusters common.Clusters) error) error
 
 	SetNewMaster(clusterId string, nodeId string) error
+	UpdateMaintain(clusterId string, maintain bool, topic common.Topics) error
+	UpdateState(clusterId string, state common.States) error
+	UpdateStateWithMaintain(clusterId string, state common.States, maintain bool, topic common.Topics) error
 	UpdateNodes(cluster *common.Cluster) error
 	ResetStats(cluster *common.Cluster) error
-	SetFreeze(clusterId string, frozen bool) error
 }
 
 const clusterCollection = "cluster"
@@ -107,7 +109,7 @@ func (c *clusters) RegisterCluster(cluster *common.Cluster) error {
 	return c.overwrite(common.Clusters{cluster})
 }
 
-func (c *clusters) UnRegisterCluster(clusterId string, clusterHandler func(cluster *common.Cluster) error) error {
+func (c *clusters) UnregisterCluster(clusterId string, clusterHandler func(cluster *common.Cluster) error) error {
 	cluster, err := c.Get(clusterId)
 	if err != nil {
 		return err
@@ -150,14 +152,24 @@ func (c *clusters) RegisterNodeTo(clusterId string, node *common.Node) error {
 	})
 }
 
-func (c *clusters) UnRegisterNode(nodeId string, syncHandler func(cluster *common.Cluster) error, unregisteredNodeHandler func(deletingNode *common.Node) error, masterChangedHandler func(newMaster *common.Node) error) error {
+func (c *clusters) UnregisterNode(nodeId string, syncHandler func(cluster *common.Cluster) error, unregisteredNodeHandler func(deletingNode *common.Node) error, masterChangedHandler func(newMaster *common.Node) error) error {
 	cluster, err := c.GetByNodeId(nodeId)
 	if err != nil {
 		return err
 	}
+	if cluster.Maintain {
+		return errors.ErrMaintain
+	}
+	if err := c.UpdateMaintain(cluster.Id, true, common.TopicUnregisterNode); err != nil {
+		return err
+	}
+
 	deletingNode := cluster.Node(nodeId)
 
 	if deletingNode.Master {
+		if err := c.UpdateState(cluster.Id, common.StateReadonly); err != nil {
+			return err
+		}
 		if err := syncHandler(cluster); err != nil {
 			return err
 		}
@@ -178,7 +190,8 @@ func (c *clusters) UnRegisterNode(nodeId string, syncHandler func(cluster *commo
 		}); err != nil {
 			return err
 		}
-		return nil
+
+		return c.UpdateStateWithMaintain(cluster.Id, common.StateOnline, false, common.TopicNone)
 	})
 }
 
@@ -322,6 +335,30 @@ func (c *clusters) SetNewMaster(clusterId string, masterNodeId string) error {
 	})
 }
 
+func (c *clusters) UpdateMaintain(clusterId string, maintain bool, topic common.Topics) error {
+	return c.Save(clusterId, func(cluster *common.Cluster) error {
+		cluster.Maintain = maintain
+		cluster.MaintainTopic = topic
+		return nil
+	})
+}
+
+func (c *clusters) UpdateState(clusterId string, state common.States) error {
+	return c.Save(clusterId, func(cluster *common.Cluster) error {
+		cluster.State = state
+		return nil
+	})
+}
+
+func (c *clusters) UpdateStateWithMaintain(clusterId string, state common.States, maintain bool, topic common.Topics) error {
+	return c.Save(clusterId, func(cluster *common.Cluster) error {
+		cluster.State = state
+		cluster.Maintain = maintain
+		cluster.MaintainTopic = topic
+		return nil
+	})
+}
+
 func (c *clusters) UpdateNodes(cluster *common.Cluster) error {
 	c.mutex.Lock(clusterLockKey)
 	defer c.mutex.Unlock(clusterLockKey)
@@ -361,30 +398,6 @@ func (c *clusters) ResetStats(cluster *common.Cluster) error {
 
 	_, err := c.col.UpdateOne(ctx, filter, update)
 	return err
-}
-
-func (c *clusters) SetFreeze(clusterId string, frozen bool) error {
-	c.mutex.Lock(clusterLockKey)
-	defer c.mutex.Unlock(clusterLockKey)
-
-	ctx, cancelFunc := c.context(context.Background())
-	defer cancelFunc()
-
-	filter := bson.M{
-		"clusterId": clusterId,
-		"frozen":    !frozen,
-	}
-	update := bson.M{
-		"$set": bson.M{
-			"paralyzed": true,
-			"frozen":    frozen,
-		},
-	}
-
-	if _, err := c.col.UpdateOne(ctx, filter, update); err != nil && err != mongo.ErrNoDocuments {
-		return err
-	}
-	return nil
 }
 
 func (c *clusters) overwrite(clusters common.Clusters) error {

@@ -73,7 +73,36 @@ func (r *repair) Start(repairType RepairType) error {
 		return err
 	}
 
+	clusters, err := r.clusters.GetAll()
+	if err != nil {
+		return err
+	}
+
+	for _, cluster := range clusters {
+		if !cluster.CanSchedule() {
+			return errors.ErrNotAvailableForClusterAction
+		}
+		if err := r.clusters.UpdateStateWithMaintain(cluster.Id, common.StateReadonly, true, common.TopicRepair); err != nil {
+			return err
+		}
+
+		cluster.Maintain = true
+		cluster.State = common.StateReadonly
+	}
+
 	go func() {
+		releaseClustersFunc := func(clusters common.Clusters) {
+			for _, cluster := range clusters {
+				if err := r.clusters.UpdateStateWithMaintain(cluster.Id, common.StateOnline, false, common.TopicNone); err != nil {
+					r.logger.Error(
+						"Cluster hasn't been taken of the maintain mode. Needs manual action!",
+						zap.String("clusterId", cluster.Id),
+						zap.Error(err),
+					)
+				}
+			}
+		}
+
 		zapRepairType := zap.String("repairType", "full")
 		switch repairType {
 		case RTStructureL1:
@@ -91,11 +120,13 @@ func (r *repair) Start(repairType RepairType) error {
 		}
 		r.logger.Info("Consistency repair is started...", zapRepairType)
 
-		if err := r.start(repairType); err != nil {
+		if err := r.start(clusters, repairType); err != nil {
+			releaseClustersFunc(clusters)
 			_ = r.operation.SetRepairing(false, false)
 			r.logger.Error("Consistency repair is failed", zap.Error(err))
 			return
 		}
+		releaseClustersFunc(clusters)
 		_ = r.operation.SetRepairing(false, true)
 		r.logger.Info("Consistency repair is completed")
 	}()
@@ -103,7 +134,7 @@ func (r *repair) Start(repairType RepairType) error {
 	return nil
 }
 
-func (r *repair) start(repairType RepairType) error {
+func (r *repair) start(clusters common.Clusters, repairType RepairType) error {
 	repairStructure := repairType == RTFull || repairType == RTStructureL1 || repairType == RTStructureL2
 	repairIntegrity := repairType == RTFull || repairType == RTStructureL2 || repairType == RTIntegrityL1 || repairType == RTIntegrityL2
 	repairChecksum := repairType == RTChecksumL1 || repairType == RTChecksumL2
@@ -118,7 +149,7 @@ func (r *repair) start(repairType RepairType) error {
 
 	if repairIntegrity {
 		r.logger.Info("Repairing metadata integrity...")
-		if err := r.repairIntegrity(repairType == RTFull || repairType == RTIntegrityL2); err != nil {
+		if err := r.repairIntegrity(clusters, repairType == RTFull || repairType == RTIntegrityL2); err != nil {
 			return err
 		}
 		r.logger.Info("Metadata integrity repair is completed")
@@ -126,7 +157,7 @@ func (r *repair) start(repairType RepairType) error {
 
 	if repairChecksum {
 		r.logger.Info("Repairing metadata file checksum...")
-		if err := r.repairChecksum(repairType == RTChecksumL2); err != nil {
+		if err := r.repairChecksum(clusters, repairType == RTChecksumL2); err != nil {
 			return err
 		}
 		r.logger.Info("Metadata file checksum repair is completed")
@@ -149,12 +180,7 @@ func (r *repair) repairStructure() error {
 	})
 }
 
-func (r *repair) repairIntegrity(calculateChecksum bool) error {
-	clusters, err := r.clusters.GetAll()
-	if err != nil {
-		return err
-	}
-
+func (r *repair) repairIntegrity(clusters common.Clusters, calculateChecksum bool) error {
 	r.logger.Info("Integrity repairing requires cluster synchronisation.")
 
 	r.metadata.Lock()
@@ -206,7 +232,7 @@ func (r *repair) createClusterIndexMap(clusters common.Clusters, waitFullSync bo
 		go func(wg *sync.WaitGroup, clusterId string) {
 			defer wg.Done()
 
-			if err := r.synchronize.Cluster(clusterId, true, false, waitFullSync); err != nil {
+			if err := r.synchronize.Cluster(clusterId, true, true, waitFullSync); err != nil {
 				r.logger.Error("Cluster sync is failed for integrity repair",
 					zap.String("clusterId", clusterId),
 					zap.Error(err),
@@ -597,15 +623,10 @@ func (r *repair) cleanupOrphan(wg *sync.WaitGroup, clusterId string, masterNode 
 	r.logger.Info(fmt.Sprintf("Orphan chunks cleanup for %s is completed", clusterId))
 
 	// Schedule sync cluster for snapshot sync
-	r.synchronize.QueueCluster(clusterId, true)
+	r.synchronize.QueueCluster(clusterId, true, true)
 }
 
-func (r *repair) repairChecksum(rebuildChecksum bool) error {
-	clusters, err := r.clusters.GetAll()
-	if err != nil {
-		return err
-	}
-
+func (r *repair) repairChecksum(clusters common.Clusters, rebuildChecksum bool) error {
 	r.logger.Info("Checksum repairing requires cluster synchronisation.")
 
 	r.metadata.Lock()

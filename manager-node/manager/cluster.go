@@ -30,7 +30,8 @@ type Cluster interface {
 
 	MoveCluster(sourceClusterId string, targetClusterId string) error
 	BalanceClusters(clusterIds []string) error
-	UnFreezeClusters(clusterIds []string) error
+	ChangeState(clusterId string, state common.States) error
+	ChangeStateAll(state common.States) error
 
 	CreateSnapshot(clusterId string) error
 	DeleteSnapshot(clusterId string, snapshotIndex uint64) error
@@ -94,6 +95,10 @@ func (c *cluster) Register(nodeAddresses []string) (*common.Cluster, error) {
 
 func (c *cluster) RegisterNodesTo(clusterId string, nodeAddresses []string) error {
 	if err := c.clusters.Save(clusterId, func(cluster *common.Cluster) error {
+		if cluster.Maintain {
+			return errors.ErrMaintain
+		}
+
 		masterNode := cluster.Master()
 
 		nodes, _, err := c.prepareNodes(nodeAddresses, cluster.Size)
@@ -113,12 +118,14 @@ func (c *cluster) RegisterNodesTo(clusterId string, nodeAddresses []string) erro
 			}
 		}
 
+		cluster.Maintain = true
+
 		return nil
 	}); err != nil {
 		return err
 	}
 
-	c.synchronize.QueueCluster(clusterId, true)
+	c.synchronize.QueueCluster(clusterId, true, false)
 
 	return nil
 }
@@ -178,7 +185,20 @@ func (c *cluster) prepareNodes(nodeAddresses []string, clusterSize uint64) (comm
 }
 
 func (c *cluster) UnRegisterCluster(clusterId string) error {
-	return c.clusters.UnRegisterCluster(clusterId, func(cluster *common.Cluster) error {
+	if err := c.clusters.Save(clusterId, func(cluster *common.Cluster) error {
+		if cluster.Maintain {
+			return errors.ErrMaintain
+		}
+
+		cluster.State = common.StateOffline
+		cluster.Maintain = true
+
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	return c.clusters.UnregisterCluster(clusterId, func(cluster *common.Cluster) error {
 		for _, node := range cluster.Nodes {
 			dn, err := cluster2.NewDataNode(node.Address)
 			if err != nil {
@@ -191,7 +211,7 @@ func (c *cluster) UnRegisterCluster(clusterId string) error {
 }
 
 func (c *cluster) UnRegisterNode(nodeId string) error {
-	return c.clusters.UnRegisterNode(
+	return c.clusters.UnregisterNode(
 		nodeId,
 		func(cluster *common.Cluster) error {
 			return c.synchronize.Cluster(cluster.Id, true, false, false)
@@ -311,7 +331,7 @@ func (c *cluster) Discard(reservationId string) error {
 }
 
 func (c *cluster) MoveCluster(sourceClusterId string, targetClusterId string) error {
-	move := newMove(c.clusters, c.synchronize, c.logger)
+	move := newMove(c.clusters, c.index, c.synchronize, c.logger)
 	return move.Move(sourceClusterId, targetClusterId)
 }
 
@@ -320,30 +340,38 @@ func (c *cluster) BalanceClusters(clusterIds []string) error {
 	return balance.Balance(clusterIds)
 }
 
-func (c *cluster) UnFreezeClusters(clusterIds []string) error {
-	if len(clusterIds) == 0 {
-		clusters, err := c.clusters.GetAll()
-		if err != nil {
-			return err
+func (c *cluster) ChangeState(clusterId string, state common.States) error {
+	return c.clusters.Save(clusterId, func(cluster *common.Cluster) error {
+		if cluster.Maintain {
+			return errors.ErrMaintain
 		}
+		cluster.State = state
+		return nil
+	})
+}
 
+func (c *cluster) ChangeStateAll(state common.States) error {
+	return c.clusters.SaveAll(func(clusters common.Clusters) error {
 		for _, cluster := range clusters {
-			clusterIds = append(clusterIds, cluster.Id)
+			if cluster.Maintain {
+				return errors.ErrMaintain
+			}
+			cluster.State = state
 		}
-	}
-
-	for _, clusterId := range clusterIds {
-		if err := c.clusters.SetFreeze(clusterId, false); err != nil {
-			return err
-		}
-	}
-
-	return nil
+		return nil
+	})
 }
 
 func (c *cluster) CreateSnapshot(clusterId string) error {
 	cluster, err := c.clusters.Get(clusterId)
 	if err != nil {
+		return err
+	}
+
+	if cluster.Maintain {
+		return errors.ErrMaintain
+	}
+	if err := c.clusters.UpdateMaintain(cluster.Id, true, common.TopicCreateSnapshot); err != nil {
 		return err
 	}
 
@@ -366,6 +394,13 @@ func (c *cluster) DeleteSnapshot(clusterId string, snapshotIndex uint64) error {
 		return err
 	}
 
+	if cluster.Maintain {
+		return errors.ErrMaintain
+	}
+	if err := c.clusters.UpdateMaintain(cluster.Id, true, common.TopicDeleteSnapshot); err != nil {
+		return err
+	}
+
 	masterNode := cluster.Master()
 	dn, err := cluster2.NewDataNode(masterNode.Address)
 	if err != nil {
@@ -382,6 +417,13 @@ func (c *cluster) DeleteSnapshot(clusterId string, snapshotIndex uint64) error {
 func (c *cluster) RestoreSnapshot(clusterId string, snapshotIndex uint64) error {
 	cluster, err := c.clusters.Get(clusterId)
 	if err != nil {
+		return err
+	}
+
+	if cluster.Maintain {
+		return errors.ErrMaintain
+	}
+	if err := c.clusters.UpdateMaintain(cluster.Id, true, common.TopicRestoreSnapshot); err != nil {
 		return err
 	}
 
@@ -424,14 +466,14 @@ func (c *cluster) Find(sha512Hex string, mapType common.MapType) (string, []stri
 		return "", nil, err
 	}
 
-	if cluster.Paralyzed {
-		if !cluster.Frozen {
-			return "", nil, errors.ErrNoAvailableClusterNode
-		}
-
-		if mapType != common.MTRead {
-			return "", nil, errors.ErrNoAvailableClusterNode
-		}
+	// if it is a read request, try other nodes even the cluster is paralyzed.
+	// maybe there is no master candidate but other nodes can contain the
+	// requested file chunk to provide
+	if cluster.State == common.StateOffline {
+		return "", nil, errors.ErrNoAvailableActionNode
+	}
+	if !cluster.CanSchedule() && mapType != common.MTRead {
+		return "", nil, errors.ErrNoAvailableActionNode
 	}
 
 	// addresses should always contain node address, if it will be empty or nil

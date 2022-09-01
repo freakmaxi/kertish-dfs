@@ -170,8 +170,16 @@ func (h *healthCheck) maintain() {
 			}
 
 			if err := h.synchronize.Cluster(cluster.Id, false, false, false); err != nil {
-				if err == errors.ErrFrozen {
-					h.logger.Warn("Frozen cluster is skipped to maintain", zap.String("clusterId", cluster.Id))
+				if err == errors.ErrMaintain {
+					h.logger.Warn("Cluster is in maintain mode, skipping...", zap.String("clusterId", cluster.Id))
+					continue
+				}
+				if err == errors.ErrOffline {
+					h.logger.Warn("Offline cluster is skipped to maintain", zap.String("clusterId", cluster.Id))
+					continue
+				}
+				if err == errors.ErrParalyzed {
+					h.logger.Warn("Paralyzed cluster is skipped to maintain", zap.String("clusterId", cluster.Id))
 					continue
 				}
 
@@ -201,6 +209,9 @@ func (h *healthCheck) health() {
 
 		wg := &sync.WaitGroup{}
 		for _, cluster := range clusters {
+			if cluster.State == common.StateOffline {
+				continue
+			}
 			wg.Add(1)
 			go h.checkHealth(wg, cluster)
 		}
@@ -211,42 +222,43 @@ func (h *healthCheck) health() {
 func (h *healthCheck) checkHealth(wg *sync.WaitGroup, cluster *common.Cluster) {
 	defer wg.Done()
 
-	if cluster.Frozen {
-		h.prioritizeNodesByConnectionQuality(cluster)
-		_ = h.clusters.UpdateNodes(cluster)
-
+	if !h.clusterLocking(cluster.Id, true) {
 		return
 	}
+	defer h.clusterLocking(cluster.Id, false)
 
-	if h.checkMasterAlive(cluster) {
-		cluster.Paralyzed = false
-		h.prioritizeNodesByConnectionQuality(cluster)
-		_ = h.clusters.UpdateNodes(cluster)
+	cluster.Paralyzed = !h.checkMasterAlive(cluster)
 
-		return
-	}
-
-	cluster.Paralyzed = true
+	h.evaluateNodesConnectionQuality(cluster)
 	_ = h.clusters.UpdateNodes(cluster)
 
-	newMaster := h.findNextMasterCandidate(cluster)
-	if newMaster == nil {
-		h.logger.Error(
-			"There is no master node candidate, current master must be up. Cluster will be kept as paralyzed",
-			zap.String("clusterId", cluster.Id),
-		)
+	if cluster.Maintain {
 		return
 	}
 
-	if strings.Compare(newMaster.Id, cluster.Master().Id) != 0 {
-		if err := h.clusters.SetNewMaster(cluster.Id, newMaster.Id); err == nil {
-			_ = cluster.SetMaster(newMaster.Id)
-			h.notifyNewMasterInCluster(cluster)
+	var newMaster *common.Node
+
+	if !cluster.Paralyzed {
+		newMaster = cluster.HighQualityMasterNodeCandidate()
+		if newMaster == nil ||
+			!h.ensureMasterNodeCandidateConsistency(cluster.Id, newMaster) {
+			return
+		}
+	} else {
+		newMaster = h.findNextMaster(cluster)
+		if newMaster == nil {
+			h.logger.Error(
+				"There is no master node candidate, current master must be up. Cluster will be kept as paralyzed",
+				zap.String("clusterId", cluster.Id),
+			)
+			return
 		}
 	}
 
-	cluster.Paralyzed = false
-	h.prioritizeNodesByConnectionQuality(cluster)
+	if err := h.clusters.SetNewMaster(cluster.Id, newMaster.Id); err == nil {
+		_ = cluster.SetMaster(newMaster.Id)
+		h.notifyNewMasterInCluster(cluster)
+	}
 	_ = h.clusters.UpdateNodes(cluster)
 }
 
@@ -267,52 +279,55 @@ func (h *healthCheck) checkMasterAlive(cluster *common.Cluster) bool {
 	return dn.Ping() > -1
 }
 
-func (h *healthCheck) findNextMasterCandidate(cluster *common.Cluster) *common.Node {
-	if !h.clusterLocking(cluster.Id, true) {
-		return nil
-	}
-	defer h.clusterLocking(cluster.Id, false)
+func (h *healthCheck) findNextMaster(cluster *common.Cluster) *common.Node {
+	currentMasterNode := cluster.Master()
 
 	for _, node := range cluster.Nodes {
-		dn, err := h.getDataNode(node)
-		if err != nil {
-			h.logger.Warn(
-				"Finding best master node candidate is failed",
-				zap.String("clusterId", cluster.Id),
-				zap.String("nodeId", node.Id),
-				zap.Error(err),
-			)
+		if strings.Compare(node.Id, currentMasterNode.Id) == 0 {
 			continue
 		}
-
-		pr := dn.Ping()
-
-		if pr == -1 {
+		if !h.ensureMasterNodeCandidateConsistency(cluster.Id, node) {
 			continue
 		}
-
-		container, err := dn.SyncList(nil)
-		if err != nil {
-			continue
-		}
-
-		if !h.index.CompareMap(cluster.Id, container.FileItems) {
-			continue
-		}
-
 		return node
 	}
 	return nil
 }
 
-func (h *healthCheck) prioritizeNodesByConnectionQuality(cluster *common.Cluster) {
+func (h *healthCheck) ensureMasterNodeCandidateConsistency(clusterId string, node *common.Node) bool {
+	dn, err := h.getDataNode(node)
+	if err != nil {
+		h.logger.Warn(
+			"Ensuring the master node candidate consistency is failed",
+			zap.String("clusterId", clusterId),
+			zap.String("nodeId", node.Id),
+			zap.Error(err),
+		)
+		return false
+	}
+
+	pr := dn.Ping()
+
+	if pr == -1 {
+		return false
+	}
+
+	container, err := dn.SyncList(nil)
+	if err != nil {
+		return false
+	}
+
+	return h.index.CompareMap(clusterId, container.FileItems)
+}
+
+func (h *healthCheck) evaluateNodesConnectionQuality(cluster *common.Cluster) {
 	qualityDisabled := int64(^uint64(0) >> 1)
 
 	for _, node := range cluster.Nodes {
 		dn, err := h.getDataNode(node)
 		if err != nil {
 			h.logger.Warn(
-				"Prioritizing node by connection quality is failed",
+				"Evaluating the connection quality of the node is failed",
 				zap.String("clusterId", cluster.Id),
 				zap.String("nodeId", node.Id),
 				zap.Error(err),
