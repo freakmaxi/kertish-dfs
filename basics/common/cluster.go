@@ -187,6 +187,9 @@ func (c *Cluster) Delete(nodeId string, masterChangedHandler func(*Node) error) 
 func (c *Cluster) SetMaster(nodeId string) error {
 	for _, n := range c.Nodes {
 		n.Master = strings.Compare(n.Id, nodeId) == 0
+		if n.Master {
+			n.SetLeadDuration()
+		}
 	}
 	sort.Sort(c.Nodes)
 
@@ -241,6 +244,9 @@ func (c *Cluster) PrioritizedHighQualityNodes(nodeIdsMap CacheFileItemLocationMa
 // if there is no candidate, returns nil
 func (c *Cluster) HighQualityMasterNodeCandidate() *Node {
 	masterNode := c.Master()
+	if !masterNode.LeadershipExpired() {
+		return nil
+	}
 	slaveNodes := c.Slaves()
 
 	var bestDiffValue = int64(^uint64(0) >> 1)
