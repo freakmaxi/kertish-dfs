@@ -119,7 +119,7 @@ Sample report output:
 
 Possible quality values:
 - -2 DNS Error, unable to resolve
-- -1 Paralysed or Frozen Data-Node/Cluster
+- -1 Paralysed or Readonly Data-Node/Cluster
 - 0 or higher Response Time in ms 
 
 ##### Move Action
@@ -194,7 +194,7 @@ Find action is to get the clusterId and data node of a file.
 ##### Possible Status Codes
 - `404`: Not found
 - `500`: Operational failures
-- `503`: Not available to complete the operation (Frozen or Paralysed cluster/node)
+- `503`: Not available to complete the operation (Readonly, Offline or Paralysed cluster/node)
 - `200`: Successful
 
 All failed responses comes with error json. Ex:
@@ -288,7 +288,7 @@ Reserve action is to reserve data space on data nodes to guaranteed that files c
 ##### Possible Status Codes
 - `400`: Operational failures
 - `422`: Required Request Headers are not valid or absent
-- `503`: Not available for reservation (Frozen or Paralysed cluster/node)
+- `503`: Not available for reservation (Readonly, Offline or Paralysed cluster/node)
 - `507`: Insufficient space
 - `200`: Successful
 
@@ -327,7 +327,7 @@ Creates the cluster access map for the specified files.
 ##### Possible Status Codes
 - `400`: Operational failures
 - `422`: Required Request Headers are not valid or absent
-- `503`: Not available for reservation (Frozen or Paralysed cluster/node)
+- `503`: Not available for reservation (Readonly, Offline or Paralysed cluster/node)
 - `200`: Successful
 
 All failed responses comes with error json. Ex:
@@ -347,10 +347,10 @@ Successful request response sample
 }
 ```
 ---
-- `DELETE` is used to delete cluster, unregister node, delete snapshot, unfreeze cluster, discard or commit reservation.
+- `DELETE` is used to delete cluster, unregister node, delete snapshot, discard or commit reservation.
 
 ##### Required Headers:
-- `X-Action` defines the behaviour of delete request. Values: `unregister` or `unfreeze` or `snapshot` or `commit` or 
+- `X-Action` defines the behaviour of delete request. Values: `unregister` or `snapshot` or `commit` or 
 `discard`
 
 ##### Possible Status Codes
@@ -381,21 +381,29 @@ All failed responses comes with error json. code can be `300` for cluster or `35
 }
 ```
 
-##### Unfreeze Action
-Unfreeze action will unfreeze the frozen cluster(s).
+##### Change State Action
+Change state action will change the cluster current state between 3 states (Online, Readonly, Offline).
 
-- `X-Options` header contains the clusterIds to unfreeze with `,` separated. Ex: `clusterId,clusterId,...`
+- `X-Options` header contains the action delegation for each or all clusters. Format is
+  `[clusterId]=[state],[clusterId]=[state],...`
+
+states are:
+- 0: Online
+- 1: Readonly
+- -1: Offline
 
 ##### Possible Status Codes
+- `404`: Cluster/Node not found
+- `422`: Required Request Headers are not valid or absent
 - `500`: Operational failure
 - `200`: Successful
 
-All failed responses comes with error json. Ex:
+All failed responses comes with error json. code can be `300` Ex:
 
 ```json
 {
-  "code": 355,
-  "message": "cluster is already exists"
+  "code": 300,
+  "message": "clusters state change options are insufficient"
 }
 ```
 
