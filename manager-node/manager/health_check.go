@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -350,6 +351,7 @@ func (h *healthCheck) evaluateNodesConnectionQuality(cluster *common.Cluster) {
 
 		node.Quality = pr
 	}
+	sort.Sort(cluster.Nodes)
 }
 
 func (h *healthCheck) notifyNewMasterInCluster(cluster *common.Cluster) {

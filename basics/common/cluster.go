@@ -232,7 +232,8 @@ func (c *Cluster) PrioritizedHighQualityNodes(nodeIdsMap CacheFileItemLocationMa
 
 		nodeList = append(nodeList, n)
 	}
-	sort.Sort(nodeList)
+	// No need to sorting here cause nodeList is already saved to db as sorted,
+	// and we are playing with already sorted list
 
 	if len(nodeList) > 0 {
 		return nodeList
