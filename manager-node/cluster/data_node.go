@@ -39,7 +39,7 @@ const (
 )
 
 const dialTimeout = time.Second * 30
-const pingWaitDuration = time.Second * 10
+const pingWaitDuration = time.Second * 5
 
 type DataNode interface {
 	Create(data []byte) (string, error)
@@ -87,6 +87,16 @@ func NewDataNode(nodeAddress string) (DataNode, error) {
 
 func (d *dataNode) connect(connectionHandler func(conn net.Conn) error) error {
 	conn, err := net.DialTimeout(d.address.Network(), d.address.String(), dialTimeout)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+
+	return connectionHandler(conn)
+}
+
+func (d *dataNode) connectWithTimeout(timeout time.Duration, connectionHandler func(conn net.Conn) error) error {
+	conn, err := net.DialTimeout(d.address.Network(), d.address.String(), timeout)
 	if err != nil {
 		return err
 	}
@@ -350,7 +360,7 @@ func (d *dataNode) Leave() bool {
 	}) == nil
 }
 
-//TODO: wipe security mechanism should be implemented between manager and data node
+// TODO: wipe security mechanism should be implemented between manager and data node
 func (d *dataNode) Wipe() bool {
 	return d.connect(func(conn net.Conn) error {
 		if _, err := conn.Write([]byte(commandWipe)); err != nil {
@@ -653,8 +663,8 @@ func (d *dataNode) SnapshotRestore(snapshotIndex uint64) bool {
 func (d *dataNode) Ping() (latency int64) {
 	starts := time.Now().UTC()
 
-	if err := d.connect(func(conn net.Conn) error {
-		if err := conn.SetDeadline(time.Now().Add(pingWaitDuration)); err != nil {
+	if err := d.connectWithTimeout(pingWaitDuration, func(conn net.Conn) error {
+		if err := conn.SetDeadline(time.Now().Add(pingWaitDuration * 2)); err != nil {
 			return err
 		}
 
@@ -662,7 +672,7 @@ func (d *dataNode) Ping() (latency int64) {
 			return err
 		}
 
-		if !d.resultWithTimeout(conn, time.Second*5) {
+		if !d.resultWithTimeout(conn, pingWaitDuration) {
 			return fmt.Errorf("ping command is failed on data node")
 		}
 
