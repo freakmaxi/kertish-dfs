@@ -10,12 +10,10 @@ import (
 
 // Manager interface is for file operation handling
 type Manager interface {
-	Wait()
-
 	File(sha512Hex string, fileHandler func(file File) error) error
 	LockFile(sha512Hex string, fileHandler func(file File) error) error
 
-	Traverse(hexHandler func(sha512Hex string) error) error
+	Traverse(hexHandler func(sha512Hex string, size uint64) error) error
 
 	Wipe() error
 }
@@ -75,11 +73,6 @@ func (m *manager) unlock(sha512Hex string) {
 	m.blockLock[sha512Hex].Unlock()
 }
 
-func (m *manager) Wait() {
-	m.blockLockMutex.Lock()
-	defer m.blockLockMutex.Unlock()
-}
-
 func (m *manager) File(sha512Hex string, fileHandler func(file File) error) error {
 	file, err := NewFile(m.dataPath, sha512Hex, m.logger)
 	if err != nil {
@@ -97,9 +90,14 @@ func (m *manager) LockFile(sha512Hex string, fileHandler func(file File) error) 
 	return m.File(sha512Hex, fileHandler)
 }
 
-func (m *manager) Traverse(hexHandler func(sha512Hex string) error) error {
+func (m *manager) Traverse(hexHandler func(sha512Hex string, size uint64) error) error {
 	return common.Traverse(m.dataPath, func(info os.FileInfo) error {
-		return hexHandler(info.Name())
+		sha512Hex := info.Name()
+
+		m.lock(sha512Hex)
+		defer m.unlock(sha512Hex)
+
+		return hexHandler(sha512Hex, uint64(info.Size()))
 	})
 }
 

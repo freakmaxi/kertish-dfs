@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"sort"
@@ -242,7 +241,7 @@ func (s *snapshot) Restore(sourceSnapshot time.Time) error {
 		return err
 	}
 
-	if err := sourceBlock.Traverse(func(sha512Hex string) error {
+	if err := sourceBlock.Traverse(func(sha512Hex string, _ uint64) error {
 		sourceFilePath := path.Join(sourceSnapshotPath, sha512Hex)
 		targetFilePath := path.Join(s.rootPath, sha512Hex)
 
@@ -250,7 +249,7 @@ func (s *snapshot) Restore(sourceSnapshot time.Time) error {
 			return err
 		}
 
-		return targetBlock.LockFile(sha512Hex, func(targetFile block.File) error {
+		return targetBlock.File(sha512Hex, func(targetFile block.File) error {
 			usage, has := sourceHeaderMap[sha512Hex]
 			if !has {
 				s.logger.Warn(

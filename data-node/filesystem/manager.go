@@ -35,7 +35,7 @@ type manager struct {
 	snapshot    Snapshot
 	synchronize Synchronize
 
-	mutex sync.Mutex
+	managerMutex sync.Mutex
 }
 
 // NewManager creates the instance of data node operations manager
@@ -52,62 +52,65 @@ func NewManager(rootPath string, logger *zap.Logger) (Manager, error) {
 	}
 
 	return &manager{
-		rootPath:    rootPath,
-		logger:      logger,
-		block:       b,
-		snapshot:    ss,
-		synchronize: s,
-		mutex:       sync.Mutex{},
+		rootPath:     rootPath,
+		logger:       logger,
+		block:        b,
+		snapshot:     ss,
+		synchronize:  s,
+		managerMutex: sync.Mutex{},
 	}, nil
 }
 
-func (m *manager) Block() block.Manager {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
+func (m *manager) wait() {
+	m.managerMutex.Lock()
+	defer m.managerMutex.Unlock()
+}
+
+func (m *manager) Block(requestType BlockRequestType) block.Manager {
+	switch requestType {
+	case Create, Delete:
+		// Wait if there is any snapshot or wipe operation
+		m.wait()
+	case Read:
+		// No need to lock for read requests in manager level
+		// File level lock will be enough to handle multiple operations
+	}
 
 	return m.block
 }
 
 func (m *manager) Snapshot(handler func(snapshot Snapshot) error) error {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	m.block.Wait()
+	m.managerMutex.Lock()
+	defer m.managerMutex.Unlock()
 
 	return handler(m.snapshot)
 }
 
 func (m *manager) Sync(handler func(sync Synchronize) error) error {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	m.block.Wait()
+	// Wait if there is any snapshot or wipe operation
+	m.wait()
 
 	return handler(m.synchronize)
 }
 
 func (m *manager) Wipe() error {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
+	m.managerMutex.Lock()
+	defer m.managerMutex.Unlock()
 
-	m.block.Wait()
+	if err := m.block.Traverse(func(sha512Hex string, size uint64) error {
+		p := path.Join(m.rootPath, sha512Hex)
+		return os.Remove(p)
+	}); err != nil {
+		return err
+	}
 
-	infos, err := ioutil.ReadDir(m.rootPath)
+	snapshotDates, err := m.snapshot.Dates()
 	if err != nil {
 		return err
 	}
 
-	for _, info := range infos {
-		p := path.Join(m.rootPath, info.Name())
-
-		if info.IsDir() {
-			if err := os.RemoveAll(p); err != nil {
-				return err
-			}
-			continue
-		}
-
-		if err := os.Remove(p); err != nil {
+	for _, snapshotDate := range snapshotDates {
+		if err := m.snapshot.Delete(snapshotDate); err != nil {
 			return err
 		}
 	}
@@ -116,16 +119,11 @@ func (m *manager) Wipe() error {
 }
 
 func (m *manager) Used() (uint64, error) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	m.block.Wait()
-
 	sha512HexMap := make(map[string]uint64)
 
 	// fill for root
-	if err := dnc.Traverse(m.rootPath, func(info os.FileInfo) error {
-		sha512HexMap[info.Name()] = uint64(info.Size())
+	if err := m.block.Traverse(func(sha512Hex string, size uint64) error {
+		sha512HexMap[sha512Hex] = size
 		return nil
 	}); err != nil {
 		return 0, err
@@ -138,9 +136,13 @@ func (m *manager) Used() (uint64, error) {
 	}
 
 	for _, snapshotDate := range snapshotDates {
-		snapshotPathName := m.snapshot.PathName(snapshotDate)
-		if err := dnc.Traverse(path.Join(m.rootPath, snapshotPathName), func(info os.FileInfo) error {
-			sha512HexMap[info.Name()] = uint64(info.Size())
+		snapshotBlock, err := m.snapshot.Block(snapshotDate)
+		if err != nil {
+			return 0, err
+		}
+
+		if err := snapshotBlock.Traverse(func(sha512Hex string, size uint64) error {
+			sha512HexMap[sha512Hex] = size
 			return nil
 		}); err != nil {
 			return 0, err
