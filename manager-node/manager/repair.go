@@ -22,13 +22,13 @@ const parallelRepair = 10
 type RepairType int
 
 const (
-	RTFull        RepairType = 1
-	RTStructureL1 RepairType = 2
-	RTStructureL2 RepairType = 3
-	RTIntegrityL1 RepairType = 4
-	RTIntegrityL2 RepairType = 5
-	RTChecksumL1  RepairType = 6
-	RTChecksumL2  RepairType = 7
+	RTFull                         RepairType = 1
+	RTStructure                    RepairType = 2
+	RTStructureWithIntegrity       RepairType = 3
+	RTIntegrity                    RepairType = 4
+	RTIntegrityWithChecksumRebuild RepairType = 5
+	RTCalculatingMissingChecksum   RepairType = 6
+	RTChecksumRebuild              RepairType = 7
 )
 
 type Repair interface {
@@ -91,79 +91,84 @@ func (r *repair) Start(repairType RepairType) error {
 	}
 
 	go func() {
-		releaseClustersFunc := func(clusters common.Clusters) {
-			for _, cluster := range clusters {
-				if err := r.clusters.UpdateStateWithMaintain(cluster.Id, common.StateOnline, false, common.TopicNone); err != nil {
-					r.logger.Error(
-						"Cluster hasn't been taken off the maintain mode. Needs manual action!",
-						zap.String("clusterId", cluster.Id),
-						zap.Error(err),
-					)
-				}
-			}
-		}
-
 		zapRepairType := zap.String("repairType", "full")
 		switch repairType {
-		case RTStructureL1:
+		case RTStructure:
 			zapRepairType = zap.String("repairType", "structure")
-		case RTStructureL2:
+		case RTStructureWithIntegrity:
 			zapRepairType = zap.String("repairType", "structure with integrity")
-		case RTIntegrityL1:
+		case RTIntegrity:
 			zapRepairType = zap.String("repairType", "integrity")
-		case RTIntegrityL2:
+		case RTIntegrityWithChecksumRebuild:
 			zapRepairType = zap.String("repairType", "integrity with rebuilding checksum calculation")
-		case RTChecksumL1:
-			zapRepairType = zap.String("repairType", "checksum calculation")
-		case RTChecksumL2:
+		case RTCalculatingMissingChecksum:
+			zapRepairType = zap.String("repairType", "calculating missing checksums")
+		case RTChecksumRebuild:
 			zapRepairType = zap.String("repairType", "rebuilding checksum calculation")
 		}
 		r.logger.Info("Consistency repair is started...", zapRepairType)
 
-		if err := r.start(clusters, repairType); err != nil {
-			releaseClustersFunc(clusters)
-			_ = r.operation.SetRepairing(false, false)
+		releaseClusters, err := r.start(clusters, repairType)
+		_ = r.operation.SetRepairing(false, err == nil)
+		if releaseClusters {
+			r.releaseClusters(clusters)
+		}
+		if err != nil {
 			r.logger.Error("Consistency repair is failed", zap.Error(err))
 			return
 		}
-		releaseClustersFunc(clusters)
-		_ = r.operation.SetRepairing(false, true)
 		r.logger.Info("Consistency repair is completed")
 	}()
 
 	return nil
 }
 
-func (r *repair) start(clusters common.Clusters, repairType RepairType) error {
-	repairStructure := repairType == RTFull || repairType == RTStructureL1 || repairType == RTStructureL2
-	repairIntegrity := repairType == RTFull || repairType == RTStructureL2 || repairType == RTIntegrityL1 || repairType == RTIntegrityL2
-	repairChecksum := repairType == RTChecksumL1 || repairType == RTChecksumL2
+func (r *repair) releaseClusters(clusters common.Clusters) {
+	for _, cluster := range clusters {
+		if err := r.clusters.UpdateStateWithMaintain(cluster.Id, common.StateOnline, false, common.TopicNone); err != nil {
+			r.logger.Error(
+				"Cluster hasn't been taken off the maintain mode. Needs manual action!",
+				zap.String("clusterId", cluster.Id),
+				zap.Error(err),
+			)
+		}
+	}
+}
+
+func (r *repair) start(clusters common.Clusters, repairType RepairType) (bool, error) {
+	repairChecksum := repairType == RTCalculatingMissingChecksum || repairType == RTChecksumRebuild
+
+	if repairChecksum {
+		r.logger.Info("Repairing metadata file checksum...")
+		if err := r.repairChecksum(clusters, repairType == RTChecksumRebuild); err != nil {
+			return true, err
+		}
+		r.logger.Info("Metadata file checksum repair is completed")
+		return true, nil
+	}
+
+	repairStructure := repairType == RTFull || repairType == RTStructure || repairType == RTStructureWithIntegrity
+	repairIntegrity := repairType == RTFull || repairType == RTStructureWithIntegrity || repairType == RTIntegrity || repairType == RTIntegrityWithChecksumRebuild
 
 	if repairStructure {
 		r.logger.Info("Repairing metadata structure consistency...")
 		if err := r.repairStructure(); err != nil {
-			return err
+			return true, err
 		}
 		r.logger.Info("Metadata structure consistency repair is completed")
 	}
 
 	if repairIntegrity {
 		r.logger.Info("Repairing metadata integrity...")
-		if err := r.repairIntegrity(clusters, repairType == RTFull || repairType == RTIntegrityL2); err != nil {
-			return err
+		if err := r.repairIntegrity(clusters, repairType == RTFull || repairType == RTIntegrityWithChecksumRebuild); err != nil {
+			return true, err
 		}
 		r.logger.Info("Metadata integrity repair is completed")
+
+		return false, nil
 	}
 
-	if repairChecksum {
-		r.logger.Info("Repairing metadata file checksum...")
-		if err := r.repairChecksum(clusters, repairType == RTChecksumL2); err != nil {
-			return err
-		}
-		r.logger.Info("Metadata file checksum repair is completed")
-	}
-
-	return nil
+	return true, nil
 }
 
 func (r *repair) repairStructure() error {
@@ -180,7 +185,7 @@ func (r *repair) repairStructure() error {
 	})
 }
 
-func (r *repair) repairIntegrity(clusters common.Clusters, calculateChecksum bool) error {
+func (r *repair) repairIntegrity(clusters common.Clusters, rebuildChecksum bool) error {
 	r.logger.Info("Integrity repairing requires cluster synchronisation.")
 
 	r.metadata.Lock()
@@ -206,7 +211,7 @@ func (r *repair) repairIntegrity(clusters common.Clusters, calculateChecksum boo
 	r.metadata.Unlock()
 
 	r.logger.Info("Phase 2: Repairing metadata chunk integrity...")
-	if err := r.repairIntegrityPhase2(calculateChecksum, clusterIndexMap, clusterMap); err != nil {
+	if err := r.repairIntegrityPhase2(rebuildChecksum, clusterIndexMap, clusterMap); err != nil {
 		return err
 	}
 
@@ -435,7 +440,7 @@ func (r *repair) fixUsage(wg *sync.WaitGroup, clusterId string, masterNode *comm
 	}
 }
 
-func (r *repair) repairIntegrityPhase2(calculateChecksum bool, clusterIndexMap map[string]map[string]string, clusterMap map[string]*common.Cluster) error {
+func (r *repair) repairIntegrityPhase2(checksumRebuild bool, clusterIndexMap map[string]map[string]string, clusterMap map[string]*common.Cluster) error {
 	clusterIndexMapMutex := sync.Mutex{}
 	deleteFromIndexMapFunc := func(clusterId string, sha512Hex string) {
 		clusterIndexMapMutex.Lock()
@@ -497,7 +502,7 @@ func (r *repair) repairIntegrityPhase2(calculateChecksum bool, clusterIndexMap m
 				deletionResult.Untouched = append(deletionResult.Untouched, chunk.Hash)
 				deleteFromIndexMapFunc(cacheFileItem.ClusterId, cacheFileItem.FileItem.Sha512Hex)
 
-				if !calculateChecksum {
+				if !checksumRebuild {
 					continue
 				}
 
@@ -539,7 +544,7 @@ func (r *repair) repairIntegrityPhase2(calculateChecksum bool, clusterIndexMap m
 				continue
 			}
 
-			if calculateChecksum {
+			if checksumRebuild {
 				if sha512Failed {
 					r.logger.Warn(
 						fmt.Sprintf("Updating checksum of %s is not possible because of the failure(s) on calculation operation", file.Name),
