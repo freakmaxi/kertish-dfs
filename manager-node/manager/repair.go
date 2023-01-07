@@ -241,6 +241,14 @@ func (r *repair) createClusterIndexMap(clusters common.Clusters, waitFullSync bo
 				return
 			}
 
+			// Recover maintain topic that we lost when we requested synchronization
+			if err := r.clusters.UpdateStateWithMaintain(clusterId, common.StateReadonly, true, common.TopicRepair); err != nil {
+				r.logger.Warn("Updating cluster state is failed after cluster synchronization is completed",
+					zap.String("clusterId", clusterId),
+					zap.Error(err),
+				)
+			}
+
 			r.logger.Info("Caching cluster chunk map for integrity exam")
 
 			indexMap, err := r.index.PullMap(clusterId)
