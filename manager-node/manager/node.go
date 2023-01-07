@@ -36,6 +36,7 @@ type nodeSync struct {
 	clusterId  string
 	sourceAddr string
 	sha512Hex  string
+	usage      uint16
 	targets    []*targetContainer
 }
 
@@ -151,6 +152,7 @@ func (n *node) create(nodeId string, fileItemList common.SyncFileItemList) error
 			clusterId:  cluster.Id,
 			sourceAddr: sourceNode.Address,
 			sha512Hex:  fileItem.Sha512Hex,
+			usage:      fileItem.Usage,
 			targets:    n.makeTargetContainerList(targetNodes),
 		})
 	}
@@ -191,6 +193,7 @@ func (n *node) delete(nodeId string, fileItemList common.SyncFileItemList) error
 					clusterId:  cluster.Id,
 					sourceAddr: sourceNode.Address,
 					sha512Hex:  fileItem.Sha512Hex,
+					usage:      fileItem.Usage,
 					targets:    n.makeTargetContainerList(targetNodes),
 				})
 		}

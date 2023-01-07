@@ -490,6 +490,11 @@ func (c *commander) sycr(conn net.Conn) error {
 		return err
 	}
 
+	var usage uint16
+	if err := c.readBinaryWithTimeout(conn, &usage); err != nil {
+		return err
+	}
+
 	var sourceAddrLength uint8
 	if err := c.readBinaryWithTimeout(conn, &sourceAddrLength); err != nil {
 		return err
@@ -502,7 +507,7 @@ func (c *commander) sycr(conn net.Conn) error {
 	sourceAddr := string(sourceAddrBuf)
 
 	return c.fs.Sync(func(sync filesystem.Synchronize) error {
-		sync.Create(sourceAddr, sha512Hex)
+		sync.Create(sourceAddr, sha512Hex, usage)
 		return nil
 	})
 }
@@ -585,8 +590,13 @@ func (c *commander) syde(conn net.Conn) error {
 		return err
 	}
 
+	var usage uint16
+	if err := c.readBinaryWithTimeout(conn, &usage); err != nil {
+		return err
+	}
+
 	return c.fs.Sync(func(sync filesystem.Synchronize) error {
-		sync.Delete(sha512Hex)
+		sync.Delete(sha512Hex, usage)
 		return nil
 	})
 }

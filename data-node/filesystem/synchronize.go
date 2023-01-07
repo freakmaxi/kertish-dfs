@@ -24,14 +24,15 @@ const semaphoreLimit = 10
 type Synchronize interface {
 	List(snapshotTime *time.Time, itemHandler func(fileItem *common.SyncFileItem) error) error
 
-	Create(sourceAddr string, sha512Hex string)
-	Delete(sha512Hex string)
+	Create(sourceAddr string, sha512Hex string, usage uint16)
+	Delete(sha512Hex string, usage uint16)
 	Full(sourceAddr string) error
 }
 
 type queueItem struct {
 	sourceAddr *string
 	sha512Hex  string
+	usage      uint16
 	create     bool
 }
 
@@ -110,7 +111,7 @@ func (s *synchronize) getSourceDataNode(sourceAddr string) (cluster.DataNode, er
 
 func (s *synchronize) processQueueItem(b block.Manager, item queueItem) {
 	if !item.create {
-		if err := s.deleteBlockFile(b, common.SyncFileItem{Sha512Hex: item.sha512Hex}, true); err != nil {
+		if err := s.deleteBlockFile(b, common.SyncFileItem{Sha512Hex: item.sha512Hex, Usage: item.usage}); err != nil {
 			s.logger.Error(
 				fmt.Sprintf("Queue sync cannot delete %s", item.sha512Hex),
 				zap.Error(err),
@@ -135,7 +136,7 @@ func (s *synchronize) processQueueItem(b block.Manager, item queueItem) {
 			continue
 		}
 
-		if err := s.createBlockFile(sourceNode, nil, b, common.SyncFileItem{Sha512Hex: item.sha512Hex}, true); err != nil {
+		if err := s.createBlockFile(sourceNode, nil, b, common.SyncFileItem{Sha512Hex: item.sha512Hex, Usage: item.usage}); err != nil {
 			s.logger.Error(
 				fmt.Sprintf("Queue sync cannot create %s", item.sha512Hex),
 				zap.Error(err),
@@ -193,18 +194,20 @@ func (s *synchronize) iterateFileItems(dataPath string, headerMap HeaderMap, ite
 	})
 }
 
-func (s *synchronize) Create(sourceAddr string, sha512Hex string) {
+func (s *synchronize) Create(sourceAddr string, sha512Hex string, usage uint16) {
 	s.syncChan <- queueItem{
 		sourceAddr: &sourceAddr,
 		sha512Hex:  sha512Hex,
+		usage:      usage,
 		create:     true,
 	}
 }
 
-func (s *synchronize) Delete(sha512Hex string) {
+func (s *synchronize) Delete(sha512Hex string, usage uint16) {
 	s.syncChan <- queueItem{
 		sourceAddr: nil,
 		sha512Hex:  sha512Hex,
+		usage:      usage,
 		create:     false,
 	}
 }
@@ -422,7 +425,7 @@ func (s *synchronize) delete(wg *sync.WaitGroup, b block.Manager, wipeList commo
 	for len(wipeList) > 0 {
 		fileItem := wipeList[0]
 		currentDeletedCount := totalWipeCount - (len(wipeList) - 1)
-		if err := s.deleteBlockFile(b, fileItem, false); err != nil {
+		if err := s.deleteBlockFile(b, fileItem); err != nil {
 			s.logger.Error(
 				"Sync cannot delete",
 				zap.String("sha512Hex", fileItem.Sha512Hex),
@@ -442,17 +445,17 @@ func (s *synchronize) delete(wg *sync.WaitGroup, b block.Manager, wipeList commo
 	}
 }
 
-func (s *synchronize) deleteBlockFile(b block.Manager, fileItem common.SyncFileItem, queueRequest bool) error {
+func (s *synchronize) deleteBlockFile(b block.Manager, fileItem common.SyncFileItem) error {
 	return b.LockFile(fileItem.Sha512Hex, func(blockFile block.File) error {
 		if blockFile.Temporary() {
 			return nil
 		}
 
-		if queueRequest {
-			return blockFile.Delete()
+		if err := blockFile.ResetUsage(fileItem.Usage); err != nil {
+			return err
 		}
 
-		return blockFile.Wipe()
+		return blockFile.Delete()
 	})
 }
 
@@ -499,7 +502,7 @@ func (s *synchronize) create(wg *sync.WaitGroup, sourceNode cluster.DataNode, sn
 			completedCreateFunc()
 		}()
 
-		if err := s.createBlockFile(sourceNode, snapshotTime, b, fileItem, false); err != nil && err != errors.ErrQuit {
+		if err := s.createBlockFile(sourceNode, snapshotTime, b, fileItem); err != nil && err != errors.ErrQuit {
 			currentCreatedCount := currentCreatedCountFunc()
 			s.logger.Error(
 				fmt.Sprintf("Sync cannot create %s - %d/%d", fileItem.Sha512Hex, currentCreatedCount, totalCreateCount),
@@ -534,13 +537,10 @@ func (s *synchronize) create(wg *sync.WaitGroup, sourceNode cluster.DataNode, sn
 	semaphoreWG.Wait()
 }
 
-func (s *synchronize) createBlockFile(sourceNode cluster.DataNode, snapshotTime *time.Time, b block.Manager, fileItem common.SyncFileItem, queueRequest bool) error {
+func (s *synchronize) createBlockFile(sourceNode cluster.DataNode, snapshotTime *time.Time, b block.Manager, fileItem common.SyncFileItem) error {
 	return b.LockFile(fileItem.Sha512Hex, func(blockFile block.File) error {
 		if !blockFile.Temporary() {
 			if blockFile.VerifyForce() {
-				if queueRequest {
-					return blockFile.IncreaseUsage()
-				}
 				return blockFile.ResetUsage(fileItem.Usage)
 			}
 

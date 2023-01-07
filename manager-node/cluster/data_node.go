@@ -52,8 +52,8 @@ type DataNode interface {
 	Leave() bool
 	Wipe() bool
 
-	SyncCreate(sha512Hex string, sourceNodeAddr string) error
-	SyncDelete(sha512Hex string) error
+	SyncCreate(sha512Hex string, usage uint16, sourceNodeAddr string) error
+	SyncDelete(sha512Hex string, usage uint16) error
 	SyncMove(sha512Hex string, sourceNodeAddr string) error
 	SyncList(snapshotTime *time.Time) (*common.SyncContainer, error)
 	SyncFull(sourceNodeAddr string) bool
@@ -380,7 +380,7 @@ func (d *dataNode) Wipe() bool {
 	}) == nil
 }
 
-func (d *dataNode) SyncCreate(sha512Hex string, sourceNodeAddr string) error {
+func (d *dataNode) SyncCreate(sha512Hex string, usage uint16, sourceNodeAddr string) error {
 	sha512Sum, err := hex.DecodeString(sha512Hex)
 	if err != nil {
 		return err
@@ -392,6 +392,10 @@ func (d *dataNode) SyncCreate(sha512Hex string, sourceNodeAddr string) error {
 		}
 
 		if _, err := conn.Write(sha512Sum); err != nil {
+			return err
+		}
+
+		if err := binary.Write(conn, binary.LittleEndian, usage); err != nil {
 			return err
 		}
 
@@ -412,7 +416,7 @@ func (d *dataNode) SyncCreate(sha512Hex string, sourceNodeAddr string) error {
 	})
 }
 
-func (d *dataNode) SyncDelete(sha512Hex string) error {
+func (d *dataNode) SyncDelete(sha512Hex string, usage uint16) error {
 	sha512Sum, err := hex.DecodeString(sha512Hex)
 	if err != nil {
 		return err
@@ -424,6 +428,10 @@ func (d *dataNode) SyncDelete(sha512Hex string) error {
 		}
 
 		if _, err := conn.Write(sha512Sum); err != nil {
+			return err
+		}
+
+		if err := binary.Write(conn, binary.LittleEndian, usage); err != nil {
 			return err
 		}
 
