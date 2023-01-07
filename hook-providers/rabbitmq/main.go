@@ -2,14 +2,12 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/freakmaxi/kertish-dfs/basics/hooks"
 	"github.com/streadway/amqp"
 )
 
 var version = "XX.X.XXXX"
-var build = "XXXXXX"
 
 func Load() hooks.Action {
 	return &RabbitMQ{}
@@ -26,7 +24,7 @@ func (r *RabbitMQ) Provider() string {
 }
 
 func (r *RabbitMQ) Version() string {
-	return fmt.Sprintf("%s-%s", version, build)
+	return version
 }
 
 func (r *RabbitMQ) Sample() interface{} {
