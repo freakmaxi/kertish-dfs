@@ -312,7 +312,7 @@ func (s *snapshot) Latest() (*time.Time, error) {
 }
 
 func (s *snapshot) Dates() (common.Snapshots, error) {
-	infos, err := ioutil.ReadDir(s.rootPath)
+	infos, err := os.ReadDir(s.rootPath)
 	if err != nil {
 		return nil, err
 	}

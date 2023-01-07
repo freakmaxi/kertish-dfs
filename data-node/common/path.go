@@ -1,12 +1,11 @@
 package common
 
 import (
-	"io/ioutil"
 	"os"
 )
 
 func Traverse(p string, fileHandler func(info os.FileInfo) error) error {
-	infos, err := ioutil.ReadDir(p)
+	infos, err := os.ReadDir(p)
 	if err != nil {
 		return err
 	}
@@ -16,7 +15,12 @@ func Traverse(p string, fileHandler func(info os.FileInfo) error) error {
 			continue
 		}
 
-		if err := fileHandler(info); err != nil {
+		fi, err := info.Info()
+		if err != nil {
+			return err
+		}
+
+		if err := fileHandler(fi); err != nil {
 			return err
 		}
 	}

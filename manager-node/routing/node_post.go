@@ -2,7 +2,7 @@ package routing
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -104,7 +104,7 @@ func (n *nodeRouter) describeHandshakeOptions(options string) (uint64, string, s
 }
 
 func (n *nodeRouter) describeNotifyOptions(r *http.Request) (string, common.NotificationContainerList, error) {
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		return "", nil, err
 	}
