@@ -108,15 +108,14 @@ func (r *repair) Start(repairType RepairType) error {
 		}
 		r.logger.Info("Consistency repair is started...", zapRepairType)
 
-		releaseClusters, err := r.start(clusters, repairType)
-		_ = r.operation.SetRepairing(false, err == nil)
-		if releaseClusters {
+		if err := r.start(clusters, repairType); err != nil {
 			r.releaseClusters(clusters)
-		}
-		if err != nil {
+			_ = r.operation.SetRepairing(false, false)
 			r.logger.Error("Consistency repair is failed", zap.Error(err))
 			return
 		}
+		r.releaseClusters(clusters)
+		_ = r.operation.SetRepairing(false, true)
 		r.logger.Info("Consistency repair is completed")
 	}()
 
@@ -135,16 +134,16 @@ func (r *repair) releaseClusters(clusters common.Clusters) {
 	}
 }
 
-func (r *repair) start(clusters common.Clusters, repairType RepairType) (bool, error) {
+func (r *repair) start(clusters common.Clusters, repairType RepairType) error {
 	repairChecksum := repairType == RTCalculatingMissingChecksum || repairType == RTChecksumRebuild
 
 	if repairChecksum {
 		r.logger.Info("Repairing metadata file checksum...")
 		if err := r.repairChecksum(clusters, repairType == RTChecksumRebuild); err != nil {
-			return true, err
+			return err
 		}
 		r.logger.Info("Metadata file checksum repair is completed")
-		return true, nil
+		return nil
 	}
 
 	repairStructure := repairType == RTFull || repairType == RTStructure || repairType == RTStructureWithIntegrity
@@ -153,7 +152,7 @@ func (r *repair) start(clusters common.Clusters, repairType RepairType) (bool, e
 	if repairStructure {
 		r.logger.Info("Repairing metadata structure consistency...")
 		if err := r.repairStructure(); err != nil {
-			return true, err
+			return err
 		}
 		r.logger.Info("Metadata structure consistency repair is completed")
 	}
@@ -161,14 +160,12 @@ func (r *repair) start(clusters common.Clusters, repairType RepairType) (bool, e
 	if repairIntegrity {
 		r.logger.Info("Repairing metadata integrity...")
 		if err := r.repairIntegrity(clusters, repairType == RTFull || repairType == RTIntegrityWithChecksumRebuild); err != nil {
-			return true, err
+			return err
 		}
 		r.logger.Info("Metadata integrity repair is completed")
-
-		return false, nil
 	}
 
-	return true, nil
+	return nil
 }
 
 func (r *repair) repairStructure() error {
@@ -633,10 +630,18 @@ func (r *repair) cleanupOrphan(wg *sync.WaitGroup, clusterId string, masterNode 
 		)
 	}
 
-	r.logger.Info(fmt.Sprintf("Orphan chunks cleanup for %s is completed", clusterId))
+	// Sync cluster for snapshot
+	if err = r.synchronize.Cluster(clusterId, true, true, true); err != nil {
+		r.logger.Warn("Cluster sync is failed for the completion of orphan cleanup",
+			zap.String("clusterId", clusterId),
+			zap.Error(err),
+		)
+	}
 
-	// Schedule sync cluster for snapshot sync
-	r.synchronize.QueueCluster(clusterId, true, false)
+	// Recover cluster state for repair
+	_ = r.clusters.UpdateStateWithMaintain(clusterId, common.StateReadonly, true, common.TopicRepair)
+
+	r.logger.Info(fmt.Sprintf("Orphan chunks cleanup for %s is completed", clusterId))
 }
 
 func (r *repair) repairChecksum(clusters common.Clusters, rebuildChecksum bool) error {
