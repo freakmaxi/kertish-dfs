@@ -631,7 +631,7 @@ func (r *repair) cleanupOrphan(wg *sync.WaitGroup, clusterId string, masterNode 
 	r.logger.Info(fmt.Sprintf("Orphan chunks cleanup for %s is completed", clusterId))
 
 	// Schedule sync cluster for snapshot sync
-	r.synchronize.QueueCluster(clusterId, true, true)
+	r.synchronize.QueueCluster(clusterId, true, false)
 }
 
 func (r *repair) repairChecksum(clusters common.Clusters, rebuildChecksum bool) error {
