@@ -192,7 +192,7 @@ func (c *commander) crea(conn net.Conn) error {
 	var blockUsage uint16 = 1
 	var blockSize uint32
 
-	err = c.fs.Block().LockFile(sha512Hex, func(blockFile block.File) error {
+	err = c.fs.Block(filesystem.Create).LockFile(sha512Hex, func(blockFile block.File) error {
 		if !blockFile.Temporary() {
 			if err := blockFile.IncreaseUsage(); err != nil {
 				return err
@@ -297,7 +297,7 @@ func (c *commander) read(conn net.Conn) error {
 		return nil
 	}
 
-	return c.fs.Block().File(sha512Hex, func(blockFile block.File) error {
+	return c.fs.Block(filesystem.Read).File(sha512Hex, func(blockFile block.File) error {
 		if blockFile.Temporary() {
 			return os.ErrNotExist
 		}
@@ -365,7 +365,7 @@ func (c *commander) dele(conn net.Conn) error {
 	var blockUsage uint16
 	var blockSize uint32
 
-	if err := c.fs.Block().LockFile(sha512Hex, func(blockFile block.File) error {
+	if err := c.fs.Block(filesystem.Delete).LockFile(sha512Hex, func(blockFile block.File) error {
 		if blockFile.Temporary() {
 			return errors.ErrQuit
 		}
@@ -523,7 +523,7 @@ func (c *commander) syrd(conn net.Conn) error {
 		return err
 	}
 
-	blockManager := c.fs.Block()
+	blockManager := c.fs.Block(filesystem.Read)
 	if snapshotTimeUint64 > 0 {
 		if err := c.fs.Snapshot(func(snapshot filesystem.Snapshot) error {
 			snapshotTime, err := snapshot.FromUint(snapshotTimeUint64)
@@ -608,7 +608,7 @@ func (c *commander) symv(conn net.Conn) error {
 	}
 	sourceAddr := string(sourceAddrBuf)
 
-	return c.fs.Block().LockFile(sha512Hex, func(blockFile block.File) error {
+	return c.fs.Block(filesystem.Create).LockFile(sha512Hex, func(blockFile block.File) error {
 		dn, err := cluster.NewDataNode(sourceAddr)
 		if err != nil {
 			return err
@@ -747,7 +747,7 @@ func (c *commander) syus(conn net.Conn) error {
 			return err
 		}
 
-		if err := c.fs.Block().LockFile(sha512Hex, func(blockFile block.File) error {
+		if err := c.fs.Block(filesystem.Create).LockFile(sha512Hex, func(blockFile block.File) error {
 			return blockFile.ResetUsage(usage)
 		}); err != nil {
 			return err

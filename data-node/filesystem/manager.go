@@ -1,19 +1,25 @@
 package filesystem
 
 import (
-	"io/ioutil"
 	"os"
 	"path"
 	"sync"
 
-	dnc "github.com/freakmaxi/kertish-dfs/data-node/common"
 	"github.com/freakmaxi/kertish-dfs/data-node/filesystem/block"
 	"go.uber.org/zap"
 )
 
+type BlockRequestType int
+
+const (
+	Read   BlockRequestType = 1
+	Create BlockRequestType = 2
+	Delete BlockRequestType = 3
+)
+
 // Manager interface is for handling data node operations
 type Manager interface {
-	Block() block.Manager
+	Block(requestType BlockRequestType) block.Manager
 	Snapshot(func(snapshot Snapshot) error) error
 	Sync(func(sync Synchronize) error) error
 
